@@ -170,6 +170,8 @@ function testWeakening(files: FileChange[], testGlobs: string[]): Signal[] {
       }
     }
     if (!isTest) continue
+    // 새 시험 파일(A, C)의 건너뛰기는 원래 있던 시험을 줄이지 않는다(V17). 지운 파일·옮긴 파일은 위에서 본다
+    if (f.status === 'A' || f.status === 'C') continue
     // 옮긴 줄(같은 줄을 지우고 더함)은 새 표식이 아니다
     const moved = new Set(f.removed_lines.map(squash))
     const marker = f.added_lines.find((l) => {

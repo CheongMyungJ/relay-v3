@@ -256,8 +256,15 @@ describe('시험 약화: 건너뛰기·하나만 표식', () => {
     expect(weak(f)).toEqual([])
   })
 
-  test('새 시험 파일의 표식도 신호다', () => {
-    const f = change('test/new.test.ts', { status: 'A', added_lines: ["it.only('a', () => {"] })
+  test('새 시험 파일의 표식은 약화가 아니다(V17)', () => {
+    const added = change('test/new.test.ts', { status: 'A', added_lines: ["it.only('a', () => {"] })
+    const copied = change('test/copy.test.ts', { status: 'C', added_lines: ["it.skip('a')"] })
+    expect(weak(added)).toEqual([])
+    expect(weak(copied)).toEqual([])
+  })
+
+  test('있던 시험 파일에 더한 표식은 신호다', () => {
+    const f = change('test/old.test.ts', { status: 'M', added_lines: ["it.only('a', () => {"] })
     expect(weak(f)).toHaveLength(1)
   })
 
