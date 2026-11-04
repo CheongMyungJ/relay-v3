@@ -74,11 +74,25 @@ describe('judgeLines: 바뀜(change)', () => {
     expect(v.examples).toEqual([{ id: 'C1.1', head: 'passed', base: 'not_run' }])
   })
 
-  test('기준에서도 통과하면 바뀐 동작을 시험하지 않은 것이라 not_met', () => {
+  test('예시가 모두 기준에서도 통과하면 바뀐 동작을 시험하지 않은 것이라 not_met', () => {
     const v = one(change, [tc('[C1.1]', 'passed')], [tc('[C1.1]', 'passed')])
     expect(v.status).toBe('not_met')
     expect(v.detail).toContain('기준에서도 통과: 바뀐 동작을 시험하지 않음')
     expect(v.detail).toContain('C1.1')
+  })
+
+  test('하나 이상이 기준에서 실패하면 met이고, 기준에서도 통과한 예시는 지킴으로 적는다(M2 평가 배치 1)', () => {
+    const two = line('C1', 'change', ['C1.1', 'C1.2'])
+    const head = [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'passed')]
+    const v = one(two, head, [tc('토 [C1.1]', 'failed'), tc('일 [C1.2]', 'passed')])
+    expect(v.status).toBe('met')
+    expect(v.detail).toBe('결과에서 통과. 기준에서도 통과(지킴): C1.2')
+    // 기준에서 통과한 것 말고는 기준 실패를 확인하지 못했으면 증거 없음 그대로
+    const unconfirmed = one(two, head, [tc('일 [C1.2]', 'passed')])
+    expect(unconfirmed.status).toBe('missing_evidence')
+    // 결과에서 하나라도 실패하면 기준과 상관없이 not_met
+    const headFail = one(two, [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'failed')], head)
+    expect(headFail.status).toBe('not_met')
   })
 
   test('기준에서 오류면(새 이름을 못 불러옴) met으로 보되 적는다', () => {
@@ -136,16 +150,6 @@ describe('judgeLines: 바뀜(change)', () => {
     const v = one(change, [tc('[C1.1]', 'passed')], [tc('[C1.1]', 'skipped')])
     expect(v.status).toBe('missing_evidence')
     expect(v.detail).toBe('기준 실패를 확인하지 못함: C1.1(기준에서 건너뜀)')
-  })
-
-  test('예시 하나라도 기준에서 통과하면 not_met', () => {
-    const l = line('C1', 'change', ['C1.1', 'C1.2'])
-    const head = [tc('[C1.1]', 'passed'), tc('[C1.2]', 'passed')]
-    const base = [tc('[C1.1]', 'failed'), tc('[C1.2]', 'passed')]
-    const v = one(l, head, base)
-    expect(v.status).toBe('not_met')
-    expect(v.detail).toContain('C1.2')
-    expect(v.detail).not.toContain('C1.1')
   })
 
   test('예시마다 기준 결과가 다르면 met의 detail에 확인하지 못한 것만 적는다', () => {

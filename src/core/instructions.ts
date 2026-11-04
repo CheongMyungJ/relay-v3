@@ -118,7 +118,7 @@ How you do the work is up to you. Commit the approved examples to \`${examplesFi
 
 ## 5. Evidence
 
-relay measures evidence on commits, not on uncommitted changes: it runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (a \`change\` line needs its test to fail on the base and pass on the head), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
+relay measures evidence on commits, not on uncommitted changes: it runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (every example of a \`change\` line must pass on the head and at least one must fail on the base; an example that also passes on the base counts as a guard), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
 
 ## 6. Changing the contract
 

@@ -120,9 +120,14 @@ interface BaseContext {
   failures: string[]
 }
 
+/**
+ * 바뀜 줄: 예시가 모두 결과에서 통과하고(judgeHead), 하나 이상이 기준에서 실패하면 met이다. 기준에서도 통과하는 예시는
+ * 그 줄의 지킴으로 적는다(예: 'LA의 토요일'을 고치는 줄의 '일요일'). 예시가 모두 기준에서도 통과하면 바뀐 동작을
+ * 시험하지 않은 것이다. M2 평가 배치 1에서 '하나라도 기준에서 통과하면 not_met'이 계약 바꾸기 요청의 반을 만들었다
+ */
 function judgeChange(evs: ExampleEvidence[], ctx: BaseContext): Judged {
   const same = evs.filter((e) => e.base === 'passed')
-  if (same.length > 0)
+  if (same.length === evs.length)
     return {
       status: 'not_met',
       detail: `기준에서도 통과: 바뀐 동작을 시험하지 않음 (${same.map((e) => e.id).join(', ')})`,
@@ -151,6 +156,7 @@ function judgeChange(evs: ExampleEvidence[], ctx: BaseContext): Judged {
       status: 'missing_evidence',
       detail: `기준 실패를 확인하지 못함: ${unconfirmed.join(', ')}`,
     }
+  if (same.length > 0) notes.push(`기준에서도 통과(지킴): ${same.map((e) => e.id).join(', ')}`)
   if (notes.length === 0) return { status: 'met', detail: '기준에서 실패, 결과에서 통과' }
   return { status: 'met', detail: `결과에서 통과. ${notes.join('. ')}` }
 }
