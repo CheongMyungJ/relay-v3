@@ -1,0 +1,533 @@
+/* 오른쪽 패널: [계약] [증거] [변경] [빚] (docs/m2-modules.md 4절). 색과 글꼴은 styles.css의 토큰을 쓴다. */
+
+/* ── 오른쪽 패널 ──────────────────────────────────────────────────────────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  /* 가장 좁은 창(1180px)에서도 가운데 터미널이 70열쯤 남게 */
+  width: clamp(340px, 30%, 560px);
+  flex: none;
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  position: relative;
+  padding: 8px 14px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.tabs button.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tabs .badge {
+  position: absolute;
+  top: 7px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.panel-scroll > .busy-line,
+.panel-scroll > .error-line,
+.panel-scroll > .empty {
+  margin: 24px;
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px 32px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 24px;
+  color: var(--muted);
+}
+
+.main > .empty {
+  margin: auto;
+  max-width: 460px;
+  align-items: flex-start;
+}
+
+.empty-title {
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.empty-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.busy-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.callout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.callout.tone-warn {
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+
+.callout-title {
+  font-weight: 650;
+}
+
+.quote {
+  padding-left: 12px;
+  border-left: 3px solid var(--warn);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.section-title {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.plain-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+/* ── 계약 ─────────────────────────────────────────────────────────────────── */
+
+.contract {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.goal {
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.line {
+  padding: 12px 14px;
+}
+
+.line + .line {
+  border-top: 1px solid var(--border);
+}
+
+.line-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.line-id {
+  flex: none;
+  min-width: 26px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--muted);
+}
+
+.line-text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.line-check {
+  flex: none;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--muted);
+}
+
+.line-facts {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 10px 0 0 34px;
+  font-size: 13px;
+}
+
+.line-facts dt {
+  color: var(--muted);
+  line-height: 22px;
+}
+
+.line-facts dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ground,
+.example {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ground code,
+.example code {
+  overflow-wrap: anywhere;
+}
+
+.example-id {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── 증거 ─────────────────────────────────────────────────────────────────── */
+
+.verdict {
+  padding: 20px 22px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border-left: 5px solid var(--muted);
+}
+
+.verdict.tone-ok {
+  background: var(--ok-soft);
+  border-left-color: var(--ok);
+}
+.verdict.tone-warn {
+  background: var(--warn-soft);
+  border-left-color: var(--warn);
+}
+.verdict.tone-info {
+  background: var(--info-soft);
+  border-left-color: var(--info);
+}
+.verdict.tone-bad {
+  background: var(--bad-soft);
+  border-left-color: var(--bad);
+}
+
+.verdict-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.verdict-title {
+  margin-top: 2px;
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.verdict-shadow {
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.verdict-decisive {
+  margin-top: 10px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.verdict-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.verdict-meta > span {
+  white-space: nowrap;
+}
+
+.next-step {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.verdict-label + .verdict-title + .verdict-label {
+  margin-top: 8px;
+}
+
+.stale {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pr-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fold {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+  flex: none;
+}
+
+.fold[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fold-body {
+  padding: 0 14px 12px 28px;
+}
+
+.fact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fact-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+
+/* ── 변경과 빚 ────────────────────────────────────────────────────────────── */
+
+.diff-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.diff-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-file > summary {
+  gap: 10px;
+}
+
+.diff-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.diff-count {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.diff-bar {
+  display: flex;
+  flex: none;
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--muted-soft);
+}
+
+.diff-bar .plus {
+  background: var(--ok);
+}
+
+.diff-bar .minus {
+  background: var(--bad);
+}
+
+.patch {
+  margin: 0 10px 10px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  line-height: 1.5;
+  /* 좁은 패널에서 옆으로 밀지 않고 접는다 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.patch .plus,
+.diff-count .plus {
+  color: var(--ok);
+}
+.patch .minus,
+.diff-count .minus {
+  color: var(--bad);
+}
+.patch .hunk {
+  color: var(--info);
+}
+.patch .meta {
+  color: var(--muted);
+}
+
+.debt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.debt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}

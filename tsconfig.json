@@ -17,5 +17,18 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "test", "scripts", "vitest.config.ts"]
+  "include": [
+    "src/core",
+    "src/adapters",
+    "src/engine",
+    "src/cli",
+    "src/shared",
+    "src/main",
+    "src/preload",
+    "test",
+    "scripts",
+    "vitest.config.ts",
+    "electron.vite.config.ts",
+    "playwright.config.ts"
+  ]
 }

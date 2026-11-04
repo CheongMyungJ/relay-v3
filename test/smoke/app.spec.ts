@@ -1,0 +1,274 @@
+// [스모크] 빌드한 앱 (docs/m2-modules.md 5절). Playwright _electron으로 out/의 앱을 띄워 화면을 누른다.
+// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 PR을 연다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin.
+// 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
+//
+//   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
+import { writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test'
+import { calc, QUALITY_TEXT, TESTS_BASE } from '../support/calc.ts'
+import { FAKE_CLAUDE, fakeGhOnPath } from '../support/fakes.ts'
+import { cleanupAll, makeRepo, makeTempDir, runGit, type TestRepo } from '../support/repo.ts'
+
+const ROOT = resolve(import.meta.dirname, '../..')
+const SHOTS = join(ROOT, 'test-results')
+const REQUEST = 'clamp fix: 값이 위로 넘으면 hi로 잘라야 하는데 lo가 나와요.'
+
+// 계약 id는 지침이 준 것(작업 브랜치 relay/<계약 id>). 가짜 claude가 {contractId}를 채운다
+const CONTRACT = {
+  version: 1,
+  id: '{contractId}',
+  goal: 'clamp가 hi보다 큰 값을 hi로 자른다',
+  lines: [
+    {
+      id: 'C1',
+      kind: 'change',
+      text: 'hi보다 큰 값은 hi가 된다',
+      grounds: [
+        { type: 'code', path: 'src/calc.js', line: 5, name: 'clamp' },
+        { type: 'request', quote: '위로 넘으면 hi로' },
+      ],
+      examples: ['C1.1'],
+      check: 'test',
+    },
+    {
+      id: 'C2',
+      kind: 'keep',
+      text: '더하기는 그대로',
+      grounds: [{ type: 'guess' }],
+      examples: ['C2.1'],
+      check: 'test',
+    },
+  ],
+  examples: [
+    { id: 'C1.1', input: [15, 0, 10], output: 10 },
+    { id: 'C2.1', input: [2, 3], output: 5 },
+  ],
+  non_goals: ['clamp의 인자 순서는 바꾸지 않는다'],
+  human_rules: [],
+  tidy: [],
+}
+
+const TESTS_FIXED = `${TESTS_BASE}
+import { readFileSync } from 'node:fs'
+const examples = JSON.parse(
+  readFileSync(new URL('../.relay/examples/{contractId}.json', import.meta.url), 'utf8'),
+)
+
+test('더하기는 그대로 [{contractId}:C2.1]', () => {
+  assert.equal(add(2, 3), 5)
+})
+
+test('위로 넘는 값은 hi로 [{contractId}:C1.1]', () => {
+  const { input, output } = examples['C1.1']
+  assert.equal(clamp(...input), output)
+})
+`
+
+const SCENARIO = {
+  start: [
+    { do: 'print', text: '요청과 코드를 읽었습니다. 계약을 냅니다.' },
+    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+    { do: 'print', text: '승인됨. clamp를 고칩니다.' },
+    {
+      do: 'commit',
+      message: 'clamp 고침',
+      files: {
+        'src/calc.js': calc('hi'),
+        'test/calc.test.js': TESTS_FIXED,
+        '.relay/examples/{contractId}.json': '{ "C1.1": { "input": [15, 0, 10], "output": 10 } }\n',
+      },
+    },
+    { do: 'print', text: '커밋했습니다. PR을 열까요? (Enter)' },
+    { do: 'stop' },
+    { do: 'waitInput' },
+    { do: 'bash', command: 'git push -u origin HEAD' },
+    { do: 'bash', command: 'gh pr create --title "clamp 고침" --body b --base main' },
+    { do: 'print', text: 'PR을 열었습니다.' },
+    { do: 'stop' },
+  ],
+}
+
+let tmp: string
+let repo: TestRepo
+let app: ElectronApplication
+let page: Page
+
+test.beforeAll(async () => {
+  tmp = await makeTempDir('relay-smoke-')
+  const origin = join(tmp, 'origin.git')
+  await runGit(tmp, ['init', '--quiet', '--bare', '--initial-branch', 'main', origin])
+  repo = await makeRepo({
+    files: {
+      'package.json': '{ "name": "calc", "private": true, "type": "module" }\n',
+      '.gitignore': '.relay-out/\n',
+      '.relay/quality.json': QUALITY_TEXT,
+      'src/calc.js': calc('lo'),
+      'test/calc.test.js': TESTS_BASE,
+    },
+  })
+  await repo.git('remote', 'add', 'origin', origin)
+  await repo.git('push', '--quiet', 'origin', 'main')
+
+  const scenario = join(tmp, 'scenario.json')
+  await writeFile(scenario, JSON.stringify(SCENARIO))
+  const review = join(tmp, 'review.json')
+  await writeFile(
+    review,
+    JSON.stringify({
+      findings: [{ severity: 'low', text: '변수 이름이 짧음', file: 'src/calc.js', line: 5 }],
+    }),
+  )
+  const ghState = join(tmp, 'gh-state.json')
+  await writeFile(ghState, '{}')
+
+  app = await electron.launch({
+    args: ['--no-sandbox', ROOT],
+    env: {
+      ...(process.env as Record<string, string>),
+      ...(await fakeGhOnPath(tmp)),
+      RELAY_HOME: join(tmp, 'home'),
+      CLAUDE_BIN: FAKE_CLAUDE,
+      FAKE_CLAUDE_SCENARIO: scenario,
+      FAKE_CLAUDE_LOG: join(tmp, 'claude.jsonl'),
+      FAKE_CLAUDE_REVIEW: review,
+      FAKE_GH_STATE: ghState,
+      FAKE_GH_LOG: join(tmp, 'gh.jsonl'),
+      RELAY_DEBOUNCE_MS: '300',
+    },
+  })
+  // 폴더 고르기 대화상자를 바꿔 끼운다(ipc.ts는 부를 때마다 dialog.showOpenDialog를 찾는다)
+  await app.evaluate(({ dialog }, dir) => {
+    const pick = async () => ({ canceled: false, filePaths: [dir] })
+    Object.assign(dialog, { showOpenDialog: pick })
+  }, repo.dir)
+  page = await app.firstWindow()
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setContentSize(1400, 900)
+  })
+  await page.waitForLoadState('domcontentloaded')
+})
+
+test.afterAll(async () => {
+  await app?.close()
+  await cleanupAll()
+})
+
+let shots = 0
+async function shot(name: string): Promise<void> {
+  // 그리기(글꼴, 애니메이션)가 가라앉을 틈
+  await page.waitForTimeout(250)
+  const n = String(++shots).padStart(2, '0')
+  await page.screenshot({ path: join(SHOTS, `smoke-${n}-${name}.png`) })
+}
+
+test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰(그림자) → [머지]', async () => {
+  // 빈 화면 → 프로젝트 추가
+  await expect(page.getByText('프로젝트를 추가하세요')).toBeVisible()
+  expect(await page.evaluate('[innerWidth, innerHeight]')).toEqual([1400, 900])
+  await shot('start')
+  await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click()
+  await expect(page.getByTestId('project')).toContainText(repo.dir.split('/').at(-1) ?? '')
+
+  // 새 Work 대화상자
+  await page.getByRole('button', { name: '+ 새 Work' }).first().click()
+  const dialog = page.getByRole('dialog', { name: '새 Work' })
+  await dialog.getByLabel('요청', { exact: true }).fill(REQUEST)
+  await dialog.getByRole('button', { name: '버그 고침' }).click()
+  await expect(dialog.getByLabel('기준 브랜치')).toHaveValue('main')
+  await shot('new-work')
+  await dialog.getByRole('button', { name: '만들기' }).click()
+  await expect(dialog).toBeHidden()
+
+  // 세션이 계약을 낸다 → [계약] 패널에 줄과 근거 확인, [승인]
+  const approve = page.getByTestId('approve-box')
+  await expect(approve).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('terminal')).toContainText('FAKE-CLAUDE READY')
+  const panel = page.getByTestId('contract-panel')
+  await expect(panel.getByRole('heading', { level: 2 })).toHaveText(CONTRACT.goal)
+  await expect(panel.getByTestId('contract-line')).toHaveCount(2)
+  await expect(panel.getByTestId('contract-line').first()).toContainText('확인됨')
+  await expect(panel.getByTestId('contract-line').nth(1)).toContainText('추정')
+  await shot('contract')
+  await approve.getByRole('button', { name: '승인', exact: true }).click()
+
+  // 승인 → 커밋·Stop → 증거(리뷰 없음): [증거] 탭으로 옮겨 결론을 크게
+  const evidence = page.getByTestId('evidence-panel')
+  await expect(evidence).toBeVisible({ timeout: 30_000 })
+  await expect(evidence.getByTestId('conclusion')).toHaveText('사람 머지', { timeout: 60_000 })
+  await expect(evidence.getByTestId('decisive')).toHaveText(/^리뷰 없음 \(리뷰는 PR을 열거나/)
+  // PR이 없으면 다음 할 일을 말한다
+  await expect(evidence.getByTestId('next-step')).toContainText('PR이 열리면')
+  await expect(evidence.getByText('줄 판정')).toBeVisible()
+  await shot('evidence')
+
+  // 터미널에서 Enter → 세션이 push하고 PR을 연다 → 내보내기 증거(가짜 리뷰), 자동 머지가 꺼져 있어 그림자
+  await page.getByTestId('terminal').click()
+  await page.keyboard.type('go')
+  await page.keyboard.press('Enter')
+  await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible({
+    timeout: 60_000,
+  })
+  await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
+  await expect(evidence.getByRole('link', { name: '#1' })).toBeVisible()
+  await expect(evidence.getByTestId('next-step')).toBeHidden()
+  await evidence.locator('summary', { hasText: '리뷰 지적' }).click()
+  await expect(evidence.getByText('변수 이름이 짧음')).toBeVisible()
+  const merge = evidence.getByRole('button', { name: '머지', exact: true })
+  await expect(merge).toBeEnabled()
+  await shot('shadow')
+
+  // [변경]: 모두 몇 줄, 파일별 diff(접기)
+  await page.getByRole('tab', { name: '변경' }).click()
+  const diff = page.getByTestId('diff-panel')
+  await expect(diff.locator('.diff-summary')).toContainText('파일 3개')
+  const calcFile = diff.locator('details', { has: page.getByText('src/calc.js', { exact: true }) })
+  await calcFile.locator('summary').click()
+  await expect(calcFile.locator('.patch')).toBeVisible()
+  await expect(calcFile.locator('.patch')).toContainText('n > hi ? hi')
+  await shot('diff')
+
+  // [머지] → 끝남
+  await page.getByRole('tab', { name: '증거' }).click()
+  await merge.click()
+  await expect(page.locator('.work-head')).toContainText('끝남', { timeout: 30_000 })
+  // 끝난 Work는 결과를 먼저, 관문 결론은 그때의 것으로
+  await expect(evidence.getByTestId('outcome')).toHaveText(/^머지됨 · PR #1 · [0-9a-f]{7}$/)
+  await expect(evidence.getByTestId('verdict')).toContainText('그때의 관문 결론')
+  await expect(page.getByTestId('terminal')).toContainText('[세션을 닫음]')
+  await shot('merged')
+
+  // 프로젝트 설정
+  await page.getByRole('button', { name: /설정$/ }).click()
+  const settings = page.getByRole('dialog')
+  await expect(settings.getByRole('switch')).not.toBeChecked()
+  await expect(settings.getByRole('radio', { name: '결정마다 확인' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await shot('settings')
+  await settings.getByRole('button', { name: '취소' }).click()
+  await expect(settings).toBeHidden()
+
+  // 어두운 테마(시스템을 따른다)
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.getByRole('tab', { name: '계약' }).click()
+  await expect(page.getByTestId('contract-panel')).toContainText('승인된 계약')
+  await shot('dark')
+
+  // 가장 좁은 창(minWidth 1180): 가운데 터미널이 70열쯤 남는다
+  await page.emulateMedia({ colorScheme: 'light' })
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setContentSize(1180, 700)
+  })
+  await expect.poll(() => page.evaluate('innerWidth')).toBe(1180)
+  const width = await page.locator('.terminal-pane').evaluate((el) => el.clientWidth)
+  expect(width).toBeGreaterThanOrEqual(560)
+  await shot('narrow')
+})

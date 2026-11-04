@@ -1,0 +1,145 @@
+// [변경]과 [빚] 패널 (docs/m2-modules.md 4절). 변경: `git diff --stat`의 내용(모두 몇 줄, 파일마다 몇 줄과 막대)과 파일별
+// diff(접기). git의 영어 --stat 글은 좁은 패널에서 잘리므로 그대로 보이지 않고 patch에서 센다. 빚: 이 Work가 건드린 경로의 빚.
+// HEAD가 바뀌면 다시 읽는다.
+import { useEffect, useState } from 'react'
+import type { DebtItem, DebtKind } from '../../core/types.ts'
+import { splitDiff } from './format.ts'
+import { Empty, ErrorLine, Spinner, Tag } from './ui.tsx'
+
+type Loaded<T> =
+  { state: 'loading' } | { state: 'ok'; value: T } | { state: 'error'; error: string }
+
+const loadDiff = (id: string) => window.relay.diff(id)
+const loadDebt = (id: string) => window.relay.debt(id)
+
+/** id와 head가 바뀔 때마다 읽는다. 늦게 온 앞 답은 버린다. load는 모듈의 함수(바뀌지 않음) */
+function useLoad<T>(load: (id: string) => Promise<T>, id: string, head: string | null): Loaded<T> {
+  const key = `${id}:${head ?? ''}`
+  const [got, setGot] = useState<{ key: string; value: Loaded<T> }>({
+    key: '',
+    value: { state: 'loading' },
+  })
+  useEffect(() => {
+    let live = true
+    load(id).then(
+      (value) => live && setGot({ key, value: { state: 'ok', value } }),
+      (e: unknown) =>
+        live &&
+        setGot({
+          key,
+          value: { state: 'error', error: e instanceof Error ? e.message : String(e) },
+        }),
+    )
+    return () => {
+      live = false
+    }
+  }, [load, id, key])
+  return got.key === key ? got.value : { state: 'loading' }
+}
+
+export function DiffPanel({ id, head }: { id: string; head: string | null }) {
+  const got = useLoad(loadDiff, id, head)
+  if (got.state === 'loading') return <Spinner label="변경을 읽는 중…" />
+  if (got.state === 'error') return <ErrorLine text={got.error} />
+  const files = splitDiff(got.value)
+  if (files.length === 0)
+    return (
+      <Empty title="아직 바뀐 것이 없습니다">
+        세션이 커밋하면 기준 브랜치와의 차이가 보입니다.
+      </Empty>
+    )
+  const added = files.reduce((n, f) => n + f.added, 0)
+  const deleted = files.reduce((n, f) => n + f.deleted, 0)
+  const most = Math.max(1, ...files.map((f) => f.added + f.deleted))
+  return (
+    <div className="panel-body" data-testid="diff-panel">
+      <p className="diff-summary">
+        기준 브랜치와 갈라진 곳부터 파일 {files.length}개 바뀜
+        <span className="diff-count">
+          <span className="plus">+{added}</span> <span className="minus">−{deleted}</span>
+        </span>
+      </p>
+      <div className="diff-files">
+        {files.map((f) => (
+          <details key={f.path} className="fold diff-file">
+            <summary>
+              <code className="diff-path">{f.path}</code>
+              <span className="diff-count">
+                {f.binary ? (
+                  <span className="muted">바이너리</span>
+                ) : (
+                  <>
+                    <span className="plus">+{f.added}</span>{' '}
+                    <span className="minus">−{f.deleted}</span>
+                  </>
+                )}
+              </span>
+              <span className="diff-bar" aria-hidden="true">
+                <span className="plus" style={{ width: `${(f.added / most) * 100}%` }} />
+                <span className="minus" style={{ width: `${(f.deleted / most) * 100}%` }} />
+              </span>
+            </summary>
+            <pre className="patch">
+              {f.patch.split('\n').map((line, i) => (
+                <span key={i} className={patchClass(line)}>
+                  {line}
+                  {'\n'}
+                </span>
+              ))}
+            </pre>
+          </details>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function patchClass(line: string): string | undefined {
+  if (line.startsWith('@@')) return 'hunk'
+  if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff --git'))
+    return 'meta'
+  if (line.startsWith('+')) return 'plus'
+  if (line.startsWith('-')) return 'minus'
+  return undefined
+}
+
+const DEBT_KIND: Record<DebtKind, string> = {
+  tidy: '정리',
+  accepted_regression: '받아들인 나빠짐',
+  rule_violation: '규칙 어김',
+  test_gap: '시험 빈틈',
+}
+
+export function DebtPanel({ id, head }: { id: string; head: string | null }) {
+  const got = useLoad<DebtItem[]>(loadDebt, id, head)
+  if (got.state === 'loading') return <Spinner label="빚을 읽는 중…" />
+  if (got.state === 'error') return <ErrorLine text={got.error} />
+  if (got.value.length === 0)
+    return (
+      <Empty title="건드린 경로에 빚이 없습니다">
+        레포의 <code>.relay/debt/</code>에 적힌 빚 가운데 이 Work가 바꾼 경로에 닿은 것만 보입니다.
+      </Empty>
+    )
+  return (
+    <div className="panel-body" data-testid="debt-panel">
+      <ul className="debt-list">
+        {got.value.map((d) => (
+          <li key={d.id} className="debt">
+            <div className="row tight">
+              <Tag tone="warn">{DEBT_KIND[d.kind]}</Tag>
+              <code>
+                {d.anchor.path}
+                {d.anchor.name ? ` · ${d.anchor.name}` : ''}
+                {d.anchor.metric ? ` · ${d.anchor.metric}` : ''}
+              </code>
+            </div>
+            <p>{d.reason}</p>
+            <p className="muted small">
+              {d.id} · {d.source} · {d.created}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
