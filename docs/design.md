@@ -27,6 +27,8 @@
 | V10 | **check worktree는 레포마다 둘(base, head)을 두고 다시 쓴다.** SHA로 강제 체크아웃하고 `git clean`으로 비운다. `setup.keep`(예: `node_modules`)은 지우지 않고, `setup.inputs`(예: lockfile)의 해시가 바뀔 때만 `setup.run`(예: `npm ci`)을 돈다 | 가정: worktree마다 설치하면 비용이 큼(philosophy 비평) | |
 | V11 | **수용 시험은 JUnit XML로 읽는다.** `commands.acceptance`가 JUnit 파일을 낸다. 시험 이름에 예시 id를 `[C1.1]`처럼 넣으면 줄 판정에 쓴다. 바뀜 줄은 base 소스에 시험 파일과 예시 자료만 얹어 돌린다 | 가정: JUnit은 대부분의 러너가 낸다(vitest, node:test, pytest, jest-junit, go-junit-report) | |
 | V12 | **M1은 앱 없이 CLI로 만든다.** `relay init`, `relay check`, `relay gate`, `relay debt`. 세션 호스트(화면)는 M2에서 정한다 | 가정 | |
+| V13 | **세션 호스트는 Electron 데스크톱 앱이다.** v2처럼 앱 안 터미널(node-pty + xterm.js)에 Claude Code를 띄우고, 옆 패널에 계약과 증거를 둔다. v2의 PTY·훅 어댑터는 필요한 만큼만 옮긴다. 엔진(M1)은 앱과 CLI가 함께 쓴다 | 사용자 결정. v2 사용자와 평가 도구(Playwright `_electron`)를 잇는다 | ✅ (2026-11-04) |
+| V14 | **실제 Claude 평가는 제안서대로 n≥5로 돌린다.** M0의 뺀 변형과 M2 비교 평가 모두. 배치를 돌리기 전에 규모(실행 수)를 알리고, 판정 규칙은 결과 전에 고정한다 | 사용자 결정 | ✅ (2026-11-04) |
 
 ## 2. 품질 기준 (`.relay/quality.json`)
 
