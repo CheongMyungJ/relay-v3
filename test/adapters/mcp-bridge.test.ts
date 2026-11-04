@@ -121,7 +121,7 @@ describe('MCP 브리지', () => {
       type: 'object',
       required: expect.arrayContaining(['version', 'id', 'goal', 'lines']),
     })
-    expect(tools[1]?.inputSchema).toMatchObject({ required: ['reason'] })
+    expect(tools[1]?.inputSchema).toMatchObject({ required: ['reason', 'contract'] })
 
     const contract = { version: 1, id: 'c', goal: 'g', lines: [] }
     const invalid = result(

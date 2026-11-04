@@ -301,6 +301,9 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) �
   await scenario([
     { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
     { do: 'mcp', tool: 'request_contract_change', args: { reason: ' ' } },
+    // 새 계약 없이, 또는 승인된 계약 그대로는 받지 않는다(받아들여도 바뀌는 게 없음)
+    { do: 'mcp', tool: 'request_contract_change', args: { reason } },
+    { do: 'mcp', tool: 'request_contract_change', args: { reason, contract: CONTRACT } },
     { do: 'mcp', tool: 'request_contract_change', args: { reason, contract: REVISED } },
     { do: 'stop' },
   ])
@@ -311,10 +314,14 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) �
   await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
   await works.approveContract(id)
   await until(() => works.view(id).state === 'recontract', '계약 바꾸기 요청')
-  expect((await mcpResults('request_contract_change'))[0]).toEqual({
-    status: 'invalid',
-    errors: ['reason: 필요함'],
-  })
+  expect((await mcpResults('request_contract_change')).slice(0, 3)).toEqual([
+    { status: 'invalid', errors: ['reason: 필요함', 'contract: 필요함'] },
+    { status: 'invalid', errors: ['contract: 필요함'] },
+    {
+      status: 'invalid',
+      errors: ['contract: 승인된 계약과 같음(바꿀 곳을 고친 계약 전체를 낸다)'],
+    },
+  ])
   let v = works.view(id)
   expect(v.pendingChange).toBe(reason)
   expect(v.pendingContract?.lines.map((l) => l.id)).toEqual(['C1'])
@@ -329,8 +336,8 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) �
   expect(await works.merge(id)).toEqual({ ok: false, error: '구현 중인 Work만 머지할 수 있음' })
 
   await works.answerChange(id, { approved: true, message: '좋아요' })
-  await until(async () => (await mcpResults('request_contract_change')).length === 2, '답')
-  const answer = (await mcpResults('request_contract_change'))[1] as Entry
+  await until(async () => (await mcpResults('request_contract_change')).length === 4, '답')
+  const answer = (await mcpResults('request_contract_change'))[3] as Entry
   expect(answer).toMatchObject({ status: 'approved', message: '좋아요' })
   v = works.view(id)
   expect(v).toMatchObject({ state: 'working', pendingChange: null, pendingContract: null })

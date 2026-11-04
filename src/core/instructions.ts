@@ -122,7 +122,7 @@ relay measures evidence on commits, not on uncommitted changes: it runs the comm
 
 ## 6. Changing the contract
 
-If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason. It waits until the human answers.
+If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason and the whole revised contract. It waits until the human answers; if the human approves, the revised contract replaces the approved one.
 
 ## 7. Git and GitHub
 

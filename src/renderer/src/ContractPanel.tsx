@@ -103,7 +103,9 @@ function ChangeBox(p: { id: string; reason: string | null; proposed: Contract | 
       <p className="callout-title">세션이 계약을 바꾸자고 합니다</p>
       <p className="quote">{p.reason ?? '(까닭 없음)'}</p>
       <p className="muted small">
-        {p.proposed ? '아래는 세션이 제안한 새 계약입니다.' : '새 계약 없이 요청만 했습니다.'}
+        {p.proposed
+          ? '아래는 세션이 제안한 새 계약입니다.'
+          : '새 계약 없이 요청만 했습니다. 거절하고 바꾼 계약 전체를 내 달라고 하세요.'}
       </p>
       <textarea
         className="field"
@@ -114,7 +116,12 @@ function ChangeBox(p: { id: string; reason: string | null; proposed: Contract | 
         onChange={(e) => setText(e.target.value)}
       />
       <div className="row">
-        <button type="button" className="primary" disabled={act.busy} onClick={() => answer(true)}>
+        <button
+          type="button"
+          className="primary"
+          disabled={act.busy || !p.proposed}
+          onClick={() => answer(true)}
+        >
           받아들이기
         </button>
         <button

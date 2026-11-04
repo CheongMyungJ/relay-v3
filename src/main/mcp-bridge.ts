@@ -88,14 +88,17 @@ const TOOLS = [
   {
     name: TOOL_CHANGE,
     description:
-      'Ask the human to change the approved contract. Give the reason and the revised contract: if the human approves, the revised contract replaces the approved one. Waits until the human answers: status "approved" or "rejected", with the contract now in force and a message.',
+      'Ask the human to change the approved contract. Give the reason and the whole revised contract (checked like submit_contract; errors come back at once as status "invalid"). If the human approves, the revised contract replaces the approved one. Waits until the human answers: status "approved" or "rejected", with the contract now in force and a message.',
     inputSchema: {
       type: 'object',
       properties: {
         reason: { type: 'string' },
-        contract: { ...CONTRACT_SCHEMA, description: 'The revised contract (optional).' },
+        contract: {
+          ...CONTRACT_SCHEMA,
+          description: 'The whole revised contract, same id. Not a diff.',
+        },
       },
-      required: ['reason'],
+      required: ['reason', 'contract'],
     },
   },
   {

@@ -56,10 +56,7 @@ export class ContractDesk {
     signal: AbortSignal,
   ): Promise<Reply> {
     const parsed = parseContract(JSON.stringify(contractArg(args) ?? null))
-    if (!parsed.ok) {
-      this.ctx.note(rec.id, { type: 'contract_invalid', errors: parsed.errors })
-      return { status: 'invalid', errors: parsed.errors }
-    }
+    if (!parsed.ok) return this.invalid(rec, parsed.errors)
     const contract = bare(parsed.value)
     // 계약 id는 앱이 Work마다 정한다(V11): 앞 Work의 머지된 시험 태그와 섞이지 않게
     if (contract.id !== rec.contract_id) return this.wrongId(rec, contract.id, 'id')
@@ -92,19 +89,25 @@ export class ContractDesk {
     signal: AbortSignal,
   ): Promise<Reply> {
     const reason = typeof args.reason === 'string' ? args.reason.trim() : ''
-    if (!reason) return { status: 'invalid', errors: ['reason: 필요함'] }
-    let proposed: Contract | null = null
-    if (args.contract !== undefined && args.contract !== null) {
-      const parsed = parseContract(JSON.stringify(args.contract))
-      if (!parsed.ok)
-        return { status: 'invalid', errors: parsed.errors.map((e) => `contract.${e}`) }
-      proposed = bare(parsed.value)
-      if (proposed.id !== rec.contract_id) return this.wrongId(rec, proposed.id, 'contract.id')
-    }
+    const errors: string[] = []
+    if (!reason) errors.push('reason: 필요함')
+    // 바꾼 계약은 꼭 받는다: 없으면 사람이 받아들여도 승인된 계약이 그대로 남는다(M2 평가 07)
+    if (args.contract === undefined || args.contract === null) errors.push('contract: 필요함')
+    if (errors.length > 0) return this.invalid(rec, errors)
+    const parsed = parseContract(JSON.stringify(args.contract))
+    if (!parsed.ok)
+      return this.invalid(
+        rec,
+        parsed.errors.map((e) => `contract.${e}`),
+      )
+    const proposed = bare(parsed.value)
+    if (proposed.id !== rec.contract_id) return this.wrongId(rec, proposed.id, 'contract.id')
     const rt = this.ctx.runtime(rec.id)
     if (!rt.contract)
       return { status: 'error', error: `No approved contract yet: use ${TOOL_SUBMIT}.` }
-    const groundings = proposed ? await this.groundings(rec, proposed) : rec.groundings
+    if (contractHash(bare(rt.contract)) === contractHash(proposed))
+      return this.invalid(rec, ['contract: 승인된 계약과 같음(바꿀 곳을 고친 계약 전체를 낸다)'])
+    const groundings = await this.groundings(rec, proposed)
     const next = nextState(rec.state, { type: 'change_requested', reason })
     if (!next.ok || !rt.contract)
       return { status: 'error', error: next.ok ? '' : next.errors.join('; ') }
@@ -117,14 +120,19 @@ export class ContractDesk {
     const answer = this.wait(rec.id, 'change', signal)
     await this.ctx.deps.store.writeJson(rec.id, 'contract.json', rt.contract)
     await this.ctx.save(rec)
-    this.ctx.note(rec.id, { type: 'change_requested', reason, contract: proposed !== null })
+    this.ctx.note(rec.id, { type: 'change_requested', reason })
     return answer
   }
 
   private wrongId(rec: WorkRecord, got: string, field: string): Reply {
-    const error = `${field}: must be "${rec.contract_id}", the contract id given in your instructions (got "${got}")`
-    this.ctx.note(rec.id, { type: 'contract_invalid', errors: [error] })
-    return { status: 'invalid', errors: [error] }
+    return this.invalid(rec, [
+      `${field}: must be "${rec.contract_id}", the contract id given in your instructions (got "${got}")`,
+    ])
+  }
+
+  private invalid(rec: WorkRecord, errors: string[]): Reply {
+    this.ctx.note(rec.id, { type: 'contract_invalid', errors })
+    return { status: 'invalid', errors }
   }
 
   // ── 사람의 답 ──────────────────────────────────────────────────────────────
@@ -174,6 +182,11 @@ export class ContractDesk {
     const rec = this.ctx.record(id)
     const rt = this.ctx.runtime(id)
     if (rec.state !== 'recontract' || !rt.contract) throw new Error('답할 계약 바꾸기 요청이 없음')
+    // 고치기 전에 저장된 요청에는 새 계약이 없을 수 있다. 받아들여도 바뀌는 게 없으니 거절만 받는다
+    if (o.approved && !rec.pending_contract)
+      throw new Error(
+        '새 계약이 없는 요청이라 받아들일 수 없음: 거절하고 바꾼 계약 전체를 내 달라고 하세요',
+      )
     const msg = o.message.trim()
     const at = this.ctx.deps.now()
     const contract: Contract =
