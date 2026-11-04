@@ -182,6 +182,38 @@ describe('시험 수', () => {
     expect(testCountRatchet(spec, base, head)).toMatchObject({ status: 'better', base: 2, head: 3 })
   })
 
+  test('태그를 감싼 묶음(describe)으로 붙여도 같은 시험이다', () => {
+    const base = [
+      { name: '홀수 개', status: 'passed' as const },
+      { name: '짝수 개', suite: '중앙값', status: 'passed' as const },
+    ]
+    const head = [
+      { name: '[w:C1.1] > 홀수 개', status: 'passed' as const },
+      { name: '짝수 개', suite: '중앙값 > [w:C2.1]', status: 'passed' as const },
+    ]
+    expect(testCountRatchet(spec, base, head).status).toBe('same')
+  })
+
+  test('태그만 다른 기준 시험 둘은 head 시험 하나가 함께 가리지 않는다(하나씩 짝짓기)', () => {
+    const base = [
+      { name: 'median [old:C1.1]', status: 'passed' as const },
+      { name: 'median [old:C1.2]', status: 'passed' as const },
+      { name: '[old:C2.1]', status: 'passed' as const },
+      { name: '[old:C2.2]', status: 'passed' as const },
+    ]
+    const head = [
+      { name: 'median [old:C1.1]', status: 'passed' as const },
+      { name: '[old:C2.1]', status: 'passed' as const },
+      { name: 'other', status: 'passed' as const },
+      { name: 'other 2', status: 'passed' as const },
+    ]
+    // 사라진 이름은 태그를 단 원래 이름으로 보인다
+    expect(testCountRatchet(spec, base, head)).toMatchObject({
+      status: 'worse',
+      detail: '기준에서 돌던 시험이 사라짐: median [old:C1.2], [old:C2.2] (시험 수 4 → 4)',
+    })
+  })
+
   test('suite가 다르면 다른 시험이다', () => {
     const base = [{ name: 'x', suite: '묶음 A', status: 'passed' as const }]
     const head = [{ name: 'x', suite: '묶음 B', status: 'passed' as const }]

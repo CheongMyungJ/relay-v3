@@ -107,22 +107,45 @@ function counted(cases: TestCase[]): number {
 }
 
 /**
- * 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름. 파일을 옮겼으면 이름으로 찾는다.
- * 예시 태그는 빼고 견준다(있던 시험에 태그를 붙여도 같은 시험)
+ * 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름(원래 이름 그대로).
+ * 1) classname·file·이름이 같거나 이름이 같으면(파일을 옮김) 같은 시험이다.
+ * 2) 남은 기준 시험은 예시 태그를 뺀 이름으로, 1)에서 짝이 없던 head 시험과 하나씩만 짝짓는다(있던 시험에 태그를
+ *    붙임). 태그만 다른 기준 시험 둘을 head 시험 하나가 함께 가리지 않게 한다.
  */
 function vanished(base: TestCase[], head: TestCase[]): string[] {
-  const title = (t: TestCase) =>
-    withoutExampleTags(t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
+  const title = (t: TestCase) => (t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
   const full = (t: TestCase) => `${t.classname ?? ''}\0${t.file ?? ''}\0${title(t)}`
   const ran = head.filter((t) => t.status !== 'skipped')
   const byFull = new Set(ran.map(full))
   const byTitle = new Set(ran.map(title))
+  const left = base.filter(
+    (t) => t.status !== 'skipped' && !byFull.has(full(t)) && !byTitle.has(title(t)),
+  )
+  if (left.length === 0) return []
+  const matchedTitles = new Set(base.map(title))
+  const pool = new Map<string, number>()
+  for (const t of ran) {
+    if (matchedTitles.has(title(t))) continue
+    const k = untagged(title(t))
+    pool.set(k, (pool.get(k) ?? 0) + 1)
+  }
   const out: string[] = []
-  for (const t of base) {
-    if (t.status === 'skipped' || byFull.has(full(t)) || byTitle.has(title(t))) continue
-    if (!out.includes(title(t))) out.push(title(t))
+  for (const t of left) {
+    const k = untagged(title(t))
+    const n = pool.get(k) ?? 0
+    if (n > 0) pool.set(k, n - 1)
+    else if (!out.includes(title(t))) out.push(title(t))
   }
   return out
+}
+
+/** 경로(묶음 > 이름)의 마디마다 예시 태그를 빼고, 태그뿐이던 마디는 버린다 */
+function untagged(title: string): string {
+  return title
+    .split(' > ')
+    .map(withoutExampleTags)
+    .filter((s) => s !== '')
+    .join(' > ')
 }
 
 // ── 명령 지표 ───────────────────────────────────────────────────────────────

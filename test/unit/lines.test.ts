@@ -90,9 +90,13 @@ describe('judgeLines: 바뀜(change)', () => {
     // 기준에서 통과한 것 말고는 기준 실패를 확인하지 못했으면 증거 없음 그대로
     const unconfirmed = one(two, head, [tc('일 [C1.2]', 'passed')])
     expect(unconfirmed.status).toBe('missing_evidence')
-    // 결과에서 하나라도 실패하면 기준과 상관없이 not_met
-    const headFail = one(two, [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'failed')], head)
-    expect(headFail.status).toBe('not_met')
+    // 결과에서 하나라도 실패하면 기준과 상관없이 not_met(지킴 예시가 결과에서 깨진 경우도)
+    const headFail = one(
+      two,
+      [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'failed')],
+      [tc('토 [C1.1]', 'failed'), tc('일 [C1.2]', 'passed')],
+    )
+    expect(headFail).toMatchObject({ status: 'not_met', detail: '결과에서 실패: C1.2(failed)' })
   })
 
   test('기준에서 오류면(새 이름을 못 불러옴) met으로 보되 적는다', () => {

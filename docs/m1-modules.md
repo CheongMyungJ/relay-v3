@@ -75,7 +75,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 
 ### `src/core/ratchet.ts`
 - `fileLinesRatchet(spec, files: { path: string; base: number | null; head: number | null }[]): RatchetResult` — 바뀐 파일만 받는다. null은 그쪽에 없음, 셀 수 없으면 NaN(engine이 남은 파일의 줄 수를 못 읽은 경우). include/exclude glob. head > max이고 (base가 null이거나 base ≤ max이거나 head > base)면 offender. offender가 있으면 worse, 없고 범위 안에 셀 수 없는 파일(0 이상의 정수가 아님)이 있으면 unknown, 없고 base > max였던 파일이 줄었으면 better, 아니면 same.
-- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다. suite·name은 예시 태그 `[<계약 id>:C1.1]`를 빼고 견준다: 있던 시험에 태그를 붙여도 같은 시험).
+- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다. 그래도 짝이 없는 base 시험은 예시 태그 `[<계약 id>:C1.1]`를 경로(suite > name) 마디마다 빼고(태그뿐인 마디는 버림), 앞에서 짝이 없던 head 시험과 하나씩만 짝짓는다: 있던 시험에 태그를 붙이거나 태그 묶음으로 감싸도 같은 시험이고, 태그만 다른 base 시험 둘을 head 하나가 함께 가리지 못한다. detail에는 원래 이름).
 - `commandRatchet(spec, base: string | null, head: string | null): RatchetResult` — 표준 출력의 마지막 숫자 줄. 못 읽으면 unknown.
 
 ### `src/core/gate.ts`
