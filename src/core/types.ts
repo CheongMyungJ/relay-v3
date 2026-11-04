@@ -130,6 +130,8 @@ export type TestStatus = 'passed' | 'failed' | 'error' | 'skipped'
 
 export interface TestCase {
   name: string
+  /** 감싼 testsuite 이름들(' > '로 이음). node:test는 describe 이름을 여기에만 낸다 */
+  suite?: string
   classname?: string
   file?: string
   status: TestStatus
@@ -243,6 +245,8 @@ export interface EvidenceBundle {
   created_at: string
   /** 판정에 쓴 quality.json의 내용 해시와 출처(base|head) (V9) */
   quality: { hash: string; from: 'base' | 'head' | 'none' }
+  /** 줄 판정에 쓴 계약의 id와 내용 해시(contractHash). 계약 없이 만들었으면 null */
+  contract: { id: string; hash: string } | null
   commands: CommandEvidence[]
   lines: LineVerdict[] | null
   groundings: GroundingCheck[] | null
@@ -255,6 +259,8 @@ export interface EvidenceBundle {
     new_dependencies: string[]
     new_modules: string[]
     paths: string[]
+    /** 줄 수를 셀 수 없는 바이너리 파일의 경로 */
+    binary: string[]
   }
   review: { status: 'done' | 'failed' | 'skipped'; findings: ReviewFinding[] } | null
   /** 세션이 PR 본문 등에 쓴 주장. 관문에 들어가지 않는다 */

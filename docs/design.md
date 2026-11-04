@@ -25,10 +25,12 @@
 | V8 | **세션에 주는 되먹임은 결정론적 실패만, 쉬는 세션에 한 줄, 라운드 상한 3** | 측정: v2 D555(깨울 때마다 토큰), v2 D171 | |
 | V9 | **관문의 품질 기준은 base의 `quality.json`으로 잰다.** diff가 `quality.json`을 바꾸면 사람 경로(지킴 파일)로 가고, 판정은 base 쪽 기준으로 한다. 세션이 기준을 낮춰 관문을 피하지 못하게 한다 | 가정 | |
 | V10 | **check worktree는 레포마다 둘(base, head)을 두고 다시 쓴다.** SHA로 강제 체크아웃하고 `git clean`으로 비운다. `setup.keep`(예: `node_modules`)은 지우지 않고, `setup.inputs`(예: lockfile)의 해시가 바뀔 때만 `setup.run`(예: `npm ci`)을 돈다 | 가정: worktree마다 설치하면 비용이 큼(philosophy 비평) | |
-| V11 | **수용 시험은 JUnit XML로 읽는다.** `commands.acceptance`가 JUnit 파일을 낸다. 시험 이름에 예시 id를 `[C1.1]`처럼 넣으면 줄 판정에 쓴다. 바뀜 줄은 base 소스에 시험 파일과 예시 자료만 얹어 돌린다 | 가정: JUnit은 대부분의 러너가 낸다(vitest, node:test, pytest, jest-junit, go-junit-report) | |
+| V11 | **수용 시험은 JUnit XML로 읽는다.** `commands.acceptance`가 JUnit 파일을 낸다. 시험 이름에 계약 id와 예시 id를 `[<계약 id>:C1.1]`처럼 넣으면 줄 판정에 쓴다(계약 id가 있어야 머지된 앞 Work의 시험과 섞이지 않는다). 바뀜 줄은 base 소스에 시험 파일과 예시 자료만 얹어 돌린다 | 가정: JUnit은 대부분의 러너가 낸다(vitest, node:test, pytest, jest-junit, go-junit-report) | |
 | V12 | **M1은 앱 없이 CLI로 만든다.** `relay init`, `relay check`, `relay gate`, `relay debt`. 세션 호스트(화면)는 M2에서 정한다 | 가정 | |
 | V13 | **세션 호스트는 Electron 데스크톱 앱이다.** v2처럼 앱 안 터미널(node-pty + xterm.js)에 Claude Code를 띄우고, 옆 패널에 계약과 증거를 둔다. v2의 PTY·훅 어댑터는 필요한 만큼만 옮긴다. 엔진(M1)은 앱과 CLI가 함께 쓴다 | 사용자 결정. v2 사용자와 평가 도구(Playwright `_electron`)를 잇는다 | ✅ (2026-11-04) |
 | V14 | **실제 Claude 평가는 제안서대로 n≥5로 돌린다.** M0의 뺀 변형과 M2 비교 평가 모두. 배치를 돌리기 전에 규모(실행 수)를 알리고, 판정 규칙은 결과 전에 고정한다 | 사용자 결정 | ✅ (2026-11-04) |
+| V15 | **리뷰가 없으면 자동 후보도 그림자도 아니다.** 리뷰 없음·실패는 사람 머지로 보내는 사실이다(V4: 자동 경로에서 리뷰는 끌 수 없음). 그림자 기록은 '증거는 모두 채웠고 스위치·서버 보호·실적만 막았다'일 때만 쌓인다. 그래서 리뷰가 없는 M1의 결론은 늘 사람 머지이고, 그림자 실적은 M2에서 리뷰가 붙은 뒤부터 쌓인다 | 가정: 그림자 실적은 '자동이었으면 머지했을 것'의 기록이라, 자동 경로가 요구하는 증거가 빠진 결론을 세면 실적이 부풀려진다 | |
+| V16 | **package.json의 scripts가 바뀌면 사람에게 보낸다.** 품질 기준의 명령이 부르는 스크립트(그리고 pre/post 훅)가 바뀌면 base 기준으로 재도 실제로 도는 것이 달라지기 때문이다. 시험 파일의 확장자를 바꾸는 것도 시험 약화 신호다 | 가정 | |
 
 ## 2. 품질 기준 (`.relay/quality.json`)
 
@@ -96,3 +98,10 @@ v2의 규칙을 잇는다. 맞는 첫 층에, 한 동작은 가장 낮은 층에
 2. 실제 git·파일·프로세스를 보면 [어댑터] `test/adapters/`
 3. 여러 모듈의 시나리오면 [흐름] `test/flow/` (실제 git 임시 레포, 가짜 명령)
 4. 실제 모델이 필요하면 [실제] `test/claude/` (M2부터)
+
+## 7. 알려진 한계 (M1)
+
+- `relay check`는 커밋을 본다. 작업 트리의 커밋하지 않은 변경은 증거에 들어가지 않는다.
+- 명령이 `setsid`로 새 세션을 만들어 떨어져 나간 자손 프로세스와 Windows의 일부 자손은 시간 초과 때 끝내지 못할 수 있다. worktree 잠금이 다음 check가 그 worktree를 건드리는 것은 막는다.
+- 지식 근거(knowledge)는 M1에 지식 저장소가 없어 늘 '확인하지 못함'이다.
+- 서버 보호와 실적은 M1에서 읽지 않는다(gate의 server는 null, track_record_ok는 빈 값). 리뷰도 없으므로 결론은 늘 사람 머지다(V15).

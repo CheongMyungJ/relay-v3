@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "setup": {
+    "run": "npm ci",
+    "inputs": ["package-lock.json"],
+    "keep": ["node_modules"]
+  },
+  "commands": {
+    "fast": [
+      {
+        "id": "typecheck",
+        "run": "npm run typecheck"
+      },
+      {
+        "id": "lint",
+        "run": "npm run lint"
+      },
+      {
+        "id": "format",
+        "run": "npm run format:check"
+      },
+      {
+        "id": "limits",
+        "run": "npm run limits"
+      }
+    ],
+    "acceptance": {
+      "id": "test",
+      "run": "npx vitest run --project unit --project adapters --project flow --reporter=junit --outputFile=.relay-out/junit.xml",
+      "junit": ".relay-out/junit.xml"
+    },
+    "full": {
+      "ci_checks": []
+    }
+  },
+  "human_paths": [],
+  "guard_paths": [],
+  "public_api": ["src/core/types.ts"],
+  "test_globs": [
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/test_*.py",
+    "**/*_test.py",
+    "**/*_test.go",
+    "**/*Test.java",
+    "**/*Tests.java",
+    "**/*Test.kt",
+    "**/*Tests.kt",
+    "**/src/test/**",
+    "test/**",
+    "tests/**",
+    "__tests__/**",
+    "spec/**"
+  ],
+  "examples_dir": ".relay/examples",
+  "ratchets": [
+    {
+      "id": "tests",
+      "kind": "test_count"
+    },
+    {
+      "id": "file-size",
+      "kind": "file_lines",
+      "max": 600,
+      "exclude": ["**/package-lock.json"]
+    }
+  ],
+  "rules": [],
+  "auto": []
+}

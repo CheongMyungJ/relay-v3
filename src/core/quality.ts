@@ -1,12 +1,7 @@
 // 품질 기준(.relay/quality.json): 파싱, 기본값, 해시, relay init 초안.
+import { globProblem } from './glob.ts'
 import { err, ok, type Result } from './result.ts'
-import type {
-  AutoCondition,
-  CommandSpec,
-  QualityConfig,
-  RatchetSpec,
-  SetupSpec,
-} from './types.ts'
+import type { AutoCondition, CommandSpec, QualityConfig, RatchetSpec, SetupSpec } from './types.ts'
 
 export const DEFAULT_GUARD_PATHS: string[] = [
   '.relay/quality.json',
@@ -17,11 +12,17 @@ export const DEFAULT_GUARD_PATHS: string[] = [
   '**/.eslintrc*',
   '**/tsconfig*.json',
   '**/.prettierrc*',
-  '**/vitest.config.*',
+  '**/vitest.*',
   '**/vite.config.*',
-  '**/jest.config.*',
+  '**/jest.*',
+  '**/.mocharc*',
+  '**/playwright.config.*',
   '**/pytest.ini',
+  '**/conftest.py',
+  '**/tox.ini',
+  '**/setup.cfg',
   '**/.coveragerc',
+  '**/.gitattributes',
   'CODEOWNERS',
   '.github/CODEOWNERS',
   'docs/CODEOWNERS',
@@ -33,6 +34,11 @@ export const DEFAULT_TEST_GLOBS: string[] = [
   '**/test_*.py',
   '**/*_test.py',
   '**/*_test.go',
+  '**/*Test.java',
+  '**/*Tests.java',
+  '**/*Test.kt',
+  '**/*Tests.kt',
+  '**/src/test/**',
   'test/**',
   'tests/**',
   '__tests__/**',
@@ -77,22 +83,31 @@ function prune<T extends object>(o: T): T {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T
 }
 
-const text: Read<string> = (v, p, e) => {
+const str: Read<string> = (v, p, e) => {
   if (typeof v !== 'string') e.push(`${p}: 문자열이어야 함`)
   else if (v.trim() === '') e.push(`${p}: 비어 있으면 안 됨`)
+  else if (v.includes('\0')) e.push(`${p}: NUL 글자를 쓸 수 없음`)
   else return v
   return ''
 }
 
+/** 레포 경로 glob. 맞는 파일이 없어 조용히 꺼지는 모양은 받지 않는다 */
+const globText: Read<string> = (v, p, e) => {
+  const s = str(v, p, e)
+  const why = s === '' ? null : globProblem(s)
+  if (why !== null) e.push(`${p}: ${why} (${s})`)
+  return s
+}
+
 const ident: Read<string> = (v, p, e) => {
-  const s = text(v, p, e)
+  const s = str(v, p, e)
   if (s !== '' && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s))
     e.push(`${p}: 영문·숫자로 시작하고 영문·숫자·. _ -만 써야 함`)
   return s
 }
 
 const relPath: Read<string> = (v, p, e) => {
-  const s = text(v, p, e)
+  const s = str(v, p, e)
   if (s !== '' && (/^(?:[A-Za-z]:)?[\\/]/.test(s) || s.split(/[\\/]/).includes('..')))
     e.push(`${p}: 레포 안의 상대 경로여야 함`)
   return s
@@ -110,9 +125,12 @@ const count: Read<number> = (v, p, e) => {
   return 0
 }
 
+/** 시간 제한의 상한(초). 하루 */
+export const MAX_TIMEOUT_SEC = 86_400
+
 const seconds: Read<number> = (v, p, e) => {
-  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v
-  e.push(`${p}: 0보다 큰 수여야 함`)
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= MAX_TIMEOUT_SEC) return v
+  e.push(`${p}: 0보다 크고 ${MAX_TIMEOUT_SEC} 이하인 수여야 함`)
   return 1
 }
 
@@ -134,7 +152,8 @@ function oneOf<T extends string>(values: readonly T[]): Read<T> {
   }
 }
 
-const texts = list(text)
+const texts = list(str)
+const globs = list(globText)
 const paths = list(relPath)
 
 // ── quality.json 읽기 ───────────────────────────────────────────────────────
@@ -144,7 +163,7 @@ const readCommand: Read<CommandSpec> = (v, p, e) => {
   if (o === null) return { id: '', run: '' }
   return prune({
     id: req(o, 'id', p, e, ident, ''),
-    run: req(o, 'run', p, e, text, ''),
+    run: req(o, 'run', p, e, str, ''),
     timeout_sec: opt(o, 'timeout_sec', p, e, seconds),
     junit: opt(o, 'junit', p, e, relPath),
   })
@@ -154,7 +173,7 @@ const readSetup: Read<SetupSpec> = (v, p, e) => {
   const o = shape(v, p, e, ['run', 'inputs', 'keep', 'timeout_sec'])
   if (o === null) return { run: '', inputs: [], keep: [] }
   return prune({
-    run: req(o, 'run', p, e, text, ''),
+    run: req(o, 'run', p, e, str, ''),
     inputs: req(o, 'inputs', p, e, paths, []),
     keep: req(o, 'keep', p, e, paths, []),
     timeout_sec: opt(o, 'timeout_sec', p, e, seconds),
@@ -197,8 +216,8 @@ const readRatchet: Read<RatchetSpec> = (v, p, e) => {
       id: req(o, 'id', p, e, ident, ''),
       kind,
       max: req(o, 'max', p, e, count, 0),
-      include: opt(o, 'include', p, e, texts),
-      exclude: opt(o, 'exclude', p, e, texts),
+      include: opt(o, 'include', p, e, globs),
+      exclude: opt(o, 'exclude', p, e, globs),
     })
   }
   if (kind === 'test_count') {
@@ -210,7 +229,7 @@ const readRatchet: Read<RatchetSpec> = (v, p, e) => {
     return prune({
       id: req(o, 'id', p, e, ident, ''),
       kind,
-      run: req(o, 'run', p, e, text, ''),
+      run: req(o, 'run', p, e, str, ''),
       better: req(o, 'better', p, e, oneOf(['lower', 'higher'] as const), 'lower'),
       timeout_sec: opt(o, 'timeout_sec', p, e, seconds),
     })
@@ -220,7 +239,7 @@ const readRatchet: Read<RatchetSpec> = (v, p, e) => {
   return fallback
 }
 
-const AUTO_LIMITS = [
+const AUTO_KEYS = [
   'max_changed_lines',
   'paths',
   'no_new_dependencies',
@@ -228,20 +247,28 @@ const AUTO_LIMITS = [
   'require_all_lines_tested',
 ] as const
 
+/**
+ * 크기나 범위를 실제로 좁히는 제한이 있는가. 부울 제한 셋은 관문 2단계가 이미 거르므로
+ * (새 의존성·새 모듈은 구조 신호, 줄은 met이 아니면 사람) 그것만으로는 제한이 없는 것과 같다.
+ * gate도 같은 규칙을 쓴다.
+ */
+export function hasRealLimit(c: AutoCondition): boolean {
+  return c.max_changed_lines !== undefined || c.paths !== undefined
+}
+
 const readAuto: Read<AutoCondition> = (v, p, e) => {
-  const o = shape(v, p, e, ['id', ...AUTO_LIMITS])
+  const o = shape(v, p, e, ['id', ...AUTO_KEYS])
   if (o === null) return { id: '' }
   const c: AutoCondition = prune({
     id: req(o, 'id', p, e, ident, ''),
     max_changed_lines: opt(o, 'max_changed_lines', p, e, count),
-    paths: opt(o, 'paths', p, e, texts),
+    paths: opt(o, 'paths', p, e, globs),
     no_new_dependencies: opt(o, 'no_new_dependencies', p, e, bool),
     no_new_modules: opt(o, 'no_new_modules', p, e, bool),
     require_all_lines_tested: opt(o, 'require_all_lines_tested', p, e, bool),
   })
   // 제한이 없는 조건은 모든 변경을 자동으로 보낸다. 그런 조건은 받지 않는다
-  const limited = AUTO_LIMITS.some((k) => c[k] !== undefined && c[k] !== false)
-  if (!limited) e.push(`${where(p)}: 자동 조건에 제한이 하나도 없음`)
+  if (!hasRealLimit(c)) e.push(`${where(p)}: 자동 조건에 max_changed_lines나 paths 제한이 없음`)
   return c
 }
 
@@ -286,10 +313,10 @@ export function parseQuality(text: string): Result<QualityConfig> {
     version: 1 as const,
     setup: opt(o, 'setup', '', e, readSetup),
     commands: req(o, 'commands', '', e, readCommands, { fast: [] }),
-    human_paths: opt(o, 'human_paths', '', e, texts) ?? [],
-    guard_paths: opt(o, 'guard_paths', '', e, texts) ?? [],
-    public_api: opt(o, 'public_api', '', e, texts) ?? [],
-    test_globs: opt(o, 'test_globs', '', e, texts) ?? [...DEFAULT_TEST_GLOBS],
+    human_paths: opt(o, 'human_paths', '', e, globs) ?? [],
+    guard_paths: opt(o, 'guard_paths', '', e, globs) ?? [],
+    public_api: opt(o, 'public_api', '', e, globs) ?? [],
+    test_globs: opt(o, 'test_globs', '', e, globs) ?? [...DEFAULT_TEST_GLOBS],
     examples_dir: opt(o, 'examples_dir', '', e, relPath) ?? DEFAULT_EXAMPLES_DIR,
     ratchets: opt(o, 'ratchets', '', e, list(readRatchet)) ?? [],
     rules: opt(o, 'rules', '', e, texts) ?? [],
@@ -301,7 +328,10 @@ export function parseQuality(text: string): Result<QualityConfig> {
     [
       ...cmds.fast.map((c, i) => ({ id: c.id, path: `commands.fast[${i}].id` })),
       ...(cmds.acceptance ? [{ id: cmds.acceptance.id, path: 'commands.acceptance.id' }] : []),
-      ...(cmds.full?.local ?? []).map((c, i) => ({ id: c.id, path: `commands.full.local[${i}].id` })),
+      ...(cmds.full?.local ?? []).map((c, i) => ({
+        id: c.id,
+        path: `commands.full.local[${i}].id`,
+      })),
     ],
     e,
   )
@@ -366,10 +396,8 @@ const LOCKFILES: { file: string; pm: PackageManager; install: string }[] = [
 
 const JUNIT_OUT = '.relay-out/junit.xml'
 
-const ACCEPTANCE: Record<'vitest' | 'node', string> = {
-  vitest: `npx vitest run --reporter=junit --outputFile=${JUNIT_OUT}`,
-  node: `node --test --test-reporter=junit --test-reporter-destination=${JUNIT_OUT}`,
-}
+const VITEST_REPORT = `--reporter=junit --outputFile=${JUNIT_OUT}`
+const NODE_REPORT = `--test-reporter=junit --test-reporter-destination=${JUNIT_OUT}`
 
 function readPackage(text: string | undefined): {
   scripts: Record<string, string>
@@ -391,14 +419,44 @@ function readPackage(text: string | undefined): {
   return pm ? { scripts, pm } : { scripts }
 }
 
-/** 한 명령으로 러너를 바로 부르는 test 스크립트만 알아본다. 이어 붙인 명령은 모른다고 본다 */
-function testRunner(script: string): 'vitest' | 'node' | null {
-  if (/[;&|]/.test(script)) return null
+const ENV_ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=\S*$/
+const isWord = (w: string, name: string): boolean => w === name || w.endsWith(`/${name}`)
+
+/**
+ * 한 명령으로 러너를 바로 부르는 test 스크립트를 수용 시험 명령으로 바꾼다.
+ * 러너 뒤의 인자(--config, 경로 등)와 앞의 환경 변수·cross-env는 그대로 두고 JUnit 출력만 더한다.
+ * 이어 붙인 명령, 따옴표·셸 글자, 이미 reporter를 정한 스크립트는 모른다고 보고 null.
+ */
+export function acceptanceRun(script: string): string | null {
+  if (/[;&|<>`$"'\\()]/.test(script)) return null
   const words = script.trim().split(/\s+/)
-  const is = (w: string, name: string): boolean => w === name || w.endsWith(`/${name}`)
-  if (words.some((w) => is(w, 'vitest'))) return 'vitest'
-  const node = words.findIndex((w) => is(w, 'node'))
-  if (node !== -1 && words.indexOf('--test', node + 1) !== -1) return 'node'
+  const prefix: string[] = []
+  let i = 0
+  while (i < words.length && ENV_ASSIGN.test(words[i] ?? '')) prefix.push(words[i++] ?? '')
+  if (words[i] === 'cross-env') {
+    prefix.unshift('npx')
+    prefix.push(words[i++] ?? '')
+    while (i < words.length && ENV_ASSIGN.test(words[i] ?? '')) prefix.push(words[i++] ?? '')
+  }
+  if (words[i] === 'npx') i++
+  const runner = words[i] ?? ''
+  const rest = words.slice(i + 1)
+  if (rest.some((w) => /^--(?:test-)?reporter|^--outputFile|^--watch$|^-w$/.test(w))) return null
+  const join = (parts: string[]): string => parts.filter((w) => w !== '').join(' ')
+  if (isWord(runner, 'vitest')) {
+    const sub = rest[0]
+    if (sub !== undefined && /^(?:watch|dev|bench|init|list)$/.test(sub)) return null
+    const args = sub === 'run' ? rest.slice(1) : rest
+    // npm 스크립트 밖에서는 node_modules/.bin이 PATH에 없다
+    const bin = runner === 'vitest' && prefix[0] !== 'npx' ? 'npx vitest' : runner
+    return join([...prefix, bin, 'run', ...args, VITEST_REPORT])
+  }
+  if (isWord(runner, 'node')) {
+    const at = rest.indexOf('--test')
+    if (at === -1) return null
+    // node는 첫 위치 인자 뒤의 옵션을 스크립트에 넘기므로 --test 바로 뒤에 넣는다
+    return join([...prefix, runner, ...rest.slice(0, at + 1), NODE_REPORT, ...rest.slice(at + 1)])
+  }
   return null
 }
 
@@ -417,8 +475,8 @@ export function draftQuality(input: { packageJson?: string; files: string[] }): 
   const test = pkg.scripts['test']
   // npm init이 넣는 자리표시 스크립트는 늘 실패하므로 넣지 않는다
   if (test !== undefined && !/no test specified/i.test(test)) {
-    const runner = testRunner(test)
-    if (runner) acceptance = { id: 'test', run: ACCEPTANCE[runner], junit: JUNIT_OUT }
+    const run = acceptanceRun(test)
+    if (run !== null) acceptance = { id: 'test', run, junit: JUNIT_OUT }
     else fast.push({ id: 'test', run: `${pm} run test` })
   }
 
