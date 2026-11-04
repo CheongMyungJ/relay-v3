@@ -1,7 +1,7 @@
-From b2121ec07576449b20622c92fef378b4ac9616d2 Mon Sep 17 00:00:00 2001
+From a571edd0bdf409ece051d663d1b7f9e71d4fbb66 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Wed, 4 Nov 2026 12:00:44 +0000
-Subject: [PATCH 1/3] =?UTF-8?q?=EA=B3=84=EC=95=BD=20=EB=B0=94=EA=BE=B8?=
+Subject: [PATCH 1/4] =?UTF-8?q?=EA=B3=84=EC=95=BD=20=EB=B0=94=EA=BE=B8?=
  =?UTF-8?q?=EA=B8=B0=20=EC=9A=94=EC=B2=AD=EC=9D=80=20=EB=B0=94=EA=BE=BC=20?=
  =?UTF-8?q?=EA=B3=84=EC=95=BD=20=EC=A0=84=EC=B2=B4=EB=A5=BC=20=EA=BC=AD=20?=
  =?UTF-8?q?=EB=B0=9B=EB=8A=94=EB=8B=A4?=
@@ -17,18 +17,27 @@ request_contract_change가 새 계약 없이 불리면 사람이 받아들여도
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01EaNCruGwgxaN7uUjbtmh27
 ---
+ .gitignore                         |  2 +-
  docs/m2-app.md                     |  2 +-
  docs/m2-modules.md                 |  2 +-
- node_modules                       |  1 +
  src/core/instructions.ts           |  2 +-
  src/main/mcp-bridge.ts             |  9 ++++--
  src/main/works-contract.ts         | 49 +++++++++++++++++++-----------
  src/renderer/src/ContractPanel.tsx | 11 +++++--
  test/adapters/mcp-bridge.test.ts   |  2 +-
  test/flow/works.test.ts            | 19 ++++++++----
- 9 files changed, 64 insertions(+), 33 deletions(-)
- create mode 120000 node_modules
+ 9 files changed, 64 insertions(+), 34 deletions(-)
 
+diff --git a/.gitignore b/.gitignore
+index f6c4d20..26eaf7a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,4 +1,4 @@
+-node_modules/
++node_modules
+ out/
+ .relay-out/
+ test-results/
 diff --git a/docs/m2-app.md b/docs/m2-app.md
 index 407e71f..58bafaa 100644
 --- a/docs/m2-app.md
@@ -55,14 +64,6 @@ index 765ef14..83d6a04 100644
  - `firstPrompt(requestPath: string): string`.
  - `sessionSettings(o: { port: number; workId: string }): object` — v2 `hookSettings`와 같은 모양의 http 훅(UserPromptSubmit, Stop, SessionEnd, PreToolUse, PostToolUse, PostToolUseFailure), 머리글 `Authorization: Bearer $RELAY_HOOK_TOKEN`, `allowedEnvVars: ['RELAY_HOOK_TOKEN']`, `disableAllHooks: false`(레포 설정이 relay 훅을 끄지 못하게), `autoMemoryEnabled: false`. URL `http://127.0.0.1:<port>/hook/<workId>/<Event>`.
  - `mcpConfig(o: { command: string; args: string[]; env: Record<string, string> }): object` — `{ mcpServers: { relay_work: { type: 'stdio', command, args, env } } }`.
-diff --git a/node_modules b/node_modules
-new file mode 120000
-index 0000000..603b020
---- /dev/null
-+++ b/node_modules
-@@ -0,0 +1 @@
-+/home/user/relay-v3/node_modules
-\ No newline at end of file
 diff --git a/src/core/instructions.ts b/src/core/instructions.ts
 index afe702f..2f00b19 100644
 --- a/src/core/instructions.ts
@@ -279,10 +280,10 @@ index 7e8dc1a..f41fa6b 100644
 2.43.0
 
 
-From 7cb06caca322587a487c6810d7ffb7c434a707ac Mon Sep 17 00:00:00 2001
+From 4fce5af81ace2d1d845c1ea8ff1e5b06cb240b42 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Wed, 4 Nov 2026 12:03:17 +0000
-Subject: [PATCH 2/3] =?UTF-8?q?=EC=8B=9C=ED=97=98=20=EC=88=98=20=EB=9E=98?=
+Subject: [PATCH 2/4] =?UTF-8?q?=EC=8B=9C=ED=97=98=20=EC=88=98=20=EB=9E=98?=
  =?UTF-8?q?=EC=B9=AB:=20=EC=9E=88=EB=8D=98=20=EC=8B=9C=ED=97=98=EC=97=90?=
  =?UTF-8?q?=20=EC=98=88=EC=8B=9C=20=ED=83=9C=EA=B7=B8=EB=A5=BC=20=EB=B6=99?=
  =?UTF-8?q?=EC=97=AC=EB=8F=84=20=EC=82=AC=EB=9D=BC=EC=A7=84=20=EC=8B=9C?=
@@ -413,10 +414,10 @@ index 7ea9a9c..be3d263 100644
 2.43.0
 
 
-From 1fac7ca53895fc1ceb0a79a26f280c5a88a6a2f6 Mon Sep 17 00:00:00 2001
+From ad0f36395360d54e5c223e30063e44c29c30746d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Wed, 4 Nov 2026 13:03:05 +0000
-Subject: [PATCH 3/3] =?UTF-8?q?=EB=B0=94=EB=80=9C=20=EC=A4=84:=20=ED=95=98?=
+Subject: [PATCH 3/4] =?UTF-8?q?=EB=B0=94=EB=80=9C=20=EC=A4=84:=20=ED=95=98?=
  =?UTF-8?q?=EB=82=98=20=EC=9D=B4=EC=83=81=EC=9D=B4=20=EA=B8=B0=EC=A4=80?=
  =?UTF-8?q?=EC=97=90=EC=84=9C=20=EC=8B=A4=ED=8C=A8=ED=95=98=EB=A9=B4=20met?=
  =?UTF-8?q?,=20=EA=B8=B0=EC=A4=80=EC=97=90=EC=84=9C=EB=8F=84=20=ED=86=B5?=
@@ -543,6 +544,171 @@ index 62c3f1f..1f07784 100644
    test('예시마다 기준 결과가 다르면 met의 detail에 확인하지 못한 것만 적는다', () => {
      const l = line('C1', 'change', ['C1.1', 'C1.2'])
      const head = [tc('[C1.1]', 'passed'), tc('[C1.2]', 'passed')]
+-- 
+2.43.0
+
+
+From 4ae6e79999e0268e15373c16f6f375a4c3b33b00 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 4 Nov 2026 14:04:23 +0000
+Subject: [PATCH 4/4] =?UTF-8?q?=EC=8B=9C=ED=97=98=20=EC=88=98=20=EB=9E=98?=
+ =?UTF-8?q?=EC=B9=AB=C2=B7=EB=B0=94=EB=80=9C=20=EC=A4=84=20=EA=B3=A0?=
+ =?UTF-8?q?=EC=B9=A8=20=EB=B3=B4=EC=99=84(=EB=8F=85=EB=A6=BD=20=EB=A6=AC?=
+ =?UTF-8?q?=EB=B7=B0=20=EC=A7=80=EC=A0=81)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- 태그를 뺀 이름으로는 head 시험과 하나씩만 짝짓는다: 태그만 다른 기준 시험 둘을 head 하나가 함께 가려 지운 시험을 놓치던 것
+- 태그를 경로 마디마다 뺀다: 태그 묶음(describe)으로 감싼 있던 시험도 같은 시험
+- 사라진 시험은 원래 이름(태그 포함)으로 적는다
+- 바뀜 줄 시험: 지킴 예시가 결과에서 깨지면 not_met인지 제대로 확인
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EaNCruGwgxaN7uUjbtmh27
+---
+ docs/m1-modules.md        |  2 +-
+ src/core/ratchet.ts       | 37 ++++++++++++++++++++++++++++++-------
+ test/unit/lines.test.ts   | 10 +++++++---
+ test/unit/ratchet.test.ts | 32 ++++++++++++++++++++++++++++++++
+ 4 files changed, 70 insertions(+), 11 deletions(-)
+
+diff --git a/docs/m1-modules.md b/docs/m1-modules.md
+index 56c037d..193d265 100644
+--- a/docs/m1-modules.md
++++ b/docs/m1-modules.md
+@@ -75,7 +75,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의
+ 
+ ### `src/core/ratchet.ts`
+ - `fileLinesRatchet(spec, files: { path: string; base: number | null; head: number | null }[]): RatchetResult` — 바뀐 파일만 받는다. null은 그쪽에 없음, 셀 수 없으면 NaN(engine이 남은 파일의 줄 수를 못 읽은 경우). include/exclude glob. head > max이고 (base가 null이거나 base ≤ max이거나 head > base)면 offender. offender가 있으면 worse, 없고 범위 안에 셀 수 없는 파일(0 이상의 정수가 아님)이 있으면 unknown, 없고 base > max였던 파일이 줄었으면 better, 아니면 same.
+-- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다. suite·name은 예시 태그 `[<계약 id>:C1.1]`를 빼고 견준다: 있던 시험에 태그를 붙여도 같은 시험).
++- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다. 그래도 짝이 없는 base 시험은 예시 태그 `[<계약 id>:C1.1]`를 경로(suite > name) 마디마다 빼고(태그뿐인 마디는 버림), 앞에서 짝이 없던 head 시험과 하나씩만 짝짓는다: 있던 시험에 태그를 붙이거나 태그 묶음으로 감싸도 같은 시험이고, 태그만 다른 base 시험 둘을 head 하나가 함께 가리지 못한다. detail에는 원래 이름).
+ - `commandRatchet(spec, base: string | null, head: string | null): RatchetResult` — 표준 출력의 마지막 숫자 줄. 못 읽으면 unknown.
+ 
+ ### `src/core/gate.ts`
+diff --git a/src/core/ratchet.ts b/src/core/ratchet.ts
+index 02a8fd9..55019ab 100644
+--- a/src/core/ratchet.ts
++++ b/src/core/ratchet.ts
+@@ -107,24 +107,47 @@ function counted(cases: TestCase[]): number {
+ }
+ 
+ /**
+- * 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름. 파일을 옮겼으면 이름으로 찾는다.
+- * 예시 태그는 빼고 견준다(있던 시험에 태그를 붙여도 같은 시험)
++ * 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름(원래 이름 그대로).
++ * 1) classname·file·이름이 같거나 이름이 같으면(파일을 옮김) 같은 시험이다.
++ * 2) 남은 기준 시험은 예시 태그를 뺀 이름으로, 1)에서 짝이 없던 head 시험과 하나씩만 짝짓는다(있던 시험에 태그를
++ *    붙임). 태그만 다른 기준 시험 둘을 head 시험 하나가 함께 가리지 않게 한다.
+  */
+ function vanished(base: TestCase[], head: TestCase[]): string[] {
+-  const title = (t: TestCase) =>
+-    withoutExampleTags(t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
++  const title = (t: TestCase) => (t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
+   const full = (t: TestCase) => `${t.classname ?? ''}\0${t.file ?? ''}\0${title(t)}`
+   const ran = head.filter((t) => t.status !== 'skipped')
+   const byFull = new Set(ran.map(full))
+   const byTitle = new Set(ran.map(title))
++  const left = base.filter(
++    (t) => t.status !== 'skipped' && !byFull.has(full(t)) && !byTitle.has(title(t)),
++  )
++  if (left.length === 0) return []
++  const matchedTitles = new Set(base.map(title))
++  const pool = new Map<string, number>()
++  for (const t of ran) {
++    if (matchedTitles.has(title(t))) continue
++    const k = untagged(title(t))
++    pool.set(k, (pool.get(k) ?? 0) + 1)
++  }
+   const out: string[] = []
+-  for (const t of base) {
+-    if (t.status === 'skipped' || byFull.has(full(t)) || byTitle.has(title(t))) continue
+-    if (!out.includes(title(t))) out.push(title(t))
++  for (const t of left) {
++    const k = untagged(title(t))
++    const n = pool.get(k) ?? 0
++    if (n > 0) pool.set(k, n - 1)
++    else if (!out.includes(title(t))) out.push(title(t))
+   }
+   return out
+ }
+ 
++/** 경로(묶음 > 이름)의 마디마다 예시 태그를 빼고, 태그뿐이던 마디는 버린다 */
++function untagged(title: string): string {
++  return title
++    .split(' > ')
++    .map(withoutExampleTags)
++    .filter((s) => s !== '')
++    .join(' > ')
++}
++
+ // ── 명령 지표 ───────────────────────────────────────────────────────────────
+ 
+ /** 표준 출력의 마지막 숫자 줄을 지표로 읽는다. 못 읽으면 모름 */
+diff --git a/test/unit/lines.test.ts b/test/unit/lines.test.ts
+index 1f07784..d022c94 100644
+--- a/test/unit/lines.test.ts
++++ b/test/unit/lines.test.ts
+@@ -90,9 +90,13 @@ describe('judgeLines: 바뀜(change)', () => {
+     // 기준에서 통과한 것 말고는 기준 실패를 확인하지 못했으면 증거 없음 그대로
+     const unconfirmed = one(two, head, [tc('일 [C1.2]', 'passed')])
+     expect(unconfirmed.status).toBe('missing_evidence')
+-    // 결과에서 하나라도 실패하면 기준과 상관없이 not_met
+-    const headFail = one(two, [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'failed')], head)
+-    expect(headFail.status).toBe('not_met')
++    // 결과에서 하나라도 실패하면 기준과 상관없이 not_met(지킴 예시가 결과에서 깨진 경우도)
++    const headFail = one(
++      two,
++      [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'failed')],
++      [tc('토 [C1.1]', 'failed'), tc('일 [C1.2]', 'passed')],
++    )
++    expect(headFail).toMatchObject({ status: 'not_met', detail: '결과에서 실패: C1.2(failed)' })
+   })
+ 
+   test('기준에서 오류면(새 이름을 못 불러옴) met으로 보되 적는다', () => {
+diff --git a/test/unit/ratchet.test.ts b/test/unit/ratchet.test.ts
+index be3d263..84aec43 100644
+--- a/test/unit/ratchet.test.ts
++++ b/test/unit/ratchet.test.ts
+@@ -182,6 +182,38 @@ describe('시험 수', () => {
+     expect(testCountRatchet(spec, base, head)).toMatchObject({ status: 'better', base: 2, head: 3 })
+   })
+ 
++  test('태그를 감싼 묶음(describe)으로 붙여도 같은 시험이다', () => {
++    const base = [
++      { name: '홀수 개', status: 'passed' as const },
++      { name: '짝수 개', suite: '중앙값', status: 'passed' as const },
++    ]
++    const head = [
++      { name: '[w:C1.1] > 홀수 개', status: 'passed' as const },
++      { name: '짝수 개', suite: '중앙값 > [w:C2.1]', status: 'passed' as const },
++    ]
++    expect(testCountRatchet(spec, base, head).status).toBe('same')
++  })
++
++  test('태그만 다른 기준 시험 둘은 head 시험 하나가 함께 가리지 않는다(하나씩 짝짓기)', () => {
++    const base = [
++      { name: 'median [old:C1.1]', status: 'passed' as const },
++      { name: 'median [old:C1.2]', status: 'passed' as const },
++      { name: '[old:C2.1]', status: 'passed' as const },
++      { name: '[old:C2.2]', status: 'passed' as const },
++    ]
++    const head = [
++      { name: 'median [old:C1.1]', status: 'passed' as const },
++      { name: '[old:C2.1]', status: 'passed' as const },
++      { name: 'other', status: 'passed' as const },
++      { name: 'other 2', status: 'passed' as const },
++    ]
++    // 사라진 이름은 태그를 단 원래 이름으로 보인다
++    expect(testCountRatchet(spec, base, head)).toMatchObject({
++      status: 'worse',
++      detail: '기준에서 돌던 시험이 사라짐: median [old:C1.2], [old:C2.2] (시험 수 4 → 4)',
++    })
++  })
++
+   test('suite가 다르면 다른 시험이다', () => {
+     const base = [{ name: 'x', suite: '묶음 A', status: 'passed' as const }]
+     const head = [{ name: 'x', suite: '묶음 B', status: 'passed' as const }]
 -- 
 2.43.0
 
