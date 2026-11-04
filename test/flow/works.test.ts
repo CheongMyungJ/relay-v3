@@ -162,6 +162,10 @@ describe('한 Work의 생애', () => {
     expect(v.evidence?.review?.findings).toEqual([
       { id: 'R1', severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 },
     ])
+    // 리뷰의 토큰은 events.jsonl에만 남긴다(리뷰는 대화 기록을 남기지 않는다). 증거 묶음에는 넣지 않는다
+    expect(v.evidence?.review).not.toHaveProperty('usage')
+    const reviewed = (await app.store.readEvents(id)).find((e) => e.type === 'review')
+    expect(reviewed?.usage).toMatchObject({ input_tokens: 1000, output_tokens: 50 })
     expect(v.gate).toEqual({
       conclusion: 'human_merge',
       decisive: '프로젝트에서 자동 머지가 꺼져 있음',

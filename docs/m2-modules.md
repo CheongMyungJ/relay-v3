@@ -116,7 +116,7 @@ class Works {
     store; sessions: SessionHost; hooksPort: number; controlUrl: string
     bridgeCommand: { command: string; args: string[]; env: Record<string,string> }
     claudeBin: string; check: typeof import('../engine/check.ts').check
-    review: (o: ReviewInput) => Promise<EvidenceBundle['review']>
+    review: (o: ReviewInput) => Promise<(EvidenceBundle['review'] & { usage? }) | null>  // usage: 토큰(events.jsonl에만)
     gh: typeof import('../adapters/gh.ts'); now: () => string; newId: () => string
     emit: (event: string, payload: unknown) => void; relayVersion: string
     debounceMs?: number   // 기본 20,000

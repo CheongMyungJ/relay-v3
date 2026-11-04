@@ -59,12 +59,13 @@ export function claudeReview(o: {
       o.log?.(`리뷰 실패: ${r.error}`)
       return { status: 'failed', findings: [] }
     }
+    const usage = r.usage ? { usage: r.usage as Record<string, unknown> } : {}
     const parsed = parseReview(r.value)
     if (!parsed.ok) {
       o.log?.(`리뷰 결과를 읽지 못함: ${parsed.errors.join('; ')}`)
-      return { status: 'failed', findings: [] }
+      return { status: 'failed', findings: [], ...usage }
     }
-    return { status: 'done', findings: parsed.value }
+    return { status: 'done', findings: parsed.value, ...usage }
   }
 }
 
@@ -322,8 +323,12 @@ export class EvidenceRunner {
         type: 'review',
         status: result?.status ?? null,
         findings: result?.findings.length ?? 0,
+        ...(result?.usage ? { usage: result.usage } : {}),
       })
-      return { ...bundle, review: result }
+      return {
+        ...bundle,
+        review: result && { status: result.status, findings: result.findings },
+      }
     } catch (e) {
       this.ctx.log(`리뷰 실패 (${rec.id})`, e)
       return { ...bundle, review: { status: 'failed', findings: [] } }

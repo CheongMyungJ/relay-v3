@@ -20,7 +20,12 @@ export interface ReviewInput {
   signal?: AbortSignal
 }
 
-export type ReviewResult = EvidenceBundle['review']
+/**
+ * 리뷰의 결과. usage는 claude -p가 알려 준 토큰 사용량이다. 리뷰는 대화 기록을 남기지 않으므로(--no-session-persistence)
+ * events.jsonl의 review 기록에 남긴다(평가가 리뷰 토큰을 센다). 증거 묶음에는 넣지 않는다
+ */
+export type ReviewResult =
+  (NonNullable<EvidenceBundle['review']> & { usage?: Record<string, unknown> }) | null
 
 export interface WorksDeps {
   store: Store
