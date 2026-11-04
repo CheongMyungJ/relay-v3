@@ -1,6 +1,6 @@
 # M2 평가 규약
 
-- 상태: 초안. 첫 배치를 돌리기 전에 '고정'으로 바꾸고 커밋한다. 고정한 뒤에는 바꾸지 않는다. 바꿀 일이 생기면 사람에게 묻고 까닭을 `log.md`에 적는다.
+- 상태: **고정 (2026-11-04)**. 빌드: relay-v3 `53f7fbb`, 평가 도구 relay-v2 `5f7bf2e`. 고정한 뒤에는 바꾸지 않는다. 바꿀 일이 생기면 사람에게 묻고 까닭을 `log.md`에 적는다.
 - 결정: V14(실제 Claude 평가 n≥5, 배치마다 규모를 먼저 알림). 철학 8장, `docs/devices.md`의 끄는 조건.
 - 도구: relay-v2 평가 도구(`relay-v2/app/eval`)에 v3 쪽(`relay3`, `relay3-noreview`)과 사람 역할 변형(`--human-mode hands-off`)을 더해 쓴다. 시나리오·숨긴 시험·판정은 v2 것을 쓰고, 아래 7절의 차이만 둔다. 집계는 `app/eval/m2-primary.mjs`.
 - 시범 실행: 도구를 만들며 실제 Claude로 시나리오 10에서 relay3 4회, cli 1회, 시나리오 01에서 relay3 1~2회를 돌렸다. 결과는 판정에 넣지 않는다. 시나리오 10의 시범을 보고 사람 역할 설명서(`guides/relay3.md`)에 끝내기 안내를 고쳤다(`log.md`).
@@ -46,7 +46,7 @@
 - 회차: 쪽·시나리오마다 5.
 - 실행 수: Q1·Q2 = 4쪽(`relay3`, `relay3-noreview`, `relay@auto`, `cli`) × 9 × 5 = 180. Q3 = 2쪽(`relay3-handsoff`, `cli-handsoff`) × 5 × 5 = 50. 합 230. `relay3`·`cli`의 보통 실행은 Q1·Q2와 Q3이 함께 쓴다.
 - 배치: 시나리오 묶음 셋(07·08·10 / 14·19·40 / 43·44·45). 배치마다 실행 수와 대략의 시간을 사람에게 먼저 알린다. 배치마다 보고서를 `docs/experiments/m2/reports/`에 커밋한다(컨테이너가 다시 시작돼도 남게).
-- 명령(배치마다 시나리오만 바꿈): `node eval/run.mjs --scenarios <묶음> --runs 5 --arms relay3,relay3-noreview,relay@auto,cli --parallel 2 --quality-overlay --no-judge-purpose`. Q3은 `--arms relay3,cli --human-mode hands-off`로 따로 돈다. 짝 판정은 relay3:cli, relay3-noreview:cli, relay@auto:cli(도구의 기본)와 relay3:relay3-noreview, relay3:relay@auto(`--pairs`로 더함).
+- 명령: `run-batch.sh main <시나리오…>`, `run-batch.sh handsoff <시나리오…>`(이 폴더). 시나리오마다 `--runs 5 --parallel 2 --quality-overlay --no-judge-purpose`, main은 쪽 넷과 짝 다섯(relay3:cli, relay3-noreview:cli, relay@auto:cli, relay3:relay3-noreview, relay3:relay@auto), handsoff는 `--arms relay3,cli --human-mode hands-off`. 결과는 `runs/`에 묶어 커밋한다.
 
 ## 4. 지표
 
