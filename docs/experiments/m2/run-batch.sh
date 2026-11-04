@@ -48,8 +48,9 @@ for S in "$@"; do
   (cd "$V2APP" && node eval/run.mjs --scenarios "$S" --runs 5 --arms "$ARMS" --pairs "$PAIRS" \
     --parallel 2 --quality-overlay --no-judge-purpose $EXTRA --out "$RES") >"$OUT/$NAME.log" 2>&1
   echo "$(date -Is) 끝: $NAME (exit $?)" >>"$LOG"
-  # 보고서와 실행 기록만 묶는다(스크린샷·결과 트리는 빼고)
-  (cd "$RES" && find . \( -name 'run.json' -o -name 'turns.jsonl' -o -name 'config.json' -o -name 'report.json' -o -name 'report.md' -o -name 'events.jsonl' -o -name 'ledger.jsonl' \) -print0 \
+  # 보고서와 실행 기록, 관문을 다시 계산할 증거·계약·diff만 묶는다(스크린샷·결과 트리는 빼고. posthoc-q4.mjs)
+  (cd "$RES" && find . \( -name 'run.json' -o -name 'turns.jsonl' -o -name 'config.json' -o -name 'report.json' -o -name 'report.md' -o -name 'events.jsonl' -o -name 'ledger.jsonl' \
+      -o -name 'evidence.json' -o -name 'contract.json' -o -name 'work.json' -o -path '*/final/*.diff' \) -print0 \
     | tar --null -czf "$OUT/$NAME.tar.gz" -T -)
   cp "$RES/report.md" "$OUT/$NAME.report.md" 2>/dev/null
   commit_runs "M2 평가 결과: $NAME"
