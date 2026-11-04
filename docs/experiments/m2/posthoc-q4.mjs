@@ -70,7 +70,22 @@ function works(runDir, run) {
       return f ?? r
     })
     const g = gate({ ...ev, ratchets }, contract, POLICY, ev.head)
-    out.push({ ...row, after: g.condition !== null, fixed, reasons: g.reasons })
+    // 탐색(규약 밖): 리뷰 올림을 severity medium 이상만 셀 때
+    const review = ev.review && {
+      ...ev.review,
+      findings: (ev.review.findings ?? []).map((f) =>
+        f.severity === 'low' ? { ...f, raise: undefined } : f,
+      ),
+    }
+    const g2 = gate({ ...ev, ratchets, review }, contract, POLICY, ev.head)
+    out.push({
+      ...row,
+      after: g.condition !== null,
+      medium: g2.condition !== null,
+      fixed,
+      reasons: g.reasons,
+      mediumReasons: g2.reasons,
+    })
   }
   return out
 }
@@ -126,6 +141,30 @@ function report(all) {
       `| ${arm} | ${rs.length} | ${exported.length} | ${before.length} | ${after.length} | ${pct(after.filter((r) => r.success).length, after.length)} | ${pct(pass.filter((r) => after.includes(r)).length, pass.length)} | ${skipped} |`,
     )
   }
+  lines.push(
+    '',
+    '## 탐색(규약 밖): 래칫을 고치고 리뷰 올림을 severity medium 이상만 셀 때',
+    '',
+    '| 쪽 | 내보내기 실행 | 자동 조건 | G1 | G2 |',
+    '|---|---|---|---|---|',
+  )
+  for (const arm of arms) {
+    const exported = all.filter((r) => r.arm === arm && r.success !== null && r.works.length > 0)
+    const auto = exported.filter((r) => r.works.some((w) => w.medium ?? w.before))
+    const pass = exported.filter((r) => r.success)
+    lines.push(
+      `| ${arm} | ${exported.length} | ${auto.length} | ${pct(auto.filter((r) => r.success).length, auto.length)} | ${pct(pass.filter((r) => auto.includes(r)).length, pass.length)} |`,
+    )
+  }
+  const still = new Map()
+  for (const w of all.filter((r) => r.arm === 'relay3').flatMap((r) => r.works)) {
+    if (w.medium !== false) continue
+    for (const k of new Set((w.mediumReasons ?? []).map(kind))) still.set(k, (still.get(k) ?? 0) + 1)
+  }
+  lines.push(
+    '',
+    `relay3에서 그래도 사람 머지로 간 까닭: ${[...still].map(([k, n]) => `${k} ${n}`).join(', ') || '-'}`,
+  )
   lines.push('', '## 사후에도 사람 머지로 간 까닭 (내보내기 Work, 까닭마다 센 수)', '')
   for (const arm of arms) {
     const counts = new Map()
