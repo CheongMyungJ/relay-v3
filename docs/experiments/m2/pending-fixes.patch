@@ -1,0 +1,548 @@
+From b2121ec07576449b20622c92fef378b4ac9616d2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 4 Nov 2026 12:00:44 +0000
+Subject: [PATCH 1/3] =?UTF-8?q?=EA=B3=84=EC=95=BD=20=EB=B0=94=EA=BE=B8?=
+ =?UTF-8?q?=EA=B8=B0=20=EC=9A=94=EC=B2=AD=EC=9D=80=20=EB=B0=94=EA=BE=BC=20?=
+ =?UTF-8?q?=EA=B3=84=EC=95=BD=20=EC=A0=84=EC=B2=B4=EB=A5=BC=20=EA=BC=AD=20?=
+ =?UTF-8?q?=EB=B0=9B=EB=8A=94=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+request_contract_change가 새 계약 없이 불리면 사람이 받아들여도 승인된 계약이 그대로 남았다(M2 평가 07에서 세션이 같은 요청을 세 번 함).
+- contract를 필수로, 제출과 같은 검사. 없거나 승인된 계약과 같으면 바로 invalid
+- 새 계약 없는 옛 요청은 받아들이기를 막는다(화면 버튼도 끔)
+- 도구 설명과 세션 지침에 '바꾼 계약 전체'를 적는다
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EaNCruGwgxaN7uUjbtmh27
+---
+ docs/m2-app.md                     |  2 +-
+ docs/m2-modules.md                 |  2 +-
+ node_modules                       |  1 +
+ src/core/instructions.ts           |  2 +-
+ src/main/mcp-bridge.ts             |  9 ++++--
+ src/main/works-contract.ts         | 49 +++++++++++++++++++-----------
+ src/renderer/src/ContractPanel.tsx | 11 +++++--
+ test/adapters/mcp-bridge.test.ts   |  2 +-
+ test/flow/works.test.ts            | 19 ++++++++----
+ 9 files changed, 64 insertions(+), 33 deletions(-)
+ create mode 120000 node_modules
+
+diff --git a/docs/m2-app.md b/docs/m2-app.md
+index 407e71f..58bafaa 100644
+--- a/docs/m2-app.md
++++ b/docs/m2-app.md
+@@ -18,7 +18,7 @@
+ | 8 머지 | 사람 머지가 기본. 자동은 V3 조건을 모두 채울 때만 | [머지]는 머지 게이트(CI, 충돌, head 일치)를 따르고 `gh pr merge --match-head-commit`. PR이 없으면 [끝내기](V18): 내보내기 증거(리뷰)를 재고 [증거]의 확인 상자로 보인다. Work는 구현 중 그대로다. 고칠 것은 터미널에서 세션에게 말하고, [끝 확정]이 끝낸다(작업 브랜치는 남고 합치기는 사람이 한다. 로컬 합치기는 M3 후보) | [머지], 또는 [끝내기] → 지적을 보고 [끝 확정] |
+ | 9 끝 | PR이 모두 머지되거나 닫힘, 또는 [끝 확정] | 받아들인 나빠짐을 빚으로 적는 PR을 제안(M3), 기록 | — |
+ 
+-계약 바꾸기: 세션이 `request_contract_change`를 부르면 패널에 뜨고, 사람이 답할 때까지 그 도구가 기다린다. 결론은 그동안 `recontract`.
++계약 바꾸기: 세션이 `request_contract_change`를 까닭과 바꾼 계약 전체로 부르면(제출과 같은 검사. 새 계약이 없거나 승인된 계약과 같으면 바로 invalid) 패널에 뜨고, 사람이 답할 때까지 그 도구가 기다린다. 결론은 그동안 `recontract`. 받아들이면 새 계약이 승인된 계약을 대신한다.
+ 
+ ## 2. 프로세스와 모듈
+ 
+diff --git a/docs/m2-modules.md b/docs/m2-modules.md
+index 765ef14..83d6a04 100644
+--- a/docs/m2-modules.md
++++ b/docs/m2-modules.md
+@@ -43,7 +43,7 @@ function canMerge(state: WorkState): boolean   // working일 때만
+ v2 `app/src/core/git-guard.ts`를 옮긴다(가져오는 v2 모듈은 같은 동작의 순수 함수로). 모양: `guardCommand(command: string, protectedBranches: string[]): { blocked: boolean; reason: string }`. 지킬 브랜치 = 기준 브랜치, `main`, `master`. v2 시험(`app/test/unit/git-guard*.test.ts`)의 경우를 옮긴다.
+ 
+ ### `src/core/instructions.ts` — 세션에 주는 글과 파일
+-- `instructionsText(o: { workId: string; contractId: string; examplesDir: string; baseBranch: string; workBranch: string; questionMode: 'confirm_each' | 'draft_first' }): string` — 영어로(모델용), 사실만. 담는 것: ① 먼저 계약을 쓴다(목표, 줄: kind change|new|keep|remove|observe|human, 줄마다 근거 code path:line | request 인용 | knowledge id | guess, 예시 입력→출력·오류, check test|observe|human, 비목표, 사람만 아는 규칙). ② 사람만 아는 사실은 AskUserQuestion으로 묻는다. confirm_each면 범위와 결정마다 하나씩, 입출력 예시와 오류 동작을 따로(v2 D563, D564의 뜻). draft_first면 초안을 먼저 보이고 남은 것만. ③ `submit_contract`로 제출하고 답을 기다린다. 오류가 오면 고쳐 다시 낸다. ④ 승인 뒤에는 방식이 자유다. 예시 자료를 `<examplesDir>/<contractId>.json`에 커밋하고, 시험 이름에 `[<contractId>:C1.1]` 태그를 넣는다. ⑤ `relay_check`로 앱이 잰 증거를 당겨 볼 수 있다. ⑥ 계약을 바꿔야 하면 `request_contract_change`. ⑦ 작업 브랜치 push와 PR 열기는 해도 된다. 막히는 동작(지킬 브랜치 push, 강제 push, 원격 브랜치 삭제, PR 머지). ⑧ 끝나면 무엇을 했고 어디 있는지 터미널에 말한다. 리뷰·시험을 '하라'는 지시는 넣지 않는다.
++- `instructionsText(o: { workId: string; contractId: string; examplesDir: string; baseBranch: string; workBranch: string; questionMode: 'confirm_each' | 'draft_first' }): string` — 영어로(모델용), 사실만. 담는 것: ① 먼저 계약을 쓴다(목표, 줄: kind change|new|keep|remove|observe|human, 줄마다 근거 code path:line | request 인용 | knowledge id | guess, 예시 입력→출력·오류, check test|observe|human, 비목표, 사람만 아는 규칙). ② 사람만 아는 사실은 AskUserQuestion으로 묻는다. confirm_each면 범위와 결정마다 하나씩, 입출력 예시와 오류 동작을 따로(v2 D563, D564의 뜻). draft_first면 초안을 먼저 보이고 남은 것만. ③ `submit_contract`로 제출하고 답을 기다린다. 오류가 오면 고쳐 다시 낸다. ④ 승인 뒤에는 방식이 자유다. 예시 자료를 `<examplesDir>/<contractId>.json`에 커밋하고, 시험 이름에 `[<contractId>:C1.1]` 태그를 넣는다. ⑤ `relay_check`로 앱이 잰 증거를 당겨 볼 수 있다. ⑥ 계약을 바꿔야 하면 `request_contract_change`에 까닭과 바꾼 계약 전체를 준다. ⑦ 작업 브랜치 push와 PR 열기는 해도 된다. 막히는 동작(지킬 브랜치 push, 강제 push, 원격 브랜치 삭제, PR 머지). ⑧ 끝나면 무엇을 했고 어디 있는지 터미널에 말한다. 리뷰·시험을 '하라'는 지시는 넣지 않는다.
+ - `firstPrompt(requestPath: string): string`.
+ - `sessionSettings(o: { port: number; workId: string }): object` — v2 `hookSettings`와 같은 모양의 http 훅(UserPromptSubmit, Stop, SessionEnd, PreToolUse, PostToolUse, PostToolUseFailure), 머리글 `Authorization: Bearer $RELAY_HOOK_TOKEN`, `allowedEnvVars: ['RELAY_HOOK_TOKEN']`, `disableAllHooks: false`(레포 설정이 relay 훅을 끄지 못하게), `autoMemoryEnabled: false`. URL `http://127.0.0.1:<port>/hook/<workId>/<Event>`.
+ - `mcpConfig(o: { command: string; args: string[]; env: Record<string, string> }): object` — `{ mcpServers: { relay_work: { type: 'stdio', command, args, env } } }`.
+diff --git a/node_modules b/node_modules
+new file mode 120000
+index 0000000..603b020
+--- /dev/null
++++ b/node_modules
+@@ -0,0 +1 @@
++/home/user/relay-v3/node_modules
+\ No newline at end of file
+diff --git a/src/core/instructions.ts b/src/core/instructions.ts
+index afe702f..2f00b19 100644
+--- a/src/core/instructions.ts
++++ b/src/core/instructions.ts
+@@ -122,7 +122,7 @@ relay measures evidence on commits, not on uncommitted changes: it runs the comm
+ 
+ ## 6. Changing the contract
+ 
+-If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason. It waits until the human answers.
++If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason and the whole revised contract. It waits until the human answers; if the human approves, the revised contract replaces the approved one.
+ 
+ ## 7. Git and GitHub
+ 
+diff --git a/src/main/mcp-bridge.ts b/src/main/mcp-bridge.ts
+index bc9396d..e7a6b30 100644
+--- a/src/main/mcp-bridge.ts
++++ b/src/main/mcp-bridge.ts
+@@ -88,14 +88,17 @@ const TOOLS = [
+   {
+     name: TOOL_CHANGE,
+     description:
+-      'Ask the human to change the approved contract. Give the reason and the revised contract: if the human approves, the revised contract replaces the approved one. Waits until the human answers: status "approved" or "rejected", with the contract now in force and a message.',
++      'Ask the human to change the approved contract. Give the reason and the whole revised contract (checked like submit_contract; errors come back at once as status "invalid"). If the human approves, the revised contract replaces the approved one. Waits until the human answers: status "approved" or "rejected", with the contract now in force and a message.',
+     inputSchema: {
+       type: 'object',
+       properties: {
+         reason: { type: 'string' },
+-        contract: { ...CONTRACT_SCHEMA, description: 'The revised contract (optional).' },
++        contract: {
++          ...CONTRACT_SCHEMA,
++          description: 'The whole revised contract, same id. Not a diff.',
++        },
+       },
+-      required: ['reason'],
++      required: ['reason', 'contract'],
+     },
+   },
+   {
+diff --git a/src/main/works-contract.ts b/src/main/works-contract.ts
+index 626159a..bb8bc69 100644
+--- a/src/main/works-contract.ts
++++ b/src/main/works-contract.ts
+@@ -56,10 +56,7 @@ export class ContractDesk {
+     signal: AbortSignal,
+   ): Promise<Reply> {
+     const parsed = parseContract(JSON.stringify(contractArg(args) ?? null))
+-    if (!parsed.ok) {
+-      this.ctx.note(rec.id, { type: 'contract_invalid', errors: parsed.errors })
+-      return { status: 'invalid', errors: parsed.errors }
+-    }
++    if (!parsed.ok) return this.invalid(rec, parsed.errors)
+     const contract = bare(parsed.value)
+     // 계약 id는 앱이 Work마다 정한다(V11): 앞 Work의 머지된 시험 태그와 섞이지 않게
+     if (contract.id !== rec.contract_id) return this.wrongId(rec, contract.id, 'id')
+@@ -92,19 +89,25 @@ export class ContractDesk {
+     signal: AbortSignal,
+   ): Promise<Reply> {
+     const reason = typeof args.reason === 'string' ? args.reason.trim() : ''
+-    if (!reason) return { status: 'invalid', errors: ['reason: 필요함'] }
+-    let proposed: Contract | null = null
+-    if (args.contract !== undefined && args.contract !== null) {
+-      const parsed = parseContract(JSON.stringify(args.contract))
+-      if (!parsed.ok)
+-        return { status: 'invalid', errors: parsed.errors.map((e) => `contract.${e}`) }
+-      proposed = bare(parsed.value)
+-      if (proposed.id !== rec.contract_id) return this.wrongId(rec, proposed.id, 'contract.id')
+-    }
++    const errors: string[] = []
++    if (!reason) errors.push('reason: 필요함')
++    // 바꾼 계약은 꼭 받는다: 없으면 사람이 받아들여도 승인된 계약이 그대로 남는다(M2 평가 07)
++    if (args.contract === undefined || args.contract === null) errors.push('contract: 필요함')
++    if (errors.length > 0) return this.invalid(rec, errors)
++    const parsed = parseContract(JSON.stringify(args.contract))
++    if (!parsed.ok)
++      return this.invalid(
++        rec,
++        parsed.errors.map((e) => `contract.${e}`),
++      )
++    const proposed = bare(parsed.value)
++    if (proposed.id !== rec.contract_id) return this.wrongId(rec, proposed.id, 'contract.id')
+     const rt = this.ctx.runtime(rec.id)
+     if (!rt.contract)
+       return { status: 'error', error: `No approved contract yet: use ${TOOL_SUBMIT}.` }
+-    const groundings = proposed ? await this.groundings(rec, proposed) : rec.groundings
++    if (contractHash(bare(rt.contract)) === contractHash(proposed))
++      return this.invalid(rec, ['contract: 승인된 계약과 같음(바꿀 곳을 고친 계약 전체를 낸다)'])
++    const groundings = await this.groundings(rec, proposed)
+     const next = nextState(rec.state, { type: 'change_requested', reason })
+     if (!next.ok || !rt.contract)
+       return { status: 'error', error: next.ok ? '' : next.errors.join('; ') }
+@@ -117,14 +120,19 @@ export class ContractDesk {
+     const answer = this.wait(rec.id, 'change', signal)
+     await this.ctx.deps.store.writeJson(rec.id, 'contract.json', rt.contract)
+     await this.ctx.save(rec)
+-    this.ctx.note(rec.id, { type: 'change_requested', reason, contract: proposed !== null })
++    this.ctx.note(rec.id, { type: 'change_requested', reason })
+     return answer
+   }
+ 
+   private wrongId(rec: WorkRecord, got: string, field: string): Reply {
+-    const error = `${field}: must be "${rec.contract_id}", the contract id given in your instructions (got "${got}")`
+-    this.ctx.note(rec.id, { type: 'contract_invalid', errors: [error] })
+-    return { status: 'invalid', errors: [error] }
++    return this.invalid(rec, [
++      `${field}: must be "${rec.contract_id}", the contract id given in your instructions (got "${got}")`,
++    ])
++  }
++
++  private invalid(rec: WorkRecord, errors: string[]): Reply {
++    this.ctx.note(rec.id, { type: 'contract_invalid', errors })
++    return { status: 'invalid', errors }
+   }
+ 
+   // ── 사람의 답 ──────────────────────────────────────────────────────────────
+@@ -174,6 +182,11 @@ export class ContractDesk {
+     const rec = this.ctx.record(id)
+     const rt = this.ctx.runtime(id)
+     if (rec.state !== 'recontract' || !rt.contract) throw new Error('답할 계약 바꾸기 요청이 없음')
++    // 고치기 전에 저장된 요청에는 새 계약이 없을 수 있다. 받아들여도 바뀌는 게 없으니 거절만 받는다
++    if (o.approved && !rec.pending_contract)
++      throw new Error(
++        '새 계약이 없는 요청이라 받아들일 수 없음: 거절하고 바꾼 계약 전체를 내 달라고 하세요',
++      )
+     const msg = o.message.trim()
+     const at = this.ctx.deps.now()
+     const contract: Contract =
+diff --git a/src/renderer/src/ContractPanel.tsx b/src/renderer/src/ContractPanel.tsx
+index 01574db..50b87a7 100644
+--- a/src/renderer/src/ContractPanel.tsx
++++ b/src/renderer/src/ContractPanel.tsx
+@@ -103,7 +103,9 @@ function ChangeBox(p: { id: string; reason: string | null; proposed: Contract |
+       <p className="callout-title">세션이 계약을 바꾸자고 합니다</p>
+       <p className="quote">{p.reason ?? '(까닭 없음)'}</p>
+       <p className="muted small">
+-        {p.proposed ? '아래는 세션이 제안한 새 계약입니다.' : '새 계약 없이 요청만 했습니다.'}
++        {p.proposed
++          ? '아래는 세션이 제안한 새 계약입니다.'
++          : '새 계약 없이 요청만 했습니다. 거절하고 바꾼 계약 전체를 내 달라고 하세요.'}
+       </p>
+       <textarea
+         className="field"
+@@ -114,7 +116,12 @@ function ChangeBox(p: { id: string; reason: string | null; proposed: Contract |
+         onChange={(e) => setText(e.target.value)}
+       />
+       <div className="row">
+-        <button type="button" className="primary" disabled={act.busy} onClick={() => answer(true)}>
++        <button
++          type="button"
++          className="primary"
++          disabled={act.busy || !p.proposed}
++          onClick={() => answer(true)}
++        >
+           받아들이기
+         </button>
+         <button
+diff --git a/test/adapters/mcp-bridge.test.ts b/test/adapters/mcp-bridge.test.ts
+index f7a47d1..2894a37 100644
+--- a/test/adapters/mcp-bridge.test.ts
++++ b/test/adapters/mcp-bridge.test.ts
+@@ -121,7 +121,7 @@ describe('MCP 브리지', () => {
+       type: 'object',
+       required: expect.arrayContaining(['version', 'id', 'goal', 'lines']),
+     })
+-    expect(tools[1]?.inputSchema).toMatchObject({ required: ['reason'] })
++    expect(tools[1]?.inputSchema).toMatchObject({ required: ['reason', 'contract'] })
+ 
+     const contract = { version: 1, id: 'c', goal: 'g', lines: [] }
+     const invalid = result(
+diff --git a/test/flow/works.test.ts b/test/flow/works.test.ts
+index 7e8dc1a..f41fa6b 100644
+--- a/test/flow/works.test.ts
++++ b/test/flow/works.test.ts
+@@ -301,6 +301,9 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) 
+   await scenario([
+     { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+     { do: 'mcp', tool: 'request_contract_change', args: { reason: ' ' } },
++    // 새 계약 없이, 또는 승인된 계약 그대로는 받지 않는다(받아들여도 바뀌는 게 없음)
++    { do: 'mcp', tool: 'request_contract_change', args: { reason } },
++    { do: 'mcp', tool: 'request_contract_change', args: { reason, contract: CONTRACT } },
+     { do: 'mcp', tool: 'request_contract_change', args: { reason, contract: REVISED } },
+     { do: 'stop' },
+   ])
+@@ -311,10 +314,14 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) 
+   await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
+   await works.approveContract(id)
+   await until(() => works.view(id).state === 'recontract', '계약 바꾸기 요청')
+-  expect((await mcpResults('request_contract_change'))[0]).toEqual({
+-    status: 'invalid',
+-    errors: ['reason: 필요함'],
+-  })
++  expect((await mcpResults('request_contract_change')).slice(0, 3)).toEqual([
++    { status: 'invalid', errors: ['reason: 필요함', 'contract: 필요함'] },
++    { status: 'invalid', errors: ['contract: 필요함'] },
++    {
++      status: 'invalid',
++      errors: ['contract: 승인된 계약과 같음(바꿀 곳을 고친 계약 전체를 낸다)'],
++    },
++  ])
+   let v = works.view(id)
+   expect(v.pendingChange).toBe(reason)
+   expect(v.pendingContract?.lines.map((l) => l.id)).toEqual(['C1'])
+@@ -329,8 +336,8 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) 
+   expect(await works.merge(id)).toEqual({ ok: false, error: '구현 중인 Work만 머지할 수 있음' })
+ 
+   await works.answerChange(id, { approved: true, message: '좋아요' })
+-  await until(async () => (await mcpResults('request_contract_change')).length === 2, '답')
+-  const answer = (await mcpResults('request_contract_change'))[1] as Entry
++  await until(async () => (await mcpResults('request_contract_change')).length === 4, '답')
++  const answer = (await mcpResults('request_contract_change'))[3] as Entry
+   expect(answer).toMatchObject({ status: 'approved', message: '좋아요' })
+   v = works.view(id)
+   expect(v).toMatchObject({ state: 'working', pendingChange: null, pendingContract: null })
+-- 
+2.43.0
+
+
+From 7cb06caca322587a487c6810d7ffb7c434a707ac Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 4 Nov 2026 12:03:17 +0000
+Subject: [PATCH 2/3] =?UTF-8?q?=EC=8B=9C=ED=97=98=20=EC=88=98=20=EB=9E=98?=
+ =?UTF-8?q?=EC=B9=AB:=20=EC=9E=88=EB=8D=98=20=EC=8B=9C=ED=97=98=EC=97=90?=
+ =?UTF-8?q?=20=EC=98=88=EC=8B=9C=20=ED=83=9C=EA=B7=B8=EB=A5=BC=20=EB=B6=99?=
+ =?UTF-8?q?=EC=97=AC=EB=8F=84=20=EC=82=AC=EB=9D=BC=EC=A7=84=20=EC=8B=9C?=
+ =?UTF-8?q?=ED=97=98=EC=9C=BC=EB=A1=9C=20=EB=B3=B4=EC=A7=80=20=EC=95=8A?=
+ =?UTF-8?q?=EB=8A=94=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+세션이 지침대로 있던 시험 이름에 [<계약 id>:C1.1]을 붙이면 래칫이 옛 이름을 '기준에서 돌던 시험이 사라짐'으로 읽어
+나빠짐(사람 머지 사실)이 됐다(M2 평가 07의 relay3 내보내기 10개 가운데 5개). suite·name을 태그를 빼고 견준다.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EaNCruGwgxaN7uUjbtmh27
+---
+ docs/m1-modules.md        |  4 ++--
+ src/core/contract.ts      | 12 +++++++++++-
+ src/core/ratchet.ts       |  9 +++++++--
+ test/unit/ratchet.test.ts | 13 +++++++++++++
+ 4 files changed, 33 insertions(+), 5 deletions(-)
+
+diff --git a/docs/m1-modules.md b/docs/m1-modules.md
+index daa3edd..07f5de0 100644
+--- a/docs/m1-modules.md
++++ b/docs/m1-modules.md
+@@ -32,7 +32,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의
+ - `parseContract(text: string): Result<Contract>` — 모양 검사. 줄 id는 `C<숫자>`, 예시 id는 `<줄 id>.<숫자>`. 줄의 `examples`가 계약의 `examples`에 있어야 한다. `check: 'test'`인 change·new·keep 줄은 예시가 하나 이상이어야 한다(remove는 예시 없이도 됨). `human` 종류 줄은 `check: 'human'`.
+ - `checkRequestQuote(request: string, quote: string): boolean` — 공백 정규화 뒤 포함 여부.
+ - `checkCodeGround(fileText: string | null, ground: { line: number; name?: string }): { ok: boolean; detail: string }` — 파일이 없으면 실패, 줄 번호가 범위 밖이면 실패, name을 주면 그 줄 ±2줄 안에 있어야 함.
+-- `exampleTag(contractId: string, id: string): string` → `[<계약 id>:C1.1]`. 태그에 계약 id를 넣어, 머지된 앞 Work의 수용 시험이 레포에 남아도 새 계약의 C1.1 증거로 잡히지 않게 한다. `findExampleTags(testName: string, contractId: string): string[]` — 이름 속 `[<그 계약 id>:C<n>.<n>]`의 예시 id를 모두. 다른 계약의 태그와 계약 id 없는 `[C1.1]`은 찾지 않는다.
++- `exampleTag(contractId: string, id: string): string` → `[<계약 id>:C1.1]`. 태그에 계약 id를 넣어, 머지된 앞 Work의 수용 시험이 레포에 남아도 새 계약의 C1.1 증거로 잡히지 않게 한다. `findExampleTags(testName: string, contractId: string): string[]` — 이름 속 `[<그 계약 id>:C<n>.<n>]`의 예시 id를 모두. 다른 계약의 태그와 계약 id 없는 `[C1.1]`은 찾지 않는다. `withoutExampleTags(testName: string): string` — 어느 계약이든 예시 태그를 뺀 이름(래칫이 같은 시험을 찾을 때).
+ - `examplesFile(examplesDir: string, contractId: string): string` → `<dir>/<id>.json`.
+ - `contractHash(c: Contract): string` — 키 순서와 상관없는 내용 해시. 묶음이 어느 계약(어느 판)으로 만들어졌는지 가린다.
+ - `checkExamplesFile(contract: Contract, text: string | null): { differs: string[]; error?: string }` — 커밋된 예시 자료가 승인된 예시와 같은지. 파일은 예시 id → `{ input, output?, error?, note? }` 객체이거나 계약의 `examples` 같은 배열이다. 파일에 있는 예시만 input·output·error를 견준다(시험이 예시를 글로 옮겨 쓴 경우는 리뷰가 본다). 없는 파일은 견줄 것이 없다. 읽지 못하면 error.
+@@ -75,7 +75,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의
+ 
+ ### `src/core/ratchet.ts`
+ - `fileLinesRatchet(spec, files: { path: string; base: number | null; head: number | null }[]): RatchetResult` — 바뀐 파일만 받는다. null은 그쪽에 없음, 셀 수 없으면 NaN(engine이 남은 파일의 줄 수를 못 읽은 경우). include/exclude glob. head > max이고 (base가 null이거나 base ≤ max이거나 head > base)면 offender. offender가 있으면 worse, 없고 범위 안에 셀 수 없는 파일(0 이상의 정수가 아님)이 있으면 unknown, 없고 base > max였던 파일이 줄었으면 better, 아니면 same.
+-- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다).
++- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다. suite·name은 예시 태그 `[<계약 id>:C1.1]`를 빼고 견준다: 있던 시험에 태그를 붙여도 같은 시험).
+ - `commandRatchet(spec, base: string | null, head: string | null): RatchetResult` — 표준 출력의 마지막 숫자 줄. 못 읽으면 unknown.
+ 
+ ### `src/core/gate.ts`
+diff --git a/src/core/contract.ts b/src/core/contract.ts
+index 232158b..e6305ba 100644
+--- a/src/core/contract.ts
++++ b/src/core/contract.ts
+@@ -302,15 +302,25 @@ export function exampleTag(contractId: string, id: string): string {
+   return `[${contractId}:${id}]`
+ }
+ 
++const EXAMPLE_TAG = /\[([A-Za-z0-9][A-Za-z0-9._-]*):(C\d+\.\d+)\]/g
++
+ /** 시험 이름 속 이 계약의 태그가 가리키는 예시 id를 처음 나온 순서대로, 겹침 없이 */
+ export function findExampleTags(testName: string, contractId: string): string[] {
+   const ids: string[] = []
+-  for (const m of testName.matchAll(/\[([A-Za-z0-9][A-Za-z0-9._-]*):(C\d+\.\d+)\]/g)) {
++  for (const m of testName.matchAll(EXAMPLE_TAG)) {
+     if (m[1] === contractId && m[2] !== undefined && !ids.includes(m[2])) ids.push(m[2])
+   }
+   return ids
+ }
+ 
++/**
++ * 예시 태그(어느 계약이든)를 뺀 시험 이름. 있던 시험에 태그를 붙이면 이름이 바뀌지만 같은 시험이다(M2 평가 07:
++ * 래칫이 이를 '사라진 시험'으로 읽었다)
++ */
++export function withoutExampleTags(testName: string): string {
++  return testName.replace(EXAMPLE_TAG, ' ').replace(/\s+/g, ' ').trim()
++}
++
+ export function examplesFile(examplesDir: string, contractId: string): string {
+   const dir = examplesDir.replace(/\/+$/, '')
+   return dir === '' ? `${contractId}.json` : `${dir}/${contractId}.json`
+diff --git a/src/core/ratchet.ts b/src/core/ratchet.ts
+index c3175af..02a8fd9 100644
+--- a/src/core/ratchet.ts
++++ b/src/core/ratchet.ts
+@@ -1,6 +1,7 @@
+ // 래칫: '나빠지지 않음'만 잰다 (docs/m1-modules.md ratchet.ts, philosophy 원칙 3).
+ // 옛 빚은 갚으라고 하지 않는다. 이번 변경이 더 나쁘게 만들었는지만 본다.
+ 
++import { withoutExampleTags } from './contract.ts'
+ import { matchAny } from './glob.ts'
+ import type { RatchetResult, RatchetSpec, TestCase } from './types.ts'
+ 
+@@ -105,9 +106,13 @@ function counted(cases: TestCase[]): number {
+   return cases.filter((c) => c.status !== 'skipped').length
+ }
+ 
+-/** 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름. 파일을 옮겼으면 이름으로 찾는다 */
++/**
++ * 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름. 파일을 옮겼으면 이름으로 찾는다.
++ * 예시 태그는 빼고 견준다(있던 시험에 태그를 붙여도 같은 시험)
++ */
+ function vanished(base: TestCase[], head: TestCase[]): string[] {
+-  const title = (t: TestCase) => (t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
++  const title = (t: TestCase) =>
++    withoutExampleTags(t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
+   const full = (t: TestCase) => `${t.classname ?? ''}\0${t.file ?? ''}\0${title(t)}`
+   const ran = head.filter((t) => t.status !== 'skipped')
+   const byFull = new Set(ran.map(full))
+diff --git a/test/unit/ratchet.test.ts b/test/unit/ratchet.test.ts
+index 7ea9a9c..be3d263 100644
+--- a/test/unit/ratchet.test.ts
++++ b/test/unit/ratchet.test.ts
+@@ -169,6 +169,19 @@ describe('시험 수', () => {
+     expect(testCountRatchet(spec, base, head).status).toBe('same')
+   })
+ 
++  test('있던 시험에 예시 태그를 붙이거나 떼도 같은 시험이다(M2 평가 07)', () => {
++    const base = [
++      { name: '줄이면 말줄임표', status: 'passed' as const },
++      { name: '홀수 개 [median-old:C1.1]', suite: '중앙값', status: 'passed' as const },
++    ]
++    const head = [
++      { name: '줄이면 말줄임표 [w-630d:C1.1]', status: 'passed' as const },
++      { name: '홀수 개', suite: '중앙값', status: 'passed' as const },
++      { name: 'n=0 [w-630d:C3.2]', status: 'passed' as const },
++    ]
++    expect(testCountRatchet(spec, base, head)).toMatchObject({ status: 'better', base: 2, head: 3 })
++  })
++
+   test('suite가 다르면 다른 시험이다', () => {
+     const base = [{ name: 'x', suite: '묶음 A', status: 'passed' as const }]
+     const head = [{ name: 'x', suite: '묶음 B', status: 'passed' as const }]
+-- 
+2.43.0
+
+
+From 1fac7ca53895fc1ceb0a79a26f280c5a88a6a2f6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 4 Nov 2026 13:03:05 +0000
+Subject: [PATCH 3/3] =?UTF-8?q?=EB=B0=94=EB=80=9C=20=EC=A4=84:=20=ED=95=98?=
+ =?UTF-8?q?=EB=82=98=20=EC=9D=B4=EC=83=81=EC=9D=B4=20=EA=B8=B0=EC=A4=80?=
+ =?UTF-8?q?=EC=97=90=EC=84=9C=20=EC=8B=A4=ED=8C=A8=ED=95=98=EB=A9=B4=20met?=
+ =?UTF-8?q?,=20=EA=B8=B0=EC=A4=80=EC=97=90=EC=84=9C=EB=8F=84=20=ED=86=B5?=
+ =?UTF-8?q?=EA=B3=BC=ED=95=9C=20=EC=98=88=EC=8B=9C=EB=8A=94=20=EC=A7=80?=
+ =?UTF-8?q?=ED=82=B4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+예시가 하나라도 기준에서 통과하면 not_met이던 규칙이 M2 평가 배치 1에서 계약 바꾸기 요청 28번 가운데 약 14번을 만들었다
+('LA의 토요일'을 고치는 줄의 '일요일'처럼 우연히 기준에서도 맞는 예시). 예시가 모두 결과에서 통과하고 하나 이상이 기준에서
+실패하면 met. 모두 기준에서도 통과하면 그대로 not_met.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EaNCruGwgxaN7uUjbtmh27
+---
+ docs/m1-modules.md       |  2 +-
+ src/core/instructions.ts |  2 +-
+ src/core/lines.ts        |  8 +++++++-
+ test/unit/lines.test.ts  | 26 +++++++++++++++-----------
+ 4 files changed, 24 insertions(+), 14 deletions(-)
+
+diff --git a/docs/m1-modules.md b/docs/m1-modules.md
+index 07f5de0..56c037d 100644
+--- a/docs/m1-modules.md
++++ b/docs/m1-modules.md
+@@ -43,7 +43,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의
+ ### `src/core/lines.ts`
+ - `judgeLines(contract: Contract, head: TestCase[] | null, base: TestCase[] | null): LineVerdict[]`
+   - 예시 id마다 이 계약의 태그(`findExampleTags(.., contract.id)`)를 이름이나 suite에 담은 testcase를 찾는다(여럿이면 하나라도 failed/error면 failed, 모두 skipped면 skipped).
+-  - change: 예시마다 head passed이고, base에서 failed(단언 실패)여야 met. base가 null이면 base는 `not_run`이고 head만으로 met 가능하되 detail에 '기준 실패를 확인하지 못함'. base에서 passed면 not_met('기준에서도 통과: 바뀐 동작을 시험하지 않음'). base가 error면 met으로 보되 detail에 적는다. base가 skipped면 missing_evidence. base에 태그가 없으면(missing) 기준에서 그 시험 파일을 불러오지 못한 경우만 met(+detail)이고 아니면 missing_evidence. 실제 러너는 import 실패를 태그 없는 파일 단위 testcase로 낸다(vitest: name = classname = 파일, node:test: name = 파일, classname = 'test'). head 시험의 파일(file·classname)을 알면 같은 파일의 파일 단위 실패가 있어야 하고, 모르면(node:test) 파일 단위 실패가 하나라도 있어야 하며 detail에 '파일은 확인하지 못함'.
++  - change: 예시마다 head passed이고, 하나 이상이 base에서 failed(단언 실패)여야 met. base에서도 passed인 예시는 그 줄의 지킴으로 보고 detail에 '기준에서도 통과(지킴): C1.2'(M2 평가 배치 1: '하나라도 base에서 passed면 not_met'이 계약 바꾸기 요청의 반을 만들었다). base가 null이면 base는 `not_run`이고 head만으로 met 가능하되 detail에 '기준 실패를 확인하지 못함'. 예시가 모두 base에서 passed면 not_met('기준에서도 통과: 바뀐 동작을 시험하지 않음'). 나머지 판정은 base에서 passed가 아닌 예시로 한다. base가 error면 met으로 보되 detail에 적는다. base가 skipped면 missing_evidence. base에 태그가 없으면(missing) 기준에서 그 시험 파일을 불러오지 못한 경우만 met(+detail)이고 아니면 missing_evidence. 실제 러너는 import 실패를 태그 없는 파일 단위 testcase로 낸다(vitest: name = classname = 파일, node:test: name = 파일, classname = 'test'). head 시험의 파일(file·classname)을 알면 같은 파일의 파일 단위 실패가 있어야 하고, 모르면(node:test) 파일 단위 실패가 하나라도 있어야 하며 detail에 '파일은 확인하지 못함'.
+   - new: head passed면 met.
+   - keep: head passed이고 base가 null이 아니면 base도 passed여야 met.
+   - remove: 예시가 있으면 head passed면 met, 없으면 missing_evidence('쓰는 곳 없음을 보일 시험이 없음').
+diff --git a/src/core/instructions.ts b/src/core/instructions.ts
+index 2f00b19..76a50bb 100644
+--- a/src/core/instructions.ts
++++ b/src/core/instructions.ts
+@@ -118,7 +118,7 @@ How you do the work is up to you. Commit the approved examples to \`${examplesFi
+ 
+ ## 5. Evidence
+ 
+-relay measures evidence on commits, not on uncommitted changes: it runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (a \`change\` line needs its test to fail on the base and pass on the head), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
++relay measures evidence on commits, not on uncommitted changes: it runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (every example of a \`change\` line must pass on the head and at least one must fail on the base; an example that also passes on the base counts as a guard), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
+ 
+ ## 6. Changing the contract
+ 
+diff --git a/src/core/lines.ts b/src/core/lines.ts
+index e56eec3..bbd67dd 100644
+--- a/src/core/lines.ts
++++ b/src/core/lines.ts
+@@ -120,9 +120,14 @@ interface BaseContext {
+   failures: string[]
+ }
+ 
++/**
++ * 바뀜 줄: 예시가 모두 결과에서 통과하고(judgeHead), 하나 이상이 기준에서 실패하면 met이다. 기준에서도 통과하는 예시는
++ * 그 줄의 지킴으로 적는다(예: 'LA의 토요일'을 고치는 줄의 '일요일'). 예시가 모두 기준에서도 통과하면 바뀐 동작을
++ * 시험하지 않은 것이다. M2 평가 배치 1에서 '하나라도 기준에서 통과하면 not_met'이 계약 바꾸기 요청의 반을 만들었다
++ */
+ function judgeChange(evs: ExampleEvidence[], ctx: BaseContext): Judged {
+   const same = evs.filter((e) => e.base === 'passed')
+-  if (same.length > 0)
++  if (same.length === evs.length)
+     return {
+       status: 'not_met',
+       detail: `기준에서도 통과: 바뀐 동작을 시험하지 않음 (${same.map((e) => e.id).join(', ')})`,
+@@ -151,6 +156,7 @@ function judgeChange(evs: ExampleEvidence[], ctx: BaseContext): Judged {
+       status: 'missing_evidence',
+       detail: `기준 실패를 확인하지 못함: ${unconfirmed.join(', ')}`,
+     }
++  if (same.length > 0) notes.push(`기준에서도 통과(지킴): ${same.map((e) => e.id).join(', ')}`)
+   if (notes.length === 0) return { status: 'met', detail: '기준에서 실패, 결과에서 통과' }
+   return { status: 'met', detail: `결과에서 통과. ${notes.join('. ')}` }
+ }
+diff --git a/test/unit/lines.test.ts b/test/unit/lines.test.ts
+index 62c3f1f..1f07784 100644
+--- a/test/unit/lines.test.ts
++++ b/test/unit/lines.test.ts
+@@ -74,13 +74,27 @@ describe('judgeLines: 바뀜(change)', () => {
+     expect(v.examples).toEqual([{ id: 'C1.1', head: 'passed', base: 'not_run' }])
+   })
+ 
+-  test('기준에서도 통과하면 바뀐 동작을 시험하지 않은 것이라 not_met', () => {
++  test('예시가 모두 기준에서도 통과하면 바뀐 동작을 시험하지 않은 것이라 not_met', () => {
+     const v = one(change, [tc('[C1.1]', 'passed')], [tc('[C1.1]', 'passed')])
+     expect(v.status).toBe('not_met')
+     expect(v.detail).toContain('기준에서도 통과: 바뀐 동작을 시험하지 않음')
+     expect(v.detail).toContain('C1.1')
+   })
+ 
++  test('하나 이상이 기준에서 실패하면 met이고, 기준에서도 통과한 예시는 지킴으로 적는다(M2 평가 배치 1)', () => {
++    const two = line('C1', 'change', ['C1.1', 'C1.2'])
++    const head = [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'passed')]
++    const v = one(two, head, [tc('토 [C1.1]', 'failed'), tc('일 [C1.2]', 'passed')])
++    expect(v.status).toBe('met')
++    expect(v.detail).toBe('결과에서 통과. 기준에서도 통과(지킴): C1.2')
++    // 기준에서 통과한 것 말고는 기준 실패를 확인하지 못했으면 증거 없음 그대로
++    const unconfirmed = one(two, head, [tc('일 [C1.2]', 'passed')])
++    expect(unconfirmed.status).toBe('missing_evidence')
++    // 결과에서 하나라도 실패하면 기준과 상관없이 not_met
++    const headFail = one(two, [tc('토 [C1.1]', 'passed'), tc('일 [C1.2]', 'failed')], head)
++    expect(headFail.status).toBe('not_met')
++  })
++
+   test('기준에서 오류면(새 이름을 못 불러옴) met으로 보되 적는다', () => {
+     const v = one(change, [tc('[C1.1]', 'passed')], [tc('[C1.1]', 'error')])
+     expect(v.status).toBe('met')
+@@ -138,16 +152,6 @@ describe('judgeLines: 바뀜(change)', () => {
+     expect(v.detail).toBe('기준 실패를 확인하지 못함: C1.1(기준에서 건너뜀)')
+   })
+ 
+-  test('예시 하나라도 기준에서 통과하면 not_met', () => {
+-    const l = line('C1', 'change', ['C1.1', 'C1.2'])
+-    const head = [tc('[C1.1]', 'passed'), tc('[C1.2]', 'passed')]
+-    const base = [tc('[C1.1]', 'failed'), tc('[C1.2]', 'passed')]
+-    const v = one(l, head, base)
+-    expect(v.status).toBe('not_met')
+-    expect(v.detail).toContain('C1.2')
+-    expect(v.detail).not.toContain('C1.1')
+-  })
+-
+   test('예시마다 기준 결과가 다르면 met의 detail에 확인하지 못한 것만 적는다', () => {
+     const l = line('C1', 'change', ['C1.1', 'C1.2'])
+     const head = [tc('[C1.1]', 'passed'), tc('[C1.2]', 'passed')]
+-- 
+2.43.0
+
