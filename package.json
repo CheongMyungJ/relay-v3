@@ -1,0 +1,42 @@
+{
+  "name": "relay-v3",
+  "version": "0.0.0",
+  "private": true,
+  "description": "relay-v3: 계약과 증거로 AI 에이전트의 일을 맡기는 하네스 (docs/philosophy.md)",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "relay": "src/cli/main.ts"
+  },
+  "scripts": {
+    "relay": "node src/cli/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "limits": "node scripts/limits.mjs",
+    "test": "vitest run --project unit --project adapters --project flow",
+    "test:unit": "vitest run --project unit",
+    "test:adapters": "vitest run --project adapters",
+    "test:flow": "vitest run --project flow",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run limits && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "@types/picomatch": "4.0.3",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.12.0",
+    "picomatch": "4.0.7"
+  }
+}

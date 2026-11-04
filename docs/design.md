@@ -1,0 +1,96 @@
+# relay-v3 설계
+
+- 상태: M1 진행 중
+- 철학과 근거: [philosophy.md](philosophy.md). 이 문서에는 정한 것과 모듈의 약속만 적는다.
+- 장치 등록부: [devices.md](devices.md)
+
+## 0. 이 문서를 고치는 규칙
+
+1. **넣기와 빼기에 같은 입증 부담.** 결정마다 근거를 '측정' 또는 '가정'으로 적는다. 장치를 넣으면 [devices.md](devices.md)에 끄는 조건과 함께 올린다.
+2. **사용자 결정(✅)은 사용자와 다시 정한다.** 에이전트가 조용히 뒤집지 않는다.
+3. **숫자 상한.** 앱 코어(`src/core`) 5,000줄, 파일 600줄. CI(`scripts/limits.mjs`)가 막는다.
+4. v2 결정은 `v2 D236`처럼 앞에 `v2`를 붙여 쓴다. v3 결정은 `V` 번호다.
+
+## 1. 결정
+
+| # | 결정 | 근거 | 사용자 결정 |
+|---|---|---|---|
+| V1 | **업무 유형을 고르지 않는다.** 유형 선택 화면, 유형별 파이프라인이 없다. 사람은 요청에 일의 성격을 '제안'할 수 있다(예: "리팩터링으로 봐 줘"). 제안은 계약의 `hint`로 남고, 계약 초안이 줄의 종류(바뀜·새로·지킴·없앰)를 정할 때 참고한다. 경로나 관문은 바꾸지 않는다 | 가정+측정: v2 D236의 근거는 추정. intake가 18회 중 17회 맞는 유형을 알림. 유형의 값은 증거 모양에 있었음(philosophy 1장 C1) | ✅ (2026-11-04) |
+| V2 | **앱이 레포 명령을 직접 돌린다.** `.relay/quality.json`의 `fast` 명령을 앱이 깨끗한 check worktree에서 base와 head에 돌린다. 전체 시험은 CI가 있으면 그 결과를 먼저 쓰고, 없으면 내보낼 때 앱이 돌린다. v2 D7(✅)의 '앱은 검사 결과에 반응하지 않는다'와 v2 D536을 바꾼다 | 측정: PR 전 결정론적 증거원이 없던 것이 v2 자율의 가장 큰 구멍. v2 D536의 까닭('레포마다 명령을 알아야')은 레포가 명령을 선언하면 사라짐. 개인 레포는 CI가 없는 경우가 많아 CI만 기댈 수 없음 | 사용자가 판단을 맡김. 에이전트가 정함(2026-11-04) |
+| V3 | **자동 머지를 허용한다. 켜고 끄는 단위는 프로젝트(레포)다.** 앱의 프로젝트 설정 `auto_merge`(기본 꺼짐)가 켜져 있고, 레포의 `quality.json`의 자동 조건을 채우고, 서버 쪽 보호(필수 검사)가 확인되고, 그 조건의 그림자 실적이 기준(`min_shadow`, 기본 20건 일치, 사용자가 바꿈)을 넘을 때만 자동 머지한다. 꺼져 있어도 결론은 그림자로 기록한다. v2 D15·D152·D518(✅)을 바꾼다 | 사용자 결정. 조건은 가정(philosophy 5장) | ✅ (2026-11-04) |
+| V4 | **독립 리뷰는 늘 돈다. 막지 않고 올리기만 한다.** 내보내기 후보(PR 열기·갱신, [끝])마다 새 맥락의 읽기 전용 리뷰어를 띄운다. 지적은 증거 묶음에 붙고, 관문에는 올림 사유(예시와 시험 불일치, 보안, 계약 밖 변경, 구조)로만 들어간다. 자동 머지 경로에서는 끌 수 없다. 사람 머지 경로에서는 프로젝트 설정으로 '자동 후보에만'으로 줄일 수 있다. 리뷰 결과는 세션에 지시로 넣지 않는다(세션에 주는 되먹임은 결정론적 실패만, V8). v2 D562(세션 재량)를 바꾼다 | 측정: 세션은 지침 없이 스스로 리뷰하지 않음(0/6). 앱 리뷰의 유일한 차단은 틀린 지적이라 막는 힘은 주지 않음. 값 자체는 모름 → devices.md에 가설로 | 사용자가 판단을 맡김. 에이전트가 정함(2026-11-04) |
+| V5 | **관문은 순수 함수다.** `gate(증거, 계약, 정책)`은 모델을 부르지 않는다. 결론은 `human_merge`(기본), `auto_merge_candidate`, `recontract`. 모델 판단(리뷰)과 실적은 결론을 엄격하게만 바꾼다 | 가정: v2의 동작 단위 관문(v2 D204, D518, D558)은 결정론이라 흔들리지 않음 | |
+| V6 | **증거는 SHA에 붙는다.** head가 바뀌면 증거는 낡음이다. 증거가 없으면 '없음'이고 통과로 보지 않는다. 체크가 없는 레포를 60초 뒤 통과로 보던 v2 D176(✅)을 따르지 않는다 | 가정 | ✅ 바꿈은 V3과 함께 승인된 것으로 본다(자동 머지 조건의 일부) |
+| V7 | **흔들리는 시험 규칙.** head에서 실패하면 한 번 다시 돈다. 다시 통과하면 '불안정'(통과로도 실패로도 세지 않음). 두 번 실패하면 base에서 돈다. base에서도 실패하면 '원래 실패', base에서 통과하면 '실패'다 | 가정 | |
+| V8 | **세션에 주는 되먹임은 결정론적 실패만, 쉬는 세션에 한 줄, 라운드 상한 3** | 측정: v2 D555(깨울 때마다 토큰), v2 D171 | |
+| V9 | **관문의 품질 기준은 base의 `quality.json`으로 잰다.** diff가 `quality.json`을 바꾸면 사람 경로(지킴 파일)로 가고, 판정은 base 쪽 기준으로 한다. 세션이 기준을 낮춰 관문을 피하지 못하게 한다 | 가정 | |
+| V10 | **check worktree는 레포마다 둘(base, head)을 두고 다시 쓴다.** SHA로 강제 체크아웃하고 `git clean`으로 비운다. `setup.keep`(예: `node_modules`)은 지우지 않고, `setup.inputs`(예: lockfile)의 해시가 바뀔 때만 `setup.run`(예: `npm ci`)을 돈다 | 가정: worktree마다 설치하면 비용이 큼(philosophy 비평) | |
+| V11 | **수용 시험은 JUnit XML로 읽는다.** `commands.acceptance`가 JUnit 파일을 낸다. 시험 이름에 예시 id를 `[C1.1]`처럼 넣으면 줄 판정에 쓴다. 바뀜 줄은 base 소스에 시험 파일과 예시 자료만 얹어 돌린다 | 가정: JUnit은 대부분의 러너가 낸다(vitest, node:test, pytest, jest-junit, go-junit-report) | |
+| V12 | **M1은 앱 없이 CLI로 만든다.** `relay init`, `relay check`, `relay gate`, `relay debt`. 세션 호스트(화면)는 M2에서 정한다 | 가정 | |
+
+## 2. 품질 기준 (`.relay/quality.json`)
+
+사람이 소유하고 PR로 바꾼다. `relay init`이 package.json과 CI 설정을 읽어 초안을 쓴다.
+
+```json
+{
+  "version": 1,
+  "setup": { "run": "npm ci", "inputs": ["package-lock.json"], "keep": ["node_modules"] },
+  "commands": {
+    "fast": [
+      { "id": "typecheck", "run": "npm run typecheck" },
+      { "id": "lint", "run": "npm run lint" }
+    ],
+    "acceptance": { "id": "test", "run": "node --test --test-reporter=junit --test-reporter-destination=.relay-out/junit.xml", "junit": ".relay-out/junit.xml" },
+    "full": { "ci_checks": ["ci"] }
+  },
+  "human_paths": ["migrations/**", "src/auth/**"],
+  "guard_paths": [],
+  "public_api": ["src/index.ts"],
+  "test_globs": ["**/*.test.*", "**/*.spec.*", "test/**", "tests/**"],
+  "examples_dir": ".relay/examples",
+  "ratchets": [
+    { "id": "tests", "kind": "test_count" },
+    { "id": "file-size", "kind": "file_lines", "max": 600 }
+  ],
+  "rules": [],
+  "auto": [
+    { "id": "small", "max_changed_lines": 50, "no_new_dependencies": true, "no_new_modules": true, "require_all_lines_tested": true }
+  ]
+}
+```
+
+- `guard_paths`는 기본 목록(`.relay/quality.json`, CI 설정, lint·tsconfig·시험 러너 설정, CODEOWNERS)에 더한다. 빼지는 못한다.
+- `.relay/debt/`는 사람 경로가 아니다. 앱이 형식과 anchor만 본다.
+
+## 3. 계약
+
+Work마다 앱 저장소(`$RELAY_HOME/works/<id>/contract.json`)에 둔다. 승인된 예시는 세션이 레포의 `examples_dir/<계약 id>.json`으로 커밋한다.
+
+- 줄: `id`(C1…), `kind`(change 바뀜 | new 새로 | keep 지킴 | remove 없앰 | observe 문서·화면 | human 사람), `text`, `grounds`(code path:line | request 인용 | knowledge id | guess), `examples`(예시 id), `check`(test | observe | human).
+- 근거 확인: code는 그 path:line이 head에 있는지(이름을 주면 그 줄에 있는지), request는 요청 글에 그 구절이 그대로 있는지, knowledge는 그 id의 항목이 있는지. 확인되지 않으면 guess로 내린다.
+- `hint`: 사람이 제안한 일의 성격(V1). `tidy`: 곁들일 정리로 받은 빚 id.
+
+## 4. 증거 묶음
+
+`$RELAY_HOME/evidence/<레포 키>/<head SHA>.json`. 모양은 `src/core/types.ts`의 `EvidenceBundle`이 정본이다.
+
+## 5. 모듈과 층
+
+| 층 | 폴더 | 맡는 일 | 가져올 수 있는 것 |
+|---|---|---|---|
+| core | `src/core` | 순수 로직. 파싱, 판정, 관문 | npm 순수 라이브러리만. Node 내장·adapters·engine·cli 금지 |
+| adapters | `src/adapters` | git, 프로세스, 파일, 저장소 | core |
+| engine | `src/engine` | 조립. check 흐름 | core, adapters |
+| cli | `src/cli` | 명령줄 | engine, core, adapters |
+
+ESLint `no-restricted-imports`가 층을 지킨다.
+
+## 6. 시험의 층
+
+v2의 규칙을 잇는다. 맞는 첫 층에, 한 동작은 가장 낮은 층에서 한 번만 자세히.
+
+1. 외부 없이 되면 [단위] `test/unit/`
+2. 실제 git·파일·프로세스를 보면 [어댑터] `test/adapters/`
+3. 여러 모듈의 시나리오면 [흐름] `test/flow/` (실제 git 임시 레포, 가짜 명령)
+4. 실제 모델이 필요하면 [실제] `test/claude/` (M2부터)

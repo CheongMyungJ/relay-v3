@@ -1,0 +1,5 @@
+node_modules/
+.relay-out/
+test-results/
+coverage/
+*.log
