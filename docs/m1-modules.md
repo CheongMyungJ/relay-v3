@@ -32,7 +32,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `parseContract(text: string): Result<Contract>` — 모양 검사. 줄 id는 `C<숫자>`, 예시 id는 `<줄 id>.<숫자>`. 줄의 `examples`가 계약의 `examples`에 있어야 한다. `check: 'test'`인 change·new·keep 줄은 예시가 하나 이상이어야 한다(remove는 예시 없이도 됨). `human` 종류 줄은 `check: 'human'`.
 - `checkRequestQuote(request: string, quote: string): boolean` — 공백 정규화 뒤 포함 여부.
 - `checkCodeGround(fileText: string | null, ground: { line: number; name?: string }): { ok: boolean; detail: string }` — 파일이 없으면 실패, 줄 번호가 범위 밖이면 실패, name을 주면 그 줄 ±2줄 안에 있어야 함.
-- `exampleTag(contractId: string, id: string): string` → `[<계약 id>:C1.1]`. 태그에 계약 id를 넣어, 머지된 앞 Work의 수용 시험이 레포에 남아도 새 계약의 C1.1 증거로 잡히지 않게 한다. `findExampleTags(testName: string, contractId: string): string[]` — 이름 속 `[<그 계약 id>:C<n>.<n>]`의 예시 id를 모두. 다른 계약의 태그와 계약 id 없는 `[C1.1]`은 찾지 않는다.
+- `exampleTag(contractId: string, id: string): string` → `[<계약 id>:C1.1]`. 태그에 계약 id를 넣어, 머지된 앞 Work의 수용 시험이 레포에 남아도 새 계약의 C1.1 증거로 잡히지 않게 한다. `findExampleTags(testName: string, contractId: string): string[]` — 이름 속 `[<그 계약 id>:C<n>.<n>]`의 예시 id를 모두. 다른 계약의 태그와 계약 id 없는 `[C1.1]`은 찾지 않는다. `withoutExampleTags(testName: string): string` — 어느 계약이든 예시 태그를 뺀 이름(래칫이 같은 시험을 찾을 때).
 - `examplesFile(examplesDir: string, contractId: string): string` → `<dir>/<id>.json`.
 - `contractHash(c: Contract): string` — 키 순서와 상관없는 내용 해시. 묶음이 어느 계약(어느 판)으로 만들어졌는지 가린다.
 - `checkExamplesFile(contract: Contract, text: string | null): { differs: string[]; error?: string }` — 커밋된 예시 자료가 승인된 예시와 같은지. 파일은 예시 id → `{ input, output?, error?, note? }` 객체이거나 계약의 `examples` 같은 배열이다. 파일에 있는 예시만 input·output·error를 견준다(시험이 예시를 글로 옮겨 쓴 경우는 리뷰가 본다). 없는 파일은 견줄 것이 없다. 읽지 못하면 error.
@@ -75,7 +75,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 
 ### `src/core/ratchet.ts`
 - `fileLinesRatchet(spec, files: { path: string; base: number | null; head: number | null }[]): RatchetResult` — 바뀐 파일만 받는다. null은 그쪽에 없음, 셀 수 없으면 NaN(engine이 남은 파일의 줄 수를 못 읽은 경우). include/exclude glob. head > max이고 (base가 null이거나 base ≤ max이거나 head > base)면 offender. offender가 있으면 worse, 없고 범위 안에 셀 수 없는 파일(0 이상의 정수가 아님)이 있으면 unknown, 없고 base > max였던 파일이 줄었으면 better, 아니면 same.
-- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다).
+- `testCountRatchet(spec, base: TestCase[] | null, head: TestCase[] | null): RatchetResult` — 건너뜀 제외 수. 하나라도 null이면 unknown. 수가 같거나 늘어도 base에서 돌던(건너뛰지 않은) 시험이 head에서 없거나 건너뛰면 worse(classname·file·suite·name이 같거나, 파일을 옮겼으면 suite·name이 같은 것을 같은 시험으로 본다. suite·name은 예시 태그 `[<계약 id>:C1.1]`를 빼고 견준다: 있던 시험에 태그를 붙여도 같은 시험).
 - `commandRatchet(spec, base: string | null, head: string | null): RatchetResult` — 표준 출력의 마지막 숫자 줄. 못 읽으면 unknown.
 
 ### `src/core/gate.ts`

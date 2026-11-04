@@ -1,6 +1,7 @@
 // 래칫: '나빠지지 않음'만 잰다 (docs/m1-modules.md ratchet.ts, philosophy 원칙 3).
 // 옛 빚은 갚으라고 하지 않는다. 이번 변경이 더 나쁘게 만들었는지만 본다.
 
+import { withoutExampleTags } from './contract.ts'
 import { matchAny } from './glob.ts'
 import type { RatchetResult, RatchetSpec, TestCase } from './types.ts'
 
@@ -105,9 +106,13 @@ function counted(cases: TestCase[]): number {
   return cases.filter((c) => c.status !== 'skipped').length
 }
 
-/** 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름. 파일을 옮겼으면 이름으로 찾는다 */
+/**
+ * 기준에서 건너뛰지 않은 시험 가운데 head에서 돌지 않은 것의 이름. 파일을 옮겼으면 이름으로 찾는다.
+ * 예시 태그는 빼고 견준다(있던 시험에 태그를 붙여도 같은 시험)
+ */
 function vanished(base: TestCase[], head: TestCase[]): string[] {
-  const title = (t: TestCase) => (t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
+  const title = (t: TestCase) =>
+    withoutExampleTags(t.suite === undefined ? t.name : `${t.suite} > ${t.name}`)
   const full = (t: TestCase) => `${t.classname ?? ''}\0${t.file ?? ''}\0${title(t)}`
   const ran = head.filter((t) => t.status !== 'skipped')
   const byFull = new Set(ran.map(full))

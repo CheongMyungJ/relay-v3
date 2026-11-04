@@ -302,13 +302,23 @@ export function exampleTag(contractId: string, id: string): string {
   return `[${contractId}:${id}]`
 }
 
+const EXAMPLE_TAG = /\[([A-Za-z0-9][A-Za-z0-9._-]*):(C\d+\.\d+)\]/g
+
 /** 시험 이름 속 이 계약의 태그가 가리키는 예시 id를 처음 나온 순서대로, 겹침 없이 */
 export function findExampleTags(testName: string, contractId: string): string[] {
   const ids: string[] = []
-  for (const m of testName.matchAll(/\[([A-Za-z0-9][A-Za-z0-9._-]*):(C\d+\.\d+)\]/g)) {
+  for (const m of testName.matchAll(EXAMPLE_TAG)) {
     if (m[1] === contractId && m[2] !== undefined && !ids.includes(m[2])) ids.push(m[2])
   }
   return ids
+}
+
+/**
+ * 예시 태그(어느 계약이든)를 뺀 시험 이름. 있던 시험에 태그를 붙이면 이름이 바뀌지만 같은 시험이다(M2 평가 07:
+ * 래칫이 이를 '사라진 시험'으로 읽었다)
+ */
+export function withoutExampleTags(testName: string): string {
+  return testName.replace(EXAMPLE_TAG, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export function examplesFile(examplesDir: string, contractId: string): string {

@@ -169,6 +169,19 @@ describe('시험 수', () => {
     expect(testCountRatchet(spec, base, head).status).toBe('same')
   })
 
+  test('있던 시험에 예시 태그를 붙이거나 떼도 같은 시험이다(M2 평가 07)', () => {
+    const base = [
+      { name: '줄이면 말줄임표', status: 'passed' as const },
+      { name: '홀수 개 [median-old:C1.1]', suite: '중앙값', status: 'passed' as const },
+    ]
+    const head = [
+      { name: '줄이면 말줄임표 [w-630d:C1.1]', status: 'passed' as const },
+      { name: '홀수 개', suite: '중앙값', status: 'passed' as const },
+      { name: 'n=0 [w-630d:C3.2]', status: 'passed' as const },
+    ]
+    expect(testCountRatchet(spec, base, head)).toMatchObject({ status: 'better', base: 2, head: 3 })
+  })
+
   test('suite가 다르면 다른 시험이다', () => {
     const base = [{ name: 'x', suite: '묶음 A', status: 'passed' as const }]
     const head = [{ name: 'x', suite: '묶음 B', status: 'passed' as const }]
