@@ -1,6 +1,7 @@
 // [단위] 세션에 주는 글과 파일: 실행 인자 순서, 훅 설정과 MCP 설정 모양, 지침이 담는 사실
 import { describe, expect, test } from 'vitest'
 import {
+  sessionEnv,
   firstPrompt,
   HOOK_EVENTS,
   instructionsText,
@@ -169,4 +170,14 @@ describe('instructionsText', () => {
 
 test('firstPrompt는 요청 파일 경로를 담는다', () => {
   expect(firstPrompt('/h/works/w1/request.md')).toContain('/h/works/w1/request.md')
+})
+
+describe('sessionEnv', () => {
+  test('훅 토큰, Work id, 하루짜리 MCP 도구 제한 시간을 준다', () => {
+    expect(sessionEnv({ hookToken: 't', workId: 'w' })).toEqual({
+      RELAY_HOOK_TOKEN: 't',
+      RELAY_WORK_ID: 'w',
+      MCP_TOOL_TIMEOUT: String(24 * 60 * 60 * 1000),
+    })
+  })
 })

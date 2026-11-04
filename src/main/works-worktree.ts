@@ -9,7 +9,7 @@ import { lsTree, mergeBase, repoRoot, showFile } from '../adapters/git.ts'
 import { parseDebt, touching } from '../core/debt.ts'
 import {
   firstPrompt,
-  HOOK_TOKEN_ENV,
+  sessionEnv,
   instructionsText,
   launchArgs,
   mcpConfig,
@@ -220,7 +220,7 @@ export async function launch(ctx: WorkCtx, rec: WorkRecord, wantResume: boolean)
       bin: deps.claudeBin,
       args,
       cwd: rec.worktree,
-      env: { [HOOK_TOKEN_ENV]: rt.token, RELAY_WORK_ID: id },
+      env: sessionEnv({ hookToken: rt.token, workId: id }),
     })
   } catch (e) {
     rt.session = 'stopped'

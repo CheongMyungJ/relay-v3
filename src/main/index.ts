@@ -94,7 +94,10 @@ async function start(): Promise<void> {
     },
     claudeBin,
     check,
-    review: claudeReview({ bin: claudeBin, log }),
+    // RELAY_ABLATE=review: 평가에서 리뷰를 뺀 쪽(docs/experiments/m2/protocol.md). 제품 설정이 아니다
+    review: (process.env['RELAY_ABLATE'] ?? '').split(',').includes('review')
+      ? async () => ({ status: 'skipped' as const, findings: [] })
+      : claudeReview({ bin: claudeBin, log }),
     gh,
     now: () => new Date().toISOString(),
     newId: () => randomUUID(),

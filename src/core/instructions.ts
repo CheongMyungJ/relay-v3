@@ -23,6 +23,21 @@ export type HookEvent = (typeof HOOK_EVENTS)[number]
 /** 훅 토큰을 넘기는 PTY 환경 변수. 설정 파일에는 변수 이름만 적는다 */
 export const HOOK_TOKEN_ENV = 'RELAY_HOOK_TOKEN'
 
+/**
+ * submit_contract와 request_contract_change는 사람이 답할 때까지 기다린다. Claude Code의 MCP 도구 제한 시간을 하루로 늘린다
+ * (v2 ASK_TIMEOUT_MS와 같은 값)
+ */
+export const MCP_TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000
+
+/** 세션 PTY에 더하는 환경 변수 */
+export function sessionEnv(o: { hookToken: string; workId: string }): Record<string, string> {
+  return {
+    [HOOK_TOKEN_ENV]: o.hookToken,
+    RELAY_WORK_ID: o.workId,
+    MCP_TOOL_TIMEOUT: String(MCP_TOOL_TIMEOUT_MS),
+  }
+}
+
 /** 훅 요청의 제한 시간(초) */
 const HOOK_TIMEOUT_SEC = 30
 
