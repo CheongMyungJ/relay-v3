@@ -1,0 +1,163 @@
+# M2 모듈 약속
+
+M2는 Electron 앱에서 한 Work의 생애를 끝까지 잇는다([m2-app.md](m2-app.md)). 타입의 정본은 `src/core/types.ts`(M1)와 `src/shared/api.ts`(M2)다. 아래 함수 모양은 모듈 사이의 약속이다. 바꾸려면 이 문서를 먼저 고친다. M1의 공통 규칙(`m1-modules.md` 머리)을 그대로 따른다.
+
+## 0. 배치와 층
+
+```
+src/core        순수 (M1 + work.ts, ledger.ts, git-guard.ts, instructions.ts, review.ts)
+src/adapters    git·프로세스·PTY·gh·claude (M1 + pty.ts, claude.ts, gh.ts)
+src/engine      check 흐름 (M1)
+src/cli         relay CLI (M1)
+src/shared      메인·렌더러가 함께 쓰는 IPC 타입 (api.ts). 런타임 코드 없음(타입과 상수만)
+src/main        Electron 메인. index.ts와 ipc.ts만 'electron'을 가져온다. 나머지는 Node에서도 돈다(시험)
+src/preload     contextBridge
+src/renderer    React. shared와 core의 'import type'만
+```
+
+- ESLint 층: renderer는 shared와 `import type`만. main은 'electron'을 index.ts·ipc.ts에서만. core·adapters·engine은 'electron' 금지(M1 규칙에 더함).
+- 빌드: electron-vite. main은 `src/main/index.ts`, preload는 `src/preload/index.ts`, 렌더러는 `src/renderer/index.html`. MCP 브리지는 main의 두 번째 입력 `src/main/mcp-bridge.ts`로 같은 `out/main/`에 빌드한다. 상대 import의 `.ts`는 Vite가 푼다.
+- 개발: `npm run dev`(electron-vite dev), `npm run build`, `npm run start`(빌드 뒤 `electron .`). `package.json`의 `main`은 `out/main/index.js`.
+- tsconfig: `tsconfig.json`(node: src/core·adapters·engine·cli·shared·main·preload, test, scripts)과 `tsconfig.web.json`(DOM, jsx: react-jsx, src/renderer, src/shared). `npm run typecheck`은 둘 다.
+- 시험 층에 [스모크] `test/smoke/`(Playwright `_electron`, Linux는 `xvfb-run -a`)를 더한다. `npm test`에는 넣지 않고 `npm run test:smoke`.
+
+## 1. core (순수)
+
+### `src/core/work.ts` — Work 상태 기계
+
+```ts
+type WorkState = 'drafting' | 'awaiting_approval' | 'working' | 'recontract' | 'done' | 'abandoned'
+type SessionState = 'starting' | 'running' | 'idle' | 'stopped'
+type WorkEvent =
+  | { type: 'contract_submitted'; contract: Contract }      // 유효한 계약만
+  | { type: 'contract_approved'; contract: Contract; by: 'human' | 'caller'; at: string }
+  | { type: 'contract_changes_asked'; message: string }    // 사람이 고쳐 달라고 함 → drafting
+  | { type: 'change_requested'; reason: string }           // 세션이 계약 바꾸기 요청 → recontract
+  | { type: 'change_answered'; approved: boolean; contract?: Contract; message: string } // → working
+  | { type: 'pr_merged' } | { type: 'pr_closed' } | { type: 'ended' } | { type: 'abandoned' }
+function nextState(state: WorkState, ev: WorkEvent): Result<WorkState>  // 허용되지 않은 전이는 오류
+function canMerge(state: WorkState): boolean   // working일 때만
+```
+
+### `src/core/git-guard.ts`
+v2 `app/src/core/git-guard.ts`를 옮긴다(가져오는 v2 모듈은 같은 동작의 순수 함수로). 모양: `guardCommand(command: string, protectedBranches: string[]): { blocked: boolean; reason: string }`. 지킬 브랜치 = 기준 브랜치, `main`, `master`. v2 시험(`app/test/unit/git-guard*.test.ts`)의 경우를 옮긴다.
+
+### `src/core/instructions.ts` — 세션에 주는 글과 파일
+- `instructionsText(o: { workId: string; contractId: string; examplesDir: string; baseBranch: string; workBranch: string; questionMode: 'confirm_each' | 'draft_first' }): string` — 영어로(모델용), 사실만. 담는 것: ① 먼저 계약을 쓴다(목표, 줄: kind change|new|keep|remove|observe|human, 줄마다 근거 code path:line | request 인용 | knowledge id | guess, 예시 입력→출력·오류, check test|observe|human, 비목표, 사람만 아는 규칙). ② 사람만 아는 사실은 AskUserQuestion으로 묻는다. confirm_each면 범위와 결정마다 하나씩, 입출력 예시와 오류 동작을 따로(v2 D563, D564의 뜻). draft_first면 초안을 먼저 보이고 남은 것만. ③ `submit_contract`로 제출하고 답을 기다린다. 오류가 오면 고쳐 다시 낸다. ④ 승인 뒤에는 방식이 자유다. 예시 자료를 `<examplesDir>/<contractId>.json`에 커밋하고, 시험 이름에 `[<contractId>:C1.1]` 태그를 넣는다. ⑤ `relay_check`로 앱이 잰 증거를 당겨 볼 수 있다. ⑥ 계약을 바꿔야 하면 `request_contract_change`. ⑦ 작업 브랜치 push와 PR 열기는 해도 된다. 막히는 동작(지킬 브랜치 push, 강제 push, 원격 브랜치 삭제, PR 머지). ⑧ 끝나면 무엇을 했고 어디 있는지 터미널에 말한다. 리뷰·시험을 '하라'는 지시는 넣지 않는다.
+- `firstPrompt(requestPath: string): string`.
+- `sessionSettings(o: { port: number; workId: string }): object` — v2 `hookSettings`와 같은 모양의 http 훅(UserPromptSubmit, Stop, SessionEnd, PreToolUse, PostToolUse, PostToolUseFailure), 머리글 `Authorization: Bearer $RELAY_HOOK_TOKEN`, `allowedEnvVars: ['RELAY_HOOK_TOKEN']`, `autoMemoryEnabled: false`. URL `http://127.0.0.1:<port>/hook/<workId>/<Event>`.
+- `mcpConfig(o: { command: string; args: string[]; env: Record<string, string> }): object` — `{ mcpServers: { relay_work: { type: 'stdio', command, args, env } } }`.
+- `launchArgs(o: { sessionId: string; resume: boolean; settingsPath: string; instructionsPath: string; mcpConfigPath: string; prompt: string | null; model?: string; effort?: string }): string[]` — `--dangerously-skip-permissions`, 새 세션은 `--session-id`, 재개는 `--resume`, `--mcp-config <path>`, `--settings <path>`, `--append-system-prompt-file <path>`, 모델·effort, 마지막에 prompt(있으면). `--mcp-config`는 값을 여럿 먹으므로 늘 `--settings` 앞(v2 확인).
+- 도구 이름 상수: `MCP_SERVER = 'relay_work'`, `TOOL_SUBMIT = 'submit_contract'`, `TOOL_CHANGE = 'request_contract_change'`, `TOOL_CHECK = 'relay_check'`.
+
+### `src/core/review.ts` — 독립 리뷰(V4)
+- `REVIEW_SCHEMA`: `{ findings: [{ severity: 'high'|'medium'|'low', raise?: RaiseReason, file?, line?, text }] }` JSON Schema.
+- `reviewPrompt(o: { contract: Contract; diffStat: string; diff: string; evidenceSummary: string[] }): string` — 영어. 읽기 전용, 계약·예시와 수용 시험 대조, 시험이 못 보는 구조·경계값, 계약 밖 변경, 보안. raise는 그 넷일 때만. diff는 앞쪽 60,000자까지(잘렸으면 알림).
+- `parseReview(json: unknown): Result<ReviewFinding[]>` — id는 `R1…`로 매긴다.
+
+### `src/core/ledger.ts` — 실적 장부(그림자)
+```ts
+interface LedgerEntry {
+  ts: string; project: string; work: string; head: string
+  conclusion: Conclusion; condition: string | null; shadow: boolean
+  by?: 'human' | 'policy' | 'human-override'   // 머지했으면 누가
+  merged_head?: string; closed?: boolean
+  model?: string; claude_version?: string; relay_version: string
+}
+function trackRecord(entries: LedgerEntry[], project: string, minShadow: number, current: { model?: string; claude_version?: string; relay_version: string }): Record<string, boolean>
+```
+- 조건마다, 같은 project이고 모델·Claude Code·relay 버전이 지금과 같은 기록만 센다(philosophy 원칙 4: 버전이 바뀌면 다시 잰다).
+- 일치: 그림자(shadow true 또는 auto_merge_candidate)였던 head를 사람이 고치지 않고 그대로 머지함(`merged_head === head`). 불일치: 그 Work에서 head 뒤에 더 커밋해 머지했거나 닫음.
+- 일치 수 ≥ minShadow이고 일치율 ≥ 95%이면 true.
+- `parseLedger(text: string): LedgerEntry[]` — 줄마다 JSON, 깨진 줄은 건너뜀.
+
+## 2. adapters
+
+### `src/adapters/pty.ts`
+v2 `app/src/adapters/pty.ts`를 옮긴다(`startPty(opts): PtySession`, DA1 답, 트리 종료). `spawnSpec`(Windows의 .cmd 실행)도 함께.
+
+### `src/adapters/claude.ts`
+- `findClaude(env): string | null` — `CLAUDE_BIN` 먼저, 그다음 PATH.
+- `claudeVersion(bin): Promise<string>`.
+- `claudeJson(o: { bin: string; cwd: string; prompt: string; schema: object; model?: string; allowedTools: string[]; timeoutMs: number; env?: Record<string,string> }): Promise<{ ok: true; value: unknown; usage?: object } | { ok: false; error: string }>` — `claude -p --output-format json --json-schema <schema> --allowedTools ... --permission-mode default`(v2 `claudeJson`을 옮김). 결과의 `structured_output`을 돌려준다.
+
+### `src/adapters/gh.ts`
+모두 `gh`를 `exec.run`으로 부르고(인자는 배열, 셸 문자열에 끼우지 않음), 실패는 결과로 돌려준다.
+- `ghAvailable(): Promise<boolean>` — `gh auth status`.
+- `findPr(repoDir, branch): Promise<PrInfo | null>` — `gh pr list --head <branch> --state all --json number,url,state,headRefOid,baseRefName,isDraft,mergedAt`.
+- `prStatus(repoDir, number): Promise<PrStatus>` — `gh pr view --json mergeable,mergeStateStatus,statusCheckRollup,headRefOid,state`.
+- `mergePr(repoDir, number, headSha, method: 'merge'|'squash'|'rebase'): Promise<{ ok: boolean; error?: string }>` — `--match-head-commit`.
+- `serverProtection(repoDir, baseBranch): Promise<ServerProtection | null>` — `gh api repos/{owner}/{repo}/branches/<b>`(protected, required_status_checks, strict)와 `gh api repos/{owner}/{repo}/rules/branches/<b>`(required_status_checks, merge_queue, pull_request 규칙)를 합친다. 못 읽으면 null.
+- 가짜 gh: `test/support/fake-gh/gh.mjs`. 위 명령만, 상태는 `FAKE_GH_STATE` JSON 파일, 받은 인자는 `FAKE_GH_LOG`에 한 줄씩.
+
+## 3. main (Node에서 시험할 수 있게)
+
+### `src/shared/api.ts`
+렌더러와 메인이 주고받는 모양: `ProjectView`, `ProjectSettings { auto_merge: boolean; min_shadow: number; review: 'all' | 'auto_only'; merge_method: 'merge'|'squash'|'rebase'; question_mode: 'confirm_each'|'draft_first' }`(기본 false, 20, 'all', 'squash', 'confirm_each'), `WorkView { id, project, title, state, session, branch, base, contract: Contract|null, pendingContract: Contract|null, pendingChange: string|null, evidence: EvidenceBundle|null, gate: GateResult|null, pr: PrInfo|null, evidenceRunning: boolean, reviewRunning: boolean }`, `RelayApi`(preload가 내놓는 함수 목록, 4절), 이벤트 이름.
+
+### `src/main/store.ts`
+`$RELAY_HOME`(기본 `~/.relay-v3`). `projects.json`, `works/<id>/{work.json, request.md, contract.json, events.jsonl, settings.json, instructions.md, mcp.json}`, `ledger.jsonl`. 쓰기는 임시 파일 뒤 rename. 시계와 id는 주입(`now()`, `newId()`).
+
+### `src/main/hooks.ts`
+127.0.0.1 임의 포트 HTTP. `/hook/<workId>/<Event>`(Work마다 토큰), `/control`(앱 실행마다 토큰, 머리글 `X-Relay-Work`로 Work id). 본문 8MB 상한. 토큰이 틀리면 401. 핸들러는 주입. v2 `adapters/hooks.ts`에서 필요한 만큼.
+- PreToolUse(Bash)에 `guardCommand`가 blocked면 `{ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason } }`로 답한다.
+
+### `src/main/mcp-bridge.ts`
+stdio MCP 서버(JSON-RPC 2.0, `initialize`, `tools/list`, `tools/call`; 외부 SDK 없이). env `RELAY_CONTROL_URL`, `RELAY_CONTROL_TOKEN`, `RELAY_WORK_ID`. 도구 셋(`submit_contract`의 입력 스키마는 Contract 모양). 호출은 `/control`에 `{ tool, args }`로 POST하고 답을 그대로 도구 결과(text)로. 기다리는 도구는 앱이 답할 때까지 HTTP가 열려 있다. Electron이 Node로 돈다(`ELECTRON_RUN_AS_NODE=1`). 개발·시험에서는 `node src/main/mcp-bridge.ts`.
+
+### `src/main/sessions.ts`
+`SessionHost`: Work마다 PTY 하나. `start(workId, { bin, args, cwd, env })`, `write`, `resize`, `kill`, `onData(workId, cb)`, 최근 출력 버퍼(200KB, 다시 붙을 때 보냄), `onExit`.
+
+### `src/main/works.ts` — 조율 (Electron을 모름)
+```ts
+class Works {
+  constructor(deps: {
+    store; sessions: SessionHost; hooksPort: number; controlUrl: string; controlToken: string
+    bridgeCommand: { command: string; args: string[]; env: Record<string,string> }
+    claudeBin: string; check: typeof import('../engine/check.ts').check
+    review: (o: ReviewInput) => Promise<EvidenceBundle['review']>
+    gh: typeof import('../adapters/gh.ts'); now: () => string; newId: () => string
+    emit: (event: string, payload: unknown) => void; relayVersion: string
+    debounceMs?: number   // 기본 20,000
+  })
+  addProject(path): Promise<ProjectView>; updateSettings(projectId, s): Promise<ProjectView>
+  createWork(o: { project; request; hint?; base? }): Promise<WorkView>   // worktree, 브랜치, 파일, 세션 시작
+  resumeWork(id): Promise<void>
+  onHook(workId, event, body): Promise<HookReply>
+  onControl(workId, tool, args, signal): Promise<unknown>   // submit_contract, request_contract_change, relay_check
+  approveContract(id): Promise<void>; askChanges(id, message): Promise<void>
+  answerChange(id, o: { approved: boolean; message: string }): Promise<void>
+  runEvidence(id, o: { exportCandidate: boolean }): Promise<void>   // check → (리뷰) → gate → 장부
+  merge(id): Promise<{ ok: boolean; error?: string }>
+  end(id): Promise<void>; abandon(id): Promise<void>
+  view(id): WorkView; list(): { projects: ProjectView[]; works: WorkView[] }
+}
+```
+- createWork: 작업 브랜치 `relay/<짧은 이름>-<4자>`, worktree는 `$RELAY_HOME/worktrees/<workId>`(git worktree add -b). `request.md`에 요청과 hint(`## 일의 성격 제안`).
+- submit_contract: `parseContract` 실패면 바로 `{ status: 'invalid', errors }`. 근거 확인(engine의 근거 확인 함수 또는 core 함수)으로 확인 못 한 근거는 계약 화면에 표시만 한다. 유효하면 `awaiting_approval`로 두고 사람의 답(승인 → `{ status: 'approved', contract }`, 고쳐 달라고 함 → `{ status: 'changes', message }`)을 기다린다. 승인하면 `contract.approved_by = 'human'`, `approved_at`, `contract.json`에 쓴다.
+- 증거 계기(m2-app 1절): Stop 훅이 오면 세션 idle, worktree HEAD가 마지막 묶음의 head와 다르면 debounceMs 뒤 `runEvidence({ exportCandidate: false })`. PostToolUse(Bash)에서 `git push`·`gh pr`이면 `findPr` 뒤 PR이 있고 head가 원격에 있으면 `runEvidence({ exportCandidate: true })`. [끝]도 export.
+- runEvidence: `check({ repo: worktree, head: HEAD, base: base SHA, contractPath, requestPath, home })`. export면 리뷰(프로젝트 설정 review가 'auto_only'면 gate를 먼저 리뷰 없이 돌려 자동 조건을 채웠을 때만)를 붙여 묶음에 넣고 다시 쓴다. `gate(bundle, contract, policy, head)`, policy는 프로젝트 설정, quality.json(묶음의 quality.from 쪽)의 auto, `gh.serverProtection`, `trackRecord`. 장부에 한 줄. 결론이 auto_merge_candidate이고 PR이 있으면 바로 `merge`(by 'policy').
+- merge: `canMerge`, PR의 head가 묶음 head와 같고 gate가 계산됐는지, `prStatus`의 mergeable. 그다음 `gh.mergePr`. 장부의 그 Work 기록에 `by`, `merged_head`.
+- PR 상태: PR이 열려 있으면 120초마다 `findPr`. 머지되면 `pr_merged`, 닫히면 `pr_closed`. 앱 밖(GitHub)에서 머지됐으면 by 'human-override'로 장부에.
+- 앱을 다시 켜면 working·drafting Work의 세션은 stopped로 보이고 [다시 열기]로 `--resume`.
+
+### `src/main/ipc.ts`, `src/main/index.ts`, `src/preload/index.ts`
+`RelayApi`: `list()`, `addProject()`(폴더 고르기 대화상자), `updateSettings(id, s)`, `createWork(o)`, `resumeWork(id)`, `approveContract(id)`, `askChanges(id, msg)`, `answerChange(id, o)`, `merge(id)`, `end(id)`, `abandon(id)`, `runEvidence(id)`, `terminal.attach(id)`(버퍼를 돌려주고 이후 데이터는 이벤트), `terminal.write(id, data)`, `terminal.resize(id, cols, rows)`, `diff(id): Promise<string>`, `debt(id): Promise<DebtItem[]>`, `on(event, cb)`. 창 하나, `contextIsolation: true`, `nodeIntegration: false`.
+
+## 4. renderer
+
+- 레이아웃: 왼쪽 사이드바(프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니), 가운데 터미널(xterm + fit), 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
+- [계약]: 목표, 줄 표(종류 꼬리표, 글, 근거와 확인됨/추정 표시, 예시 입력→출력, 확인 방법), 비목표, 사람만 아는 규칙, hint. `awaiting_approval`이면 [승인]과 [고쳐 달라고 하기](글 입력). `recontract`면 세션의 요청과 [받아들임]/[거절](글).
+- [증거]: 맨 위 결론 한 줄(사람 머지 / 자동 머지 후보 / 계약 다시, 그림자면 '그림자: 자동이었으면 머지했을 것'), 그 아래 decisive 한 줄. 펼침: reasons, 명령, 줄 판정, 래칫, 신호, 리뷰 지적, 없는 증거, 낡음. [증거 다시 재기]. PR이 있으면 [머지](gate가 계산됐고 state가 working일 때).
+- [변경]: `git diff base..HEAD --stat`과 파일별 diff(접기).
+- [빚]: 이 Work가 건드린 경로의 빚 항목.
+- 새 Work 대화상자: 프로젝트, 요청(여러 줄), 일의 성격 제안(선택: 버그 고침, 기능, 리팩터링, 문서 칩 + 자유 글), 기준 브랜치(기본 origin의 기본 브랜치).
+- 프로젝트 설정: 자동 머지 스위치(설명: 조건·서버 보호·그림자 실적을 모두 채울 때만), min_shadow, 리뷰 범위, 머지 방식, 질문 방식.
+- 글은 한국어. 밝은·어두운 테마는 시스템을 따른다.
+
+## 5. 시험
+
+- [단위]: work 상태 기계, git-guard(v2 경우), instructions(인자 순서, 설정 모양), review(스키마, 파싱, 프롬프트 자르기), ledger(일치·불일치·버전 바뀜).
+- [어댑터]: pty(실제 node-pty로 echo, resize, killTree), claude(가짜 `claude -p`), gh(가짜 gh), hooks 서버(토큰, 상한), mcp-bridge(실제 프로세스로 initialize → tools/list → tools/call이 control에 닿음).
+- [흐름] `test/flow/works.test.ts`: 가짜 claude(`test/support/fake-claude/fake-claude.mjs`, 시나리오 JSON: 훅 보내기, 파일 쓰기, 커밋, MCP 도구 부르기(브리지 대신 mcp.json의 env로 `/control`에 직접 POST), 기다리기, 끝내기)로 Works를 Node에서 돌린다: 새 Work → 계약 제출(틀린 것 → invalid → 고친 것) → 승인 → 커밋·Stop → 증거(debounce를 짧게) → 관문 human_merge('리뷰 없음' 아님: export면 가짜 리뷰) → 가짜 gh PR → [머지] → done, 장부 기록. 다른 경우: 계약 바꾸기 요청과 답, git-guard 막기(PreToolUse 응답), 앱 재시작 뒤 resume 인자.
+- [스모크] `test/smoke/app.spec.ts`: 빌드한 앱을 Playwright `_electron`으로 띄워 프로젝트 추가(대화상자는 메인에서 바꿔 끼움) → 새 Work → 가짜 claude가 계약 제출 → [승인] → 증거 패널에 결론 → 스크린샷 `test-results/`.
