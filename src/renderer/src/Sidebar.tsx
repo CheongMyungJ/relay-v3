@@ -1,6 +1,8 @@
-// 왼쪽 사이드바 (docs/m2-modules.md 4절): 프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니.
+// 왼쪽 사이드바 (docs/m2-modules.md 4절): 프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니. 품질 기준이 없거나
+// 깨진 프로젝트는 그 줄에 알림과 [초안 만들기](V20).
 import type { ProjectView, WorkView } from '../../shared/api.ts'
 import { STATE_LABEL, workTone } from './format.ts'
+import { QualityNotice } from './QualityNotice.tsx'
 import { Dot, GearIcon } from './ui.tsx'
 
 interface Props {
@@ -39,6 +41,7 @@ export function Sidebar(p: Props) {
                   <GearIcon />
                 </button>
               </header>
+              <QualityNotice project={project} compact />
               <button type="button" className="new-work" onClick={() => p.onNewWork(project.id)}>
                 + 새 Work
               </button>

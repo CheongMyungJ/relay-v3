@@ -2,14 +2,14 @@
 // 종료 코드: 0 성공(결론과 상관없이), 1 사용 오류, 2 내부 오류.
 
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { readdir, readFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { parseContract } from '../core/contract.ts'
 import { parseDebt, vanished } from '../core/debt.ts'
 import { summarize } from '../core/evidence.ts'
 import { gate } from '../core/gate.ts'
-import { draftQuality, parseQuality, qualityHash } from '../core/quality.ts'
+import { parseQuality, qualityHash } from '../core/quality.ts'
 import type {
   AutoCondition,
   Conclusion,
@@ -18,10 +18,10 @@ import type {
   EvidenceBundle,
   GateResult,
 } from '../core/types.ts'
-import { git } from '../adapters/exec.ts'
 import { repoRoot, revParse, showFile } from '../adapters/git.ts'
 import { evidencePath, readJson, relayHome, repoKey } from '../adapters/store.ts'
 import { check, CheckInputError, QUALITY_PATH } from '../engine/check.ts'
+import { draftFor, draftText, writeDraft } from '../engine/init.ts'
 
 export interface Io {
   cwd: string
@@ -112,24 +112,12 @@ async function rootOf(cwd: string): Promise<string> {
 async function initCommand(io: Io, args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: { write: { type: 'boolean' } }, strict: true })
   const root = await rootOf(io.cwd)
-  const listed = await git(['ls-files', '-z', '--cached', '--others', '--exclude-standard'], root)
-  const files = listed.split('\0').filter((f) => f !== '')
-  const packageJson = await readFile(join(root, 'package.json'), 'utf8').catch(() => undefined)
-  const draft = draftQuality(packageJson === undefined ? { files } : { packageJson, files })
-  const text = `${JSON.stringify(draft, null, 2)}\n`
   if (values.write !== true) {
-    io.out(text.trimEnd())
+    io.out(draftText(await draftFor(root)).trimEnd())
     return 0
   }
-  const target = join(root, QUALITY_PATH)
-  await mkdir(dirname(target), { recursive: true })
-  try {
-    await writeFile(target, text, { flag: 'wx' })
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'EEXIST')
-      throw new UsageError(`이미 있음: ${QUALITY_PATH}. 고치려면 직접 고친다`)
-    throw e
-  }
+  if (!(await writeDraft(root)).written)
+    throw new UsageError(`이미 있음: ${QUALITY_PATH}. 고치려면 직접 고친다`)
   io.out(`씀: ${QUALITY_PATH}`)
   return 0
 }

@@ -29,7 +29,8 @@ const api: RelayApi = {
   askChanges: (id, message) => call(IPC.askChanges, id, message),
   answerChange: (id, o) => call(IPC.answerChange, id, o),
   merge: (id) => call(IPC.merge, id),
-  end: (id) => call(IPC.end, id),
+  prepareEnd: (id) => call(IPC.prepareEnd, id),
+  end: (id, head) => call(IPC.end, id, head),
   abandon: (id) => call(IPC.abandon, id),
   runEvidence: (id) => call(IPC.runEvidence, id),
   terminal: {
@@ -39,6 +40,7 @@ const api: RelayApi = {
   },
   diff: (id) => call(IPC.diff, id),
   debt: (id) => call(IPC.debt, id),
+  draftQuality: (projectId) => call(IPC.draftQuality, projectId),
   on<E extends RelayEvent>(event: E, cb: (payload: RelayEventPayload[E]) => void): () => void {
     if (!events.has(event)) throw new Error(`모르는 이벤트: ${String(event)}`)
     const listener = (_e: unknown, payload: RelayEventPayload[E]) => cb(payload)

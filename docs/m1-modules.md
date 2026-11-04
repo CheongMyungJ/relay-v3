@@ -26,7 +26,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `hasRealLimit(c: AutoCondition): boolean` — `max_changed_lines`나 `paths`가 있으면 참. parseQuality와 gate가 같이 쓴다.
 - `effectiveGuardPaths(q: QualityConfig): string[]` — 기본 + 사용자.
 - `qualityHash(text: string): string` — 내용 해시(순수 JS, 예: FNV-1a 64비트 16진수). 암호 강도는 필요 없다.
-- `draftQuality(input: { packageJson?: string; files: string[] }): QualityConfig` — `relay init`의 초안. package.json의 scripts에 `typecheck`·`lint`·`test`가 있으면 명령으로 넣는다. `files`(레포의 파일 목록)에 lockfile이 있으면 setup(`npm ci`/`pnpm install --frozen-lockfile`/`yarn install --frozen-lockfile`)과 `keep: ['node_modules']`. acceptance는 테스트 러너를 알아볼 수 있을 때만(`acceptanceRun`). 러너 뒤의 인자(`--config`, 경로 등)와 앞의 환경 변수·`cross-env`는 남기고 JUnit 출력만 더한다(vitest → `npx vitest run <인자> --reporter=junit --outputFile=.relay-out/junit.xml`, node:test → `node <옵션> --test --test-reporter=junit --test-reporter-destination=.relay-out/junit.xml <인자>`). 이어 붙인 명령, 따옴표·셸 글자, 이미 reporter를 정한 스크립트는 알아보지 못한 것으로 보고 fast의 `test`로 둔다. 래칫 기본 `test_count`(acceptance가 있을 때), `file_lines` max 600. CI 파일(`.github/workflows/*.yml`)이 있으면 `full.ci_checks`는 비워 두고 주석 대신 `rules`에 넣지 않는다(사람이 채운다).
+- `draftQuality(input: { packageJson?: string; files: string[] }): QualityConfig` — `relay init`의 초안. package.json의 scripts에 `typecheck`·`lint`·`test`가 있으면 명령으로 넣는다. `files`(레포의 파일 목록)에 lockfile이 있으면 setup(`npm ci`/`pnpm install --frozen-lockfile`/`yarn install --frozen-lockfile`)과 `keep: ['node_modules']`. acceptance는 테스트 러너를 알아볼 수 있을 때만(`acceptanceRun`). 러너 뒤의 인자(`--config`, 경로 등)와 앞의 환경 변수·`cross-env`는 남기고 JUnit 출력만 더한다(vitest → `npx vitest run <인자> --reporter=junit --outputFile=.relay-out/junit.xml`, node:test → `node <옵션> --test --test-reporter=junit --test-reporter-destination=.relay-out/junit.xml <인자>`). 이어 붙인 명령, 따옴표·셸 글자, 이미 reporter를 정한 스크립트는 알아보지 못한 것으로 보고 fast의 `test`로 둔다. 래칫 기본 `test_count`(acceptance가 있을 때), `file_lines` max 600. CI 파일(`.github/workflows/*.yml`)이 있으면 `full.ci_checks`는 비워 두고 주석 대신 `rules`에 넣지 않는다(사람이 채운다). `auto`는 늘 `DRAFT_AUTO` 하나: `{ id: 'small', max_changed_lines: 100, no_new_dependencies: true, no_new_modules: true, require_all_lines_tested: true }`(V19: 스위치가 꺼져 있어도 그림자 실적이 첫날부터 쌓이게).
 
 ### `src/core/contract.ts`
 - `parseContract(text: string): Result<Contract>` — 모양 검사. 줄 id는 `C<숫자>`, 예시 id는 `<줄 id>.<숫자>`. 줄의 `examples`가 계약의 `examples`에 있어야 한다. `check: 'test'`인 change·new·keep 줄은 예시가 하나 이상이어야 한다(remove는 예시 없이도 됨). `human` 종류 줄은 `check: 'human'`.
@@ -135,6 +135,11 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
   6. 래칫: file_lines(바뀐 파일의 base·head 줄 수. 남은 파일의 줄 수를 못 읽으면 NaN), test_count(acceptance JUnit base·head. base는 얹지 않은 base에서 돌린 것), command(base·head).
   7. 잠금을 풀고 묶음을 만들어 `evidencePath`에 쓴다. `contract`는 `{ id, hash: contractHash }`(계약이 없으면 null), `diff.binary`는 바이너리 파일 경로. review는 null(M2), claims null.
 - 어떤 단계든 실패하면 묶음에 `missing`으로 적고 다음으로 간다(명령·래칫·줄 판정이 던져도). 묶음은 늘 나온다.
+
+### `src/engine/init.ts` — 품질 기준 초안 (V19, V20)
+- `draftFor(root): Promise<QualityConfig>` — `git ls-files -z --cached --others --exclude-standard`의 파일 목록과 작업 트리의 `package.json`으로 `draftQuality`.
+- `draftText(q): string` — 들여 쓴 JSON과 끝 줄바꿈.
+- `writeDraft(root): Promise<{ written: boolean; path: string }>` — 작업 트리의 `.relay/quality.json`에 쓴다(`wx`). 이미 있으면 덮지 않고 written false. `relay init --write`와 앱의 [초안 만들기]가 쓴다.
 
 ## cli (`src/cli/main.ts`, bin `relay`)
 

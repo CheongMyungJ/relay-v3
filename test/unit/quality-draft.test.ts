@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import {
   acceptanceRun,
   DEFAULT_TEST_GLOBS,
+  DRAFT_AUTO,
   draftQuality,
   parseQuality,
 } from '../../src/core/quality.ts'
@@ -14,10 +15,19 @@ function valueOf(text: string): QualityConfig {
   return r.value
 }
 
+// 초안의 자동 조건(V19)
+const SMALL = {
+  id: 'small',
+  max_changed_lines: 100,
+  no_new_dependencies: true,
+  no_new_modules: true,
+  require_all_lines_tested: true,
+}
+
 // 선택 칸의 기본값 (ratchets 빼고)
 const defaults = {
   ...{ human_paths: [], guard_paths: [], public_api: [], test_globs: DEFAULT_TEST_GLOBS },
-  ...{ examples_dir: '.relay/examples', rules: [], auto: [] },
+  ...{ examples_dir: '.relay/examples', rules: [], auto: [SMALL] },
 }
 
 describe('draftQuality', () => {
@@ -193,6 +203,16 @@ describe('draftQuality', () => {
     const a = draftQuality({ packageJson, files })
     const b = draftQuality({ packageJson, files: [...files].reverse().map((f) => `./${f}`) })
     expect(b).toEqual(a)
+  })
+
+  test('초안은 늘 자동 조건 small을 넣는다(V19: 스위치가 꺼져 있어도 그림자 실적이 첫날부터 쌓이게)', () => {
+    expect(DRAFT_AUTO).toEqual(SMALL)
+    expect(draftQuality({ files: [] }).auto).toEqual([SMALL])
+    expect(draft({ test: 'vitest' }, {}, ['package-lock.json']).auto).toEqual([SMALL])
+    // 돌려준 초안을 고쳐도 다음 초안이 바뀌지 않는다
+    const first = draftQuality({ files: [] })
+    if (first.auto[0]) first.auto[0].max_changed_lines = 1
+    expect(draftQuality({ files: [] }).auto).toEqual([SMALL])
   })
 
   test('초안은 parseQuality를 그대로 통과한다', () => {

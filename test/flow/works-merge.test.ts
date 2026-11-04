@@ -167,6 +167,45 @@ test('내보내기 리뷰가 도는 동안 relay_check는 먼저 보인 증거�
   }
 })
 
+test('같은 head의 내보내기가 도는 동안 또 온 git push·gh pr은 그 내보내기에 합친다(리뷰는 한 번)', async () => {
+  // 실제 세션은 git push와 gh pr create를 잇달아 부르고, 그 뒤에도 gh pr view 같은 명령을 부른다. PostToolUse마다
+  // 내보내기를 줄 세우면 같은 head의 리뷰가 두 번 돈다(전체 묶음에서 가끔 export [true, true]이던 경합)
+  vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '3000')
+  await scenario([
+    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+    FIX_COMMIT,
+    ...PUSH_AND_PR,
+    { do: 'sleep', ms: 1500 },
+    { do: 'bash', command: 'git push' },
+    { do: 'bash', command: 'gh pr view --json number' },
+    { do: 'stop' },
+  ])
+  try {
+    const app = await kit.openApp(await makeTempDir('relay-home-'))
+    const { works } = app
+    const project = await works.addProject(kit.repo.dir)
+    const { id } = await works.createWork({ project: project.id, request: REQUEST })
+    await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
+    await works.approveContract(id)
+    await until(
+      async () => (await fake()).some((e) => e.type === 'hook' && e.event === 'Stop'),
+      'Stop',
+    )
+    await until(
+      () => works.view(id).evidence?.review?.status === 'done' && settled(works.view(id)),
+      '리뷰',
+    )
+    await works.idle()
+    const evidence = (await events(app, id)).filter((e) => e.type === 'evidence')
+    expect(evidence.map((e) => e.export)).toEqual([true])
+    expect((await fake()).filter((e) => e.type === 'review')).toHaveLength(1)
+    const ledger = (await app.store.readLedger()).filter((e) => e.work === id)
+    expect(ledger).toHaveLength(1)
+  } finally {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '0')
+  }
+})
+
 test('[머지]: Work의 기준과 다른 PR, CI 실패·진행 중인 PR은 머지하지 않는다. PR을 고치면 PR 확인이 내보내기로 잰다', async () => {
   await scenario([
     { do: 'mcp', tool: 'submit_contract', args: CONTRACT },

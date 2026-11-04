@@ -103,7 +103,10 @@ export class Store {
   readonly home: string
   readonly now: () => string
   readonly newId: () => string
-  /** 같은 파일에 쓰는 일을 차례로(늦게 부른 쓰기가 먼저 끝나 덮이지 않게) */
+  /**
+   * 같은 파일에 쓰는 일을 차례로(늦게 부른 쓰기가 먼저 끝나 덮이지 않게). 읽기는 그 파일에 앞서 줄 선 쓰기를 기다린다:
+   * Works는 기록(events.jsonl)을 기다리지 않고 남기므로, 바로 뒤에 읽어도 마지막 기록을 놓치지 않게
+   */
   private readonly chains = new Map<string, Promise<void>>()
 
   constructor(o: { home?: string; now: () => string; newId: () => string }) {
@@ -142,6 +145,11 @@ export class Store {
     return next
   }
 
+  /** 이 파일에 줄 선 쓰기가 끝날 때까지(실패는 삼킨다) */
+  private async written(path: string): Promise<void> {
+    await this.chains.get(path)?.catch(() => {})
+  }
+
   /** 글을 통째로 쓴다(임시 파일 뒤 rename) */
   writeFileAtomic(path: string, text: string): Promise<void> {
     return this.serial(path, () => atomicWrite(path, text))
@@ -150,6 +158,7 @@ export class Store {
   // ── 프로젝트 ───────────────────────────────────────────────────────────────
 
   async readProjects(): Promise<ProjectRecord[]> {
+    await this.written(this.projectsFile)
     const list = await readJson<unknown>(this.projectsFile)
     if (!Array.isArray(list)) return []
     return list.filter(
@@ -177,7 +186,9 @@ export class Store {
   }
 
   async readWork(id: string): Promise<WorkRecord | null> {
-    const w = await readJson<unknown>(this.workPath(id, 'work.json')).catch(() => null)
+    const path = this.workPath(id, 'work.json')
+    await this.written(path)
+    const w = await readJson<unknown>(path).catch(() => null)
     if (!isObject(w) || w.version !== 1 || w.id !== id || typeof w.worktree !== 'string')
       return null
     return w as unknown as WorkRecord
@@ -198,7 +209,9 @@ export class Store {
   }
 
   async readText(id: string, name: WorkFile): Promise<string | null> {
-    return readFile(this.workPath(id, name), 'utf8').catch(() => null)
+    const path = this.workPath(id, name)
+    await this.written(path)
+    return readFile(path, 'utf8').catch(() => null)
   }
 
   async removeFile(id: string, name: WorkFile): Promise<void> {
@@ -243,7 +256,7 @@ export class Store {
   }
 
   async readLedger(): Promise<LedgerEntry[]> {
-    await this.chains.get(this.ledgerFile)?.catch(() => {})
+    await this.written(this.ledgerFile)
     const text = await readFile(this.ledgerFile, 'utf8').catch(() => '')
     return parseLedger(text)
   }

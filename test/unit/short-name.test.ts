@@ -19,3 +19,20 @@ test('한국어로만 쓴 요청은 한글을 로마자로 옮겨 서로 구분�
   expect(a).toMatch(/^[a-z0-9-]{1,24}$/)
   expect(shortName('!!! ???')).toBe('work')
 })
+
+test('한글에 숫자만 섞인 요청은 숫자가 아니라 로마자 이름이다(relay/3-xxxx가 되지 않게)', () => {
+  expect(shortName('청구서 합계가 3원 크다')).toBe('cheongguseo-hapgyega')
+  expect(shortName('3원 더 나와요')).toBe('3won-deo-nawayo')
+  expect(shortName('2024년 보고서')).toBe('2024nyeon-bogoseo')
+  // 영문 낱말이 하나라도 있으면 그대로(숫자는 이름에 남는다)
+  expect(shortName('v2 화면 고치기')).toBe('v2')
+  expect(shortName('fix 3 bugs')).toBe('fix-3-bugs')
+  // 글자가 하나도 없으면 숫자만으로 짓지 않는다
+  expect(shortName('123 456')).toBe('work-123-456')
+  expect(shortName('1234567890 1234567890 1234')).toBe('work-1234567890')
+  for (const r of ['청구서 합계가 3원 크다', '42', '7 8 9', '3원']) {
+    expect(shortName(r)).toMatch(/[a-z]/)
+    expect(shortName(r)).toMatch(/^[a-z0-9-]{1,24}$/)
+    expect(shortName(r)).not.toMatch(/-$/)
+  }
+})

@@ -378,6 +378,33 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* 품질 기준 알림(V20): [증거] 탭 위와 사이드바의 프로젝트 줄 */
+.quality-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  line-height: 1.5;
+}
+
+.quality-notice.compact {
+  gap: 8px;
+  margin: 6px 0 2px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+.quality-notice.compact .secondary {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.quality-drafted {
+  color: var(--muted);
+}
+
 .new-work {
   display: block;
   width: 100%;

@@ -54,12 +54,17 @@ function words(text: string): string[] {
     .filter(Boolean)
 }
 
+const hasLetter = (text: string): boolean => /[a-z]/.test(text)
+
 /**
- * 요청 글에서 브랜치·계약 id에 쓸 짧은 이름(영문 소문자·숫자·-, 24자까지). 영문 낱말이 없으면(한국어로만 쓴 요청)
- * 한글을 로마자로 옮겨 쓴다. 그래도 없으면 'work'
+ * 요청 글에서 브랜치·계약 id에 쓸 짧은 이름(영문 소문자·숫자·-, 24자까지). 영문 낱말이 없으면(한국어로만 쓴 요청,
+ * '청구서 합계가 3원 크다'처럼 한글에 숫자만 섞인 요청) 한글을 로마자로 옮겨 쓴다. 숫자만으로 된 이름은 짓지 않는다:
+ * 그래도 글자가 없으면 'work-'를 앞에 붙이고, 아무것도 없으면 'work'
  */
 export function shortName(request: string): string {
-  const ws = words(request).length > 0 ? words(request) : words(romanize(request))
+  const plain = words(request)
+  const named = plain.some(hasLetter) ? plain : words(romanize(request))
+  const ws = named.some(hasLetter) ? named : ['work', ...named]
   let out = ''
   for (const w of ws) {
     const next = out ? `${out}-${w}` : w
@@ -81,8 +86,8 @@ async function refExists(root: string, ref: string): Promise<boolean> {
     .catch(() => false)
 }
 
-/** worktree를 만들 ref: origin/<base>가 있으면 그것, 없으면 로컬 <base> */
-async function baseRef(root: string, base: string): Promise<string> {
+/** worktree를 만들 ref(품질 기준을 읽는 곳도): origin/<base>가 있으면 그것, 없으면 로컬 <base> */
+export async function baseRef(root: string, base: string): Promise<string> {
   for (const ref of [`origin/${base}`, base]) if (await refExists(root, ref)) return ref
   throw new Error(`기준 브랜치를 찾지 못함: ${base}`)
 }

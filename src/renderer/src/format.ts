@@ -15,7 +15,13 @@ import type {
   ReviewFinding,
   SignalKind,
 } from '../../core/types.ts'
-import type { SessionState, WorkState, WorkView } from '../../shared/api.ts'
+import type {
+  DraftQualityResult,
+  QualityState,
+  SessionState,
+  WorkState,
+  WorkView,
+} from '../../shared/api.ts'
 
 /** 꼬리표의 색 */
 export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'muted'
@@ -136,16 +142,42 @@ export function canMergeView(v: WorkView): boolean {
   )
 }
 
+/**
+ * 평가 설정(RELAY_ABLATE=review)으로 리뷰를 끈 Work의 리뷰 문구. 다른 까닭의 건너뜀(계약 없음, 리뷰 범위가 자동 후보에만)
+ * 이나 '리뷰는 PR을 열 때 돕니다'와 섞지 않는다: 이 Work에서는 리뷰가 돌지 않는다
+ */
+export const REVIEW_DISABLED = '리뷰가 꺼져 있음(평가 설정)'
+
+/** 관문의 사실 한 줄(decisive, reasons)을 화면 글로. 리뷰를 평가용으로 껐으면 리뷰 없음·건너뜀을 그 뜻으로 */
+export function factText(fact: string, v: Pick<WorkView, 'reviewDisabled'>): string {
+  return v.reviewDisabled && (fact === '리뷰 없음' || fact === '리뷰를 건너뜀')
+    ? REVIEW_DISABLED
+    : fact
+}
+
 /** 결론을 정한 사실 한 줄. 리뷰가 도는 중이거나 내보내기가 아니어서 리뷰가 없으면 그 뜻을 풀어 쓴다 */
 export function decisiveText(v: WorkView): string {
-  const d = v.gate?.decisive ?? ''
+  const d = factText(v.gate?.decisive ?? '', v)
   if (v.evidence?.review !== null) return d
   if (v.reviewRunning) return '독립 리뷰 중: 리뷰가 끝나면 결론을 다시 정합니다'
   return d === '리뷰 없음' ? '리뷰 없음 (리뷰는 PR을 열거나 갱신할 때, 끝낼 때 돕니다)' : d
 }
 
+/** 결론 아래 메타 줄의 리뷰 한 마디 */
+export function reviewMeta(r: EvidenceBundle['review'], disabled = false): string {
+  if (disabled && (r === null || r.status === 'skipped')) return REVIEW_DISABLED
+  if (r === null) return '리뷰 없음'
+  if (r.status === 'done') return `리뷰 지적 ${r.findings.length}개`
+  return r.status === 'failed' ? '리뷰 실패' : '리뷰 건너뜀'
+}
+
 /** [리뷰 지적] 펼침의 첫 줄. 지적이 0개라도 리뷰가 돌지 않았거나 실패했으면 '지적 없음'이라고 하지 않는다(V6) */
-export function reviewNote(r: EvidenceBundle['review'], running: boolean): string | null {
+export function reviewNote(
+  r: EvidenceBundle['review'],
+  running: boolean,
+  disabled = false,
+): string | null {
+  if (disabled && (r === null || r.status === 'skipped')) return REVIEW_DISABLED
   if (r === null)
     return running ? '독립 리뷰 중…' : '리뷰 없음: 리뷰는 PR을 열거나 갱신할 때, 끝낼 때 돕니다'
   if (r.status === 'failed') return '리뷰 실패: 지적을 받지 못함'
@@ -170,17 +202,104 @@ export function outcomeOf(v: WorkView): string | null {
   return '머지 없이 끝남'
 }
 
-/** 구현 중 Work의 다음 할 일 한 줄: PR이 지금 HEAD를 가리키지 않음, PR이 없음, 품질 기준이 없음 */
-export function nextStep(v: WorkView): string | null {
-  if (v.state !== 'working' && v.state !== 'recontract') return null
+/**
+ * 구현 중 Work의 다음 할 일 한 줄: PR이 지금 HEAD를 가리키지 않음, PR이 없음, 품질 기준이 없음. 품질 기준 알림(V20)이
+ * 위에 이미 보이면(qualityNotice) 품질 기준 줄은 되풀이하지 않고, [끝내기]의 확인 상자(V18)가 보이면(ending) 그 상자가
+ * 다음 할 일이다
+ */
+export function nextStep(
+  v: WorkView,
+  o: { qualityNotice?: boolean; ending?: boolean } = {},
+): string | null {
+  if ((v.state !== 'working' && v.state !== 'recontract') || o.ending) return null
   const pr = v.pr?.state === 'OPEN' ? v.pr : null
   if (pr && v.head !== null && pr.headRefOid !== v.head)
     return `PR이 지금 HEAD(${shortSha(v.head)})를 가리키지 않음: 세션에게 push를 요청하세요`
-  if (v.evidence?.quality.from === 'none')
+  if (v.evidence?.quality.from === 'none' && !o.qualityNotice)
     return '품질 기준(.relay/quality.json)이 없어 명령을 돌리지 않았습니다. 레포에서 relay init으로 초안을 만드세요'
+  // [끝내기]로 이 head를 내보내기로 쟀으면 리뷰는 이미 돌았다. 리뷰를 끈 앱(평가 설정)은 리뷰를 말하지 않는다
+  if (!pr && v.evidence?.review === null && !v.reviewDisabled)
+    return '리뷰와 머지는 PR이 열리면 시작합니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(리뷰를 돌리고 확인을 받습니다)'
+  if (!pr && v.evidence?.review === null)
+    return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고 확인을 받습니다)'
   if (!pr && v.evidence)
-    return '리뷰와 머지는 PR이 열리면 시작합니다. 세션에게 PR을 열라고 하거나 끝내기를 누르세요'
+    return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요'
   return null
+}
+
+/** [끝내기]의 확인 상자(V18)를 보일 때: 구현 중이고, 내보내기 증거를 잰 head가 지금 HEAD다(HEAD가 바뀌면 거둔다) */
+export function showEndBox(v: WorkView, preparedHead: string | null): boolean {
+  return (
+    preparedHead !== null &&
+    v.head === preparedHead &&
+    (v.state === 'working' || v.state === 'recontract')
+  )
+}
+
+/**
+ * [끝내기]의 확인 상자(V18)를 HEAD가 바뀌어 거뒀을 때의 한 줄(상자가 왜 사라졌는지). [끝 확정]이 HEAD가 바뀌었다고
+ * 거절해도 이 줄이 보인다. 상자를 닫았거나 끝난 Work면 null
+ */
+export function endMovedText(v: WorkView, preparedHead: string | null): string | null {
+  if (preparedHead === null || v.head === null || v.head === preparedHead) return null
+  if (v.state !== 'working' && v.state !== 'recontract') return null
+  const what = v.reviewDisabled ? '증거' : '증거와 리뷰'
+  return `[끝내기] 뒤 세션이 새로 커밋했습니다(${shortSha(preparedHead)} → ${shortSha(v.head)}). 새 커밋의 ${what}를 보려면 끝내기를 다시 누르세요`
+}
+
+/** [끝내기] 단추의 설명과 확인 상자(V18)의 첫 줄. 리뷰를 끈 앱(평가 설정)은 리뷰를 말하지 않는다 */
+export function endTexts(v: Pick<WorkView, 'reviewDisabled'>): { button: string; box: string } {
+  const what = v.reviewDisabled ? '내보내기 증거' : '내보내기 증거와 리뷰'
+  return {
+    button: `${v.reviewDisabled ? '내보내기 증거' : '내보내기 증거(리뷰 포함)'}를 재고 [증거]에서 확인을 받습니다. Work는 [끝 확정]으로 끝납니다`,
+    box: `${what}를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.`,
+  }
+}
+
+/**
+ * 확인 상자(V18) 안의 리뷰 한 줄: 지적 수, 지적 없음, 실패(끝내기를 다시 누르면 다시 돈다), 건너뜀, 꺼짐. 지적 목록은
+ * 상자가 이 줄 아래에 보인다
+ */
+export function endReviewText(v: WorkView): string {
+  const r = v.evidence?.review ?? null
+  if (r?.status === 'failed')
+    return '리뷰 실패: 지적을 받지 못함. 끝내기를 다시 누르면 리뷰를 다시 돌립니다'
+  if (r?.status === 'done')
+    return r.findings.length === 0 ? '리뷰 지적 없음' : `리뷰 지적 ${r.findings.length}개`
+  return reviewNote(r, v.reviewRunning, v.reviewDisabled) ?? reviewMeta(r, v.reviewDisabled)
+}
+
+const QUALITY_EFFECT = '앱이 명령을 돌리지 못해 증거가 비고, 결론은 늘 사람 머지입니다.'
+
+/** 품질 기준 알림(V20): 기본 브랜치에 없거나 깨졌을 때의 글. 있으면 null */
+export function qualityNotice(q: QualityState): string | null {
+  if (q === 'missing')
+    return `이 레포에는 품질 기준(.relay/quality.json)이 없습니다. ${QUALITY_EFFECT}`
+  if (q === 'invalid')
+    return `이 레포의 품질 기준(.relay/quality.json)이 깨져 읽지 못합니다. ${QUALITY_EFFECT}`
+  return null
+}
+
+/**
+ * 초안 다음에 할 일. 품질 기준을 origin/<기본>에서 읽으면(qualityRef) 로컬 커밋만으로는 쓰이지 않으니 push까지 말한다
+ * (새 Work도 origin/<기본>에서 만든다)
+ */
+function draftNext(ref: string | null): string {
+  return ref?.startsWith('origin/')
+    ? `검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(V9: 기준은 ${ref}에서 읽음).`
+    : '검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).'
+}
+
+/** [초안 만들기]의 답을 한 줄로. 이미 있으면 덮지 않았다고 */
+export function draftResultText(r: DraftQualityResult, ref: string | null = null): string {
+  return r.written
+    ? `초안을 썼습니다. ${draftNext(ref)}`
+    : `이미 있어 덮지 않았습니다: ${r.path}. ${draftNext(ref)}`
+}
+
+/** 기본 브랜치(qualityRef)에는 없고 작업 트리에 초안이 있을 때(qualityDraft) [초안 만들기] 대신 보이는 글 */
+export function draftPending(ref: string | null = null): string {
+  return `작업 트리에 초안(.relay/quality.json)이 있습니다. ${draftNext(ref)}`
 }
 
 /** 세션이 끝났을 때 터미널에 쓰는 한 줄. 앱이 끝낸 것(SIGHUP 129, SIGTERM 143, SIGKILL 137)은 오류처럼 보이지 않게 */

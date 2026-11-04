@@ -1,9 +1,10 @@
 // [스모크] 빌드한 앱 (docs/m2-modules.md 5절). Playwright _electron으로 out/의 앱을 띄워 화면을 누른다.
 // 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 PR을 연다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin.
+// 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 확인 상자 → [끝 확정](V18).
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import {
   _electron as electron,
@@ -97,6 +98,8 @@ const SCENARIO = {
 
 let tmp: string
 let repo: TestRepo
+/** 품질 기준이 없는 레포(origin 없음) */
+let bare: TestRepo
 let app: ElectronApplication
 let page: Page
 
@@ -115,6 +118,14 @@ test.beforeAll(async () => {
   })
   await repo.git('remote', 'add', 'origin', origin)
   await repo.git('push', '--quiet', 'origin', 'main')
+  bare = await makeRepo({
+    files: {
+      'package.json': '{ "name": "calc2", "private": true, "type": "module" }\n',
+      '.gitignore': '.relay-out/\n',
+      'src/calc.js': calc('lo'),
+      'test/calc.test.js': TESTS_BASE,
+    },
+  })
 
   const scenario = join(tmp, 'scenario.json')
   await writeFile(scenario, JSON.stringify(SCENARIO))
@@ -143,11 +154,7 @@ test.beforeAll(async () => {
       RELAY_DEBOUNCE_MS: '300',
     },
   })
-  // 폴더 고르기 대화상자를 바꿔 끼운다(ipc.ts는 부를 때마다 dialog.showOpenDialog를 찾는다)
-  await app.evaluate(({ dialog }, dir) => {
-    const pick = async () => ({ canceled: false, filePaths: [dir] })
-    Object.assign(dialog, { showOpenDialog: pick })
-  }, repo.dir)
+  await pickFolder(repo.dir)
   page = await app.firstWindow()
   await app.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.setContentSize(1400, 900)
@@ -159,6 +166,14 @@ test.afterAll(async () => {
   await app?.close()
   await cleanupAll()
 })
+
+/** 폴더 고르기 대화상자를 바꿔 끼운다(ipc.ts는 부를 때마다 dialog.showOpenDialog를 찾는다) */
+async function pickFolder(dir: string): Promise<void> {
+  await app.evaluate(({ dialog }, d) => {
+    const pick = async () => ({ canceled: false, filePaths: [d] })
+    Object.assign(dialog, { showOpenDialog: pick })
+  }, dir)
+}
 
 let shots = 0
 async function shot(name: string): Promise<void> {
@@ -243,9 +258,69 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('verdict')).toContainText('그때의 관문 결론')
   await expect(page.getByTestId('terminal')).toContainText('[세션을 닫음]')
   await shot('merged')
+  // 품질 기준이 있는 레포에는 알림이 없다
+  await expect(page.getByTestId('quality-notice')).toHaveCount(0)
+
+  // 품질 기준이 없는 레포(V20): 사이드바의 프로젝트 줄에 알림, [초안 만들기]는 작업 트리에 쓰고 커밋은 사람이 한다
+  await pickFolder(bare.dir)
+  await page.getByRole('button', { name: '+ 프로젝트 추가' }).click()
+  const second = page.getByTestId('project').nth(1)
+  await expect(second).toContainText(bare.dir.split('/').at(-1) ?? '')
+  const notice = second.getByTestId('quality-notice')
+  await expect(notice).toContainText('이 레포에는 품질 기준(.relay/quality.json)이 없습니다')
+  await notice.getByRole('button', { name: '초안 만들기' }).click()
+  await expect(notice.getByTestId('quality-drafted')).toHaveText(
+    /^초안을 썼습니다\. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다/,
+  )
+  expect(JSON.parse(await readFile(bare.path('.relay/quality.json'), 'utf8'))).toMatchObject({
+    version: 1,
+    auto: [{ id: 'small', max_changed_lines: 100 }],
+  })
+  // 커밋하지 않았으니 기준은 아직 없다(V9: base에서 읽음)
+  await expect(notice).toBeVisible()
+  await shot('quality-notice')
+
+  // 그 레포의 새 Work: 계약 → [승인] → 커밋·Stop → 증거(명령 없음). [증거] 탭 위에도 알림
+  await second.getByRole('button', { name: '+ 새 Work' }).click()
+  const newWork = page.getByRole('dialog', { name: '새 Work' })
+  await newWork.getByLabel('요청', { exact: true }).fill(REQUEST)
+  await newWork.getByRole('button', { name: '만들기' }).click()
+  await expect(newWork).toBeHidden()
+  await expect(page.getByTestId('approve-box')).toBeVisible({ timeout: 30_000 })
+  await page.getByTestId('approve-box').getByRole('button', { name: '승인', exact: true }).click()
+  await expect(evidence.getByTestId('conclusion')).toHaveText('사람 머지', { timeout: 60_000 })
+  // 작업 트리에 초안이 있으니 [초안 만들기] 대신 커밋하라고 쓴다
+  const tabNotice = evidence.getByTestId('quality-notice')
+  await expect(tabNotice).toContainText('이 레포에는 품질 기준')
+  await expect(tabNotice.getByTestId('quality-drafted')).toHaveText(/^작업 트리에 초안/)
+  await expect(tabNotice.getByRole('button', { name: '초안 만들기' })).toHaveCount(0)
+  await expect(evidence.getByTestId('next-step')).not.toContainText('relay init')
+
+  // [끝내기](V18): 내보내기 증거(리뷰 포함)를 재고 확인 상자. Work는 구현 중 그대로, 상자 안에 리뷰 한 줄과 지적
+  const head = page.locator('.work-head')
+  await head.getByRole('button', { name: '끝내기' }).click()
+  const endBox = evidence.getByTestId('end-box')
+  await expect(endBox).toBeVisible({ timeout: 60_000 })
+  await expect(endBox).toContainText('내보내기 증거와 리뷰를 확인하세요')
+  await expect(head).toContainText('구현 중')
+  await expect(endBox.getByTestId('end-review')).toHaveText('리뷰 지적 1개')
+  await expect(endBox.getByText('변수 이름이 짧음')).toBeVisible()
+  await shot('end-box')
+  // [더 고치기]: 상자를 닫고 Work는 그대로
+  await endBox.getByRole('button', { name: '더 고치기' }).click()
+  await expect(endBox).toBeHidden()
+  await expect(head).toContainText('구현 중')
+  // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [끝 확정]
+  await head.getByRole('button', { name: '끝내기' }).click()
+  await expect(endBox).toBeVisible({ timeout: 30_000 })
+  await endBox.getByRole('button', { name: '끝 확정' }).click()
+  await expect(head).toContainText('끝남', { timeout: 30_000 })
+  await expect(evidence.getByTestId('outcome')).toHaveText('머지 없이 끝남')
+  await expect(endBox).toBeHidden()
+  await shot('ended')
 
   // 프로젝트 설정
-  await page.getByRole('button', { name: /설정$/ }).click()
+  await page.getByRole('button', { name: /설정$/ }).first().click()
   const settings = page.getByRole('dialog')
   await expect(settings.getByRole('switch')).not.toBeChecked()
   await expect(settings.getByRole('radio', { name: '결정마다 확인' })).toHaveAttribute(

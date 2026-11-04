@@ -460,6 +460,18 @@ export function acceptanceRun(script: string): string | null {
   return null
 }
 
+/**
+ * 초안의 자동 조건(V19): 작은 변경, 새 의존성·새 모듈 없음, 모든 줄이 시험으로 충족. 자동 머지 스위치는 기본 꺼짐이고
+ * 그림자 실적이 있어야 켜지므로 이 조건은 처음에는 그림자 기록만 쌓는다(실적이 첫날부터 쌓이게)
+ */
+export const DRAFT_AUTO: Readonly<AutoCondition> = {
+  id: 'small',
+  max_changed_lines: 100,
+  no_new_dependencies: true,
+  no_new_modules: true,
+  require_all_lines_tested: true,
+}
+
 export function draftQuality(input: { packageJson?: string; files: string[] }): QualityConfig {
   const files = new Set(input.files.map((f) => (f.startsWith('./') ? f.slice(2) : f)))
   const pkg = readPackage(input.packageJson)
@@ -506,6 +518,6 @@ export function draftQuality(input: { packageJson?: string; files: string[] }): 
     examples_dir: DEFAULT_EXAMPLES_DIR,
     ratchets,
     rules: [],
-    auto: [],
+    auto: [{ ...DRAFT_AUTO }],
   })
 }

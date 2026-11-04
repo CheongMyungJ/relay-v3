@@ -71,7 +71,11 @@ export function App() {
       <main className="main">
         <ErrorLine text={loadError ?? addError} />
         {view ? (
-          <WorkPane key={view.id} view={view} />
+          <WorkPane
+            key={view.id}
+            view={view}
+            project={projects.find((p) => p.id === view.project) ?? null}
+          />
         ) : projects.length === 0 ? (
           <Empty title="프로젝트를 추가하세요">
             <p>git 레포 폴더를 고르면 그 레포에 Work를 맡길 수 있습니다.</p>

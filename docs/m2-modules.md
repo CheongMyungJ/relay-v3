@@ -94,10 +94,10 @@ v2 `app/src/adapters/pty.ts`를 옮긴다(`startPty(opts): PtySession`, DA1 답,
 ## 3. main (Node에서 시험할 수 있게)
 
 ### `src/shared/api.ts`
-렌더러와 메인이 주고받는 모양: `ProjectView`, `ProjectSettings { auto_merge: boolean; min_shadow: number; review: 'all' | 'auto_only'; merge_method: 'merge'|'squash'|'rebase'; question_mode: 'confirm_each'|'draft_first' }`(기본 false, 20, 'all', 'squash', 'confirm_each'), `WorkView { id, project, title, state, session, branch, base, contract: Contract|null, pendingContract: Contract|null, pendingChange: string|null, evidence: EvidenceBundle|null, gate: GateResult|null, pr: PrInfo|null, evidenceRunning: boolean, reviewRunning: boolean }`, `RelayApi`(preload가 내놓는 함수 목록, 4절), 이벤트 이름.
+렌더러와 메인이 주고받는 모양: `ProjectView`(더해 `quality: 'present' | 'missing' | 'invalid'`(V20: 기본 브랜치의 `.relay/quality.json`), `qualityDraft: boolean`(기본 브랜치에는 없고 작업 트리에 있음), `qualityRef: string | null`(상태를 읽은 ref: origin/<기본>이 있으면 그것)), `ProjectSettings { auto_merge: boolean; min_shadow: number; review: 'all' | 'auto_only'; merge_method: 'merge'|'squash'|'rebase'; question_mode: 'confirm_each'|'draft_first' }`(기본 false, 20, 'all', 'squash', 'confirm_each'), `WorkView { id, project, title, state, session, branch, base, contract: Contract|null, pendingContract: Contract|null, pendingChange: string|null, evidence: EvidenceBundle|null, gate: GateResult|null, pr: PrInfo|null, evidenceRunning: boolean, reviewRunning: boolean, reviewDisabled: boolean }`(reviewDisabled: 평가 설정 `RELAY_ABLATE=review`로 리뷰를 끔), `PreparedEnd { head: string | null }`, `DraftQualityResult { written: boolean; path: string }`, `RelayApi`(preload가 내놓는 함수 목록, 4절), 이벤트 이름.
 
 ### `src/main/store.ts`
-`$RELAY_HOME`(기본 `~/.relay-v3`). `projects.json`, `works/<id>/{work.json, request.md, contract.json, events.jsonl, settings.json, instructions.md, mcp.json}`, `ledger.jsonl`. 쓰기는 임시 파일 뒤 rename. 시계와 id는 주입(`now()`, `newId()`).
+`$RELAY_HOME`(기본 `~/.relay-v3`). `projects.json`, `works/<id>/{work.json, request.md, contract.json, events.jsonl, settings.json, instructions.md, mcp.json}`, `ledger.jsonl`. 쓰기는 임시 파일 뒤 rename. 같은 파일의 쓰기는 차례로, 읽기는 그 파일에 앞서 줄 선 쓰기 뒤에 한다(Works는 events.jsonl 기록을 기다리지 않고 남기므로 바로 뒤에 읽어도 놓치지 않게). 시계와 id는 주입(`now()`, `newId()`).
 
 ### `src/main/hooks.ts`
 127.0.0.1 임의 포트 HTTP. `/hook/<workId>/<Event>`(Work마다 토큰), `/control`(머리글 `X-Relay-Work`의 Work id와 그 Work의 control 토큰이 맞아야 한다. 토큰은 세션을 띄울 때마다 새로: `controlTokenFor(workId)`). 본문 8MB 상한. 토큰이 틀리면 401. 핸들러는 주입. v2 `adapters/hooks.ts`에서 필요한 만큼.
@@ -120,8 +120,11 @@ class Works {
     gh: typeof import('../adapters/gh.ts'); now: () => string; newId: () => string
     emit: (event: string, payload: unknown) => void; relayVersion: string
     debounceMs?: number   // 기본 20,000
+    reviewDisabled?: boolean   // 평가에서 리뷰를 뺀 쪽(RELAY_ABLATE=review). 제품 설정이 아니다
   })
   addProject(path): Promise<ProjectView>; updateSettings(projectId, s): Promise<ProjectView>
+  refreshProjects(): Promise<void>   // 기본 브랜치의 품질 기준 상태를 다시 잰다(V20)
+  draftQuality(projectId): Promise<DraftQualityResult>   // [초안 만들기](V20)
   createWork(o: { project; request; hint?; base? }): Promise<WorkView>   // worktree, 브랜치, 파일, 세션 시작
   resumeWork(id): Promise<void>
   onHook(workId, event, body): Promise<HookReply>
@@ -131,27 +134,32 @@ class Works {
   runEvidence(id, o: { exportCandidate: boolean }): Promise<void>   // check → (리뷰) → gate → 장부
   merge(id): Promise<{ ok: boolean; error?: string }>
   hookToken(id): string | null; controlToken(id): string | null   // 세션이 떠 있는 동안만
-  end(id): Promise<void>; abandon(id): Promise<void>
+  prepareEnd(id): Promise<PreparedEnd>   // [끝내기](V18): 내보내기 증거만 재고 working 그대로
+  end(id, head): Promise<void>; abandon(id): Promise<void>   // end: [끝 확정]. head는 확인 상자의 head(prepareEnd의 답)
   view(id): WorkView; list(): { projects: ProjectView[]; works: WorkView[] }
 }
 ```
-- createWork: 작업 브랜치 `relay/<짧은 이름>-<4자>`(한국어로만 쓴 요청은 로마자로 옮김), worktree는 `$RELAY_HOME/worktrees/<workId>`(git worktree add --no-track -b: 기준 브랜치를 upstream으로 두지 않는다). `request.md`에 요청과 hint(`## 일의 성격 제안`). `$RELAY_HOME` 아래 파일은 0600, 폴더는 0700.
+- 프로젝트(`works-projects.ts`): 품질 기준 상태는 기본 브랜치(origin/<기본>이 있으면 그것)의 `.relay/quality.json`을 `parseQuality`로 읽어 정한다(없음·깨짐·있음, V20). 프로젝트를 더할 때, 목록을 다시 읽을 때(IPC `list`), 새 Work, 증거를 잰 뒤 다시 재고 바뀌면 `EVENTS.projects`. `draftQuality`는 engine `writeDraft`로 프로젝트의 작업 트리에 쓴다(이미 있으면 덮지 않고 `written: false`). 커밋은 사람이 한다.
+- createWork: 작업 브랜치 `relay/<짧은 이름>-<4자>`(영문 낱말에 글자가 없으면(한국어로만 쓴 요청, '청구서 합계가 3원 크다'처럼 숫자만 섞인 요청) 한글을 로마자로 옮김. 숫자만으로 된 이름은 짓지 않는다), worktree는 `$RELAY_HOME/worktrees/<workId>`(git worktree add --no-track -b: 기준 브랜치를 upstream으로 두지 않는다). `request.md`에 요청과 hint(`## 일의 성격 제안`). `$RELAY_HOME` 아래 파일은 0600, 폴더는 0700.
 - submit_contract: `parseContract` 실패나 지침이 준 것과 다른 계약 id(V11)면 바로 `{ status: 'invalid', errors }`. 근거 확인(engine의 근거 확인 함수 또는 core 함수)으로 확인 못 한 근거는 계약 화면에 표시만 한다. 유효하면 `awaiting_approval`로 두고 사람의 답(승인 → `{ status: 'approved', contract }`, 고쳐 달라고 함 → `{ status: 'changes', message }`)을 기다린다. 승인하면 `contract.approved_by = 'human'`, `approved_at`, `contract.json`에 쓴다.
-- 증거 계기(m2-app 1절): '이미 잰 것'은 (head, 지금 계약의 hash)다. Stop 훅이 오면 세션 idle, 지금 HEAD를 지금 계약으로 재지 않았으면 debounceMs 뒤(그때 다시 보고) `runEvidence({ exportCandidate: false })`. PostToolUse(셸 명령)에서 `git push`·`gh pr`이면 `findPr` 뒤 PR이 지금 HEAD를 가리키고 Work의 기준 브랜치로 가면 `runEvidence({ exportCandidate: true })`(기준이 다르면 재지 않고 알림). [끝]도 export. 계약 바꾸기에 답한 뒤 같은 head도 다시 잰다(앞 묶음이 내보내기였으면 export). `relay_check`는 그 head를 재는 중이면 기다리고 새로 줄 세우지 않는다.
-- runEvidence: `check({ repo: worktree, head: HEAD, base: base SHA, contractPath, requestPath, home })`. export면 결정론적 묶음과 리뷰 없는 관문을 먼저 보이고(리뷰는 사람을 막지 않는다) 리뷰(프로젝트 설정 review가 'auto_only'면 gate를 리뷰가 됐다고 치고 묶음의 head로 먼저 돌려 자동 조건을 채웠을 때만)를 붙여 묶음에 넣고 다시 쓴다. export가 아니면 같은 head·계약의 내보내기 리뷰를 잇는다. `gate(bundle, contract, policy, head)`, policy는 프로젝트 설정, quality.json(묶음의 quality.from 쪽)의 auto, `gh.serverProtection`, `trackRecord`. 장부에 한 줄(export면 리뷰 뒤에만). 재는 사이 Work가 끝났으면 관문·장부를 남기지 않는다. 결론이 auto_merge_candidate이고 PR이 있으면 바로 `merge`(by 'policy').
+- 증거 계기(m2-app 1절): '이미 잰 것'은 (head, 지금 계약의 hash)다. Stop 훅이 오면 세션 idle, 지금 HEAD를 지금 계약으로 재지 않았으면 debounceMs 뒤(그때 다시 보고) `runEvidence({ exportCandidate: false })`. PostToolUse(셸 명령)에서 `git push`·`gh pr`이면 `findPr` 뒤 PR이 지금 HEAD를 가리키고 Work의 기준 브랜치로 가면 `runEvidence({ exportCandidate: true })`(기준이 다르면 재지 않고 알림). [끝내기]·[끝 확정]도 export. 계약 바꾸기에 답한 뒤 같은 head도 다시 잰다(앞 묶음이 내보내기였으면 export). `relay_check`는 그 head를 재는 중이면 기다리고 새로 줄 세우지 않는다. 계기가 겹치면 합친다: 한 Work의 재기는 한 번에 하나이고 기다리는 요청은 하나로 합치며, 줄 선 재기는 시작할 때 앞 재기가 이미 잰 head(내보내기면 리뷰까지)면 재지 않는다. 그래서 세션의 git push와 gh pr create가 잇달아 오거나 내보내기 리뷰가 도는 동안 gh pr이 또 와도 같은 head의 리뷰는 한 번이다. [증거 다시 재기](IPC `runEvidence`)만 이미 잰 head도 다시 잰다.
+- runEvidence: `check({ repo: worktree, head: HEAD, base: base SHA, contractPath, requestPath, home })`. export면 결정론적 묶음과 리뷰 없는 관문을 먼저 보이고(리뷰는 사람을 막지 않는다) 리뷰(프로젝트 설정 review가 'auto_only'면 gate를 리뷰가 됐다고 치고 묶음의 head로 먼저 돌려 자동 조건을 채웠을 때만. `reviewDisabled`면 부르지 않고 skipped, events.jsonl에 `{ type: 'review', status: 'skipped', disabled: true }`)를 붙여 묶음에 넣고 다시 쓴다. 리뷰의 기본 구현은 `works-review.ts`의 `claudeReview`. export가 아니면 같은 head·계약의 내보내기 리뷰를 잇는다. `gate(bundle, contract, policy, head)`, policy는 프로젝트 설정, quality.json(묶음의 quality.from 쪽)의 auto, `gh.serverProtection`, `trackRecord`. 장부에 한 줄(export면 리뷰 뒤에만). 재는 사이 Work가 끝났으면 관문·장부를 남기지 않는다. 결론이 auto_merge_candidate이고 PR이 있으면 바로 `merge`(by 'policy').
 - merge: 한 Work에 한 번에 하나(사람·정책). `canMerge`, gate가 계산됐고 묶음의 계약 hash가 지금 계약과 같은지, PR이 Work의 기준 브랜치로 가고 그 head가 묶음 head와 같은지, `prStatus`의 CI(statusCheckRollup: 실패·취소·진행 중이면 거절, m2-app 1절 8의 머지 게이트)와 mergeable. 그다음 `gh.mergePr`. 장부의 그 Work 기록에 `by`, `merged_head`. 정책 머지는 기다릴 일(CI 진행 중, mergeable UNKNOWN, gh 오류)이면 오류로 적지 않는다.
 - PR 상태: PR이 열려 있으면 120초마다 `findPr`(머지가 도는 동안은 건너뜀). 머지되면 `pr_merged`, 닫히면 `pr_closed`. 앱 밖(GitHub)에서 머지됐으면 by 'human-override'로 장부에. 열려 있고 지금 HEAD를 가리키는데 그 head를 내보내기로 재지 않았으면 잰다. 이미 쟀고 결론이 auto_merge_candidate면 정책 머지를 다시 해 본다.
 - 앱을 다시 켜면 working·drafting Work의 세션은 stopped로 보이고 [다시 열기]로 `--resume`. 그 session id로 훅을 받은 적이 없으면(대화가 없음) 새 session id와 첫 프롬프트로 새로 띄운다. 멈춘 사이 사람의 답(notice)은 재개한 세션의 UserPromptSubmit이 온 뒤에 지운다.
 - `relay_check`의 답: 영어 사실(`evidenceFacts`), 명령의 outcome, 줄의 status와 예시, 없는 증거. 리뷰와 관문 결론은 주지 않는다.
+- 끝내기(V18): `prepareEnd`는 `canEnd`(working·recontract)를 확인하고 지금 HEAD를 내보내기로 재지 않았거나 그 리뷰가 실패했으면 잰다(이미 도는 같은 head의 내보내기에는 합친다). Work는 그대로다. 답의 head는 내보내기로 잰 지금 HEAD(화면은 HEAD가 이것인 동안만 확인 상자를 보인다). 재는 사이 정책이 머지해 끝났으면 null, 재지 못했거나 그사이 HEAD가 바뀌었으면 던진다. `end(id, head)`([끝 확정])는 지금 HEAD가 head(확인 상자의 head)가 아니면 끝내지 않고 던진다(화면의 HEAD를 고쳐 상자를 거둔다). 같으면 지금 HEAD의 내보내기 증거가 없을 때 먼저 재고(안전망) 그사이 HEAD가 그대로면 `ended`로 끝낸다. 셸 명령의 PostToolUse·PostToolUseFailure는 HEAD를 다시 읽어 화면에 보인다(차례 안의 커밋으로 상자가 낡은 head에 남지 않게). 앱을 닫아 끊긴 리뷰(abort)는 `exported_head`·장부·evidence 기록으로 남기지 않는다(재는 사이 끊긴 명령도). 리뷰 결과는 세션에 넣지 않는다(V4, V8).
 
 ### `src/main/ipc.ts`, `src/main/index.ts`, `src/preload/index.ts`
-`RelayApi`: `list()`, `addProject()`(폴더 고르기 대화상자), `updateSettings(id, s)`, `createWork(o)`, `resumeWork(id)`, `approveContract(id)`, `askChanges(id, msg)`, `answerChange(id, o)`, `merge(id)`, `end(id)`, `abandon(id)`, `runEvidence(id)`, `terminal.attach(id)`(버퍼를 돌려주고 이후 데이터는 이벤트), `terminal.write(id, data)`, `terminal.resize(id, cols, rows)`, `diff(id): Promise<string>`, `debt(id): Promise<DebtItem[]>`, `on(event, cb)`. 창 하나, `contextIsolation: true`, `nodeIntegration: false`.
+`RelayApi`: `list()`(품질 기준 상태를 다시 잰 뒤), `addProject()`(폴더 고르기 대화상자), `updateSettings(id, s)`, `createWork(o)`, `resumeWork(id)`, `approveContract(id)`, `askChanges(id, msg)`, `answerChange(id, o)`, `merge(id)`, `prepareEnd(id)`([끝내기]), `end(id, head)`([끝 확정]), `abandon(id)`, `runEvidence(id)`, `draftQuality(projectId)`([초안 만들기]), `terminal.attach(id)`(버퍼를 돌려주고 이후 데이터는 이벤트), `terminal.write(id, data)`, `terminal.resize(id, cols, rows)`, `diff(id): Promise<string>`, `debt(id): Promise<DebtItem[]>`, `on(event, cb)`. 창 하나, `contextIsolation: true`, `nodeIntegration: false`.
 
 ## 4. renderer
 
-- 레이아웃: 왼쪽 사이드바(프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니), 가운데 터미널(xterm + fit), 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
+- 레이아웃: 왼쪽 사이드바(프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니, 품질 기준이 없거나 깨진 프로젝트는 그 줄에 알림과 [초안 만들기]), 가운데 터미널(xterm + fit), 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
 - [계약]: 목표, 줄 표(종류 꼬리표, 글, 근거와 확인됨/추정 표시, 예시 입력→출력, 확인 방법), 비목표, 사람만 아는 규칙, hint. `awaiting_approval`이면 [승인]과 [고쳐 달라고 하기](글 입력). `recontract`면 세션의 요청과 [받아들임]/[거절](글).
-- [증거]: 맨 위 결론 한 줄(사람 머지 / 자동 머지 후보 / 계약 다시, 그림자면 '그림자: 자동이었으면 머지했을 것'), 그 아래 decisive 한 줄(리뷰 중이면 그렇게). 끝난 Work는 결과(머지됨·머지 없이 끝남·버림)를 먼저 쓴다. 구현 중이면 다음 할 일 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: reasons, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(리뷰의 status를 말함), 없는 증거(품질 기준이 없으면 quality.json 먼저), 낡음. [증거 다시 재기]. PR이 있으면 [머지](gate가 계산됐고 state가 working이고 PR이 증거의 head를 가리키며 Work의 기준으로 갈 때. 리뷰 중에도 누를 수 있다). 탭이나 상태가 바뀌면 패널을 맨 위로.
+- 품질 기준 알림(V20): '이 레포에는 품질 기준(.relay/quality.json)이 없습니다. 앱이 명령을 돌리지 못해 증거가 비고, 결론은 늘 사람 머지입니다.'(깨졌으면 '…이 깨져 읽지 못합니다. …'). [초안 만들기] → '초안을 썼습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).'(이미 있으면 덮지 않았다고. 기준을 origin/<기본>에서 읽으면(qualityRef) '…기본 브랜치에 커밋한 뒤 origin에 push하면…'). 작업 트리에 초안이 있으면(qualityDraft) 단추 대신 커밋하라는 글(push도 같다).
+- [끝내기](V18): 머리줄의 [끝내기]는 [증거] 탭으로 옮기고 `prepareEnd`를 부른다(도는 동안 '증거 재는 중…'). 끝나면 [증거] 맨 위에 확인 상자 '내보내기 증거와 리뷰를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.', 리뷰 한 줄(지적 n개, 지적 없음, 실패면 '끝내기를 다시 누르면 리뷰를 다시 돌립니다')과 지적 목록, [끝 확정](`end(id, head)`), [더 고치기](상자 닫기). HEAD가 답의 head와 다르면 상자를 보이지 않고 그 자리에 '[끝내기] 뒤 세션이 새로 커밋했습니다(앞 → 지금). 새 커밋의 증거와 리뷰를 보려면 끝내기를 다시 누르세요'를 보인다. 리뷰를 끈 앱(reviewDisabled)은 상자·[끝내기] 설명·다음 할 일에서 리뷰를 말하지 않는다('내보내기 증거를 확인하세요…').
+- [증거]: 맨 위(알림과 확인 상자 아래) 결론 한 줄(사람 머지 / 자동 머지 후보 / 계약 다시, 그림자면 '그림자: 자동이었으면 머지했을 것'), 그 아래 decisive 한 줄(리뷰 중이면 그렇게). 리뷰를 평가용으로 껐으면(reviewDisabled) 리뷰 없음·건너뜀을 모두 '리뷰가 꺼져 있음(평가 설정)'으로 쓴다(다른 까닭의 건너뜀 문구와 섞지 않는다). 끝난 Work는 결과(머지됨·머지 없이 끝남·버림)를 먼저 쓴다. 구현 중이면 다음 할 일 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음(리뷰가 이미 돌았으면 머지만 PR을 기다림), 품질 기준 없음(위에 알림이 보이면 되풀이하지 않음). 확인 상자가 보이면 없음). 펼침: reasons, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(리뷰의 status를 말함), 없는 증거(품질 기준이 없으면 quality.json 먼저), 낡음. [증거 다시 재기]. PR이 있으면 [머지](gate가 계산됐고 state가 working이고 PR이 증거의 head를 가리키며 Work의 기준으로 갈 때. 리뷰 중에도 누를 수 있다). 탭이나 상태가 바뀌면 패널을 맨 위로.
 - [변경]: `git diff base..HEAD --stat`과 파일별 diff(접기).
 - [빚]: 이 Work가 건드린 경로의 빚 항목.
 - 새 Work 대화상자: 프로젝트, 요청(여러 줄), 일의 성격 제안(선택: 버그 고침, 기능, 리팩터링, 문서 칩 + 자유 글), 기준 브랜치(기본 origin의 기본 브랜치).
@@ -162,5 +170,6 @@ class Works {
 
 - [단위]: work 상태 기계, git-guard(v2 경우), instructions(인자 순서, 설정 모양), review(스키마, 파싱, 프롬프트 자르기), ledger(일치·불일치·버전 바뀜).
 - [어댑터]: pty(실제 node-pty로 echo, resize, killTree), claude(가짜 `claude -p`), gh(가짜 gh), hooks 서버(토큰, 상한), mcp-bridge(실제 프로세스로 initialize → tools/list → tools/call이 control에 닿음).
+- [흐름] `test/flow/works-end.test.ts`: [끝내기] → working 그대로·리뷰 한 번 → 세션이 더 커밋 → 다시 [끝내기] → [끝 확정](다시 재지 않음), 상자 뒤 Stop 없이 커밋 → [끝 확정](앞 head)은 거절·셸 커밋은 Stop 전에 HEAD를 보임, 리뷰 실패 뒤 [끝내기]는 리뷰를 다시 부름, 앱을 닫아 끊긴 리뷰는 내보내기로 남지 않음, 리뷰를 끈 앱의 [끝 확정](안전망, skipped), 품질 기준 상태(missing → 초안 → invalid → present)와 덮지 않는 초안. `works-merge.test.ts`: 같은 head의 내보내기가 도는 동안 또 온 git push·gh pr은 합친다(리뷰 한 번).
 - [흐름] `test/flow/works.test.ts`: 가짜 claude(`test/support/fake-claude/fake-claude.mjs`, 시나리오 JSON: 훅 보내기, 파일 쓰기, 커밋, MCP 도구 부르기(브리지 대신 mcp.json의 env로 `/control`에 직접 POST), 기다리기, 끝내기)로 Works를 Node에서 돌린다: 새 Work → 계약 제출(틀린 것 → invalid → 고친 것) → 승인 → 커밋·Stop → 증거(debounce를 짧게) → 관문 human_merge('리뷰 없음' 아님: export면 가짜 리뷰) → 가짜 gh PR → [머지] → done, 장부 기록. 다른 경우: 계약 바꾸기 요청과 답, git-guard 막기(PreToolUse 응답), 앱 재시작 뒤 resume 인자.
-- [스모크] `test/smoke/app.spec.ts`: 빌드한 앱을 Playwright `_electron`으로 띄워 프로젝트 추가(대화상자는 메인에서 바꿔 끼움) → 새 Work → 가짜 claude가 계약 제출 → [승인] → 증거 패널에 결론 → 스크린샷 `test-results/`.
+- [스모크] `test/smoke/app.spec.ts`: 빌드한 앱을 Playwright `_electron`으로 띄워 프로젝트 추가(대화상자는 메인에서 바꿔 끼움) → 새 Work → 가짜 claude가 계약 제출 → [승인] → 증거 패널에 결론 → PR·그림자 → [머지]. 둘째 프로젝트(품질 기준 없음): 사이드바 알림 → [초안 만들기] → 새 Work → [끝내기] → 확인 상자(리뷰 한 줄과 지적) → [더 고치기] → [끝내기] → [끝 확정]. 스크린샷 `test-results/`.

@@ -1,19 +1,29 @@
 // [단위] 렌더러의 순수 조각 (src/renderer/src/format.ts, termSize.ts). 화면을 띄우지 않고 본다.
 // 화면 전체는 [스모크] test/smoke/app.spec.ts가 이어지는지만 본다.
 import { describe, expect, test } from 'vitest'
-import type { GateResult } from '../../src/core/types.ts'
+import type { EvidenceBundle, GateResult } from '../../src/core/types.ts'
 import type { WorkView } from '../../src/shared/api.ts'
 import {
   canMergeView,
   conclusionOf,
   decisiveText,
+  draftPending,
+  draftResultText,
+  endMovedText,
+  endReviewText,
+  endTexts,
   exitText,
+  factText,
   groundStatus,
   isStale,
   missingOf,
   nextStep,
   outcomeOf,
+  qualityNotice,
+  REVIEW_DISABLED,
+  reviewMeta,
   reviewNote,
+  showEndBox,
   splitDiff,
 } from '../../src/renderer/src/format.ts'
 import { evidence } from '../support/gate.ts'
@@ -233,6 +243,118 @@ describe('증거 패널의 글', () => {
     expect(nextStep(base)).toMatch(/^리뷰와 머지는 PR이 열리면 시작합니다/)
     expect(nextStep({ ...base, pr })).toBeNull()
     expect(nextStep({ ...base, state: 'done' })).toBeNull()
+    // 품질 기준 알림(V20)이 위에 보이면 되풀이하지 않는다
+    const none = {
+      ...base,
+      evidence: evidence({ quality: { hash: '', from: 'none' }, review: null }),
+    }
+    expect(nextStep(none, { qualityNotice: true })).toMatch(/^리뷰와 머지는 PR이 열리면/)
+    // [끝내기](V18)로 리뷰가 이미 돌았으면 머지만 PR을 기다린다. 확인 상자가 보이면 그 상자가 다음 할 일
+    expect(nextStep({ ...base, evidence: evidence() })).toMatch(
+      /^머지는 PR이 열리면 할 수 있습니다/,
+    )
+    expect(nextStep(base, { ending: true })).toBeNull()
+  })
+
+  test('리뷰를 평가용으로 끈 Work(reviewDisabled)는 리뷰 문구를 그 뜻으로만 쓴다(다른 건너뜀과 섞지 않음)', () => {
+    const off = { ...base, reviewDisabled: true }
+    expect(REVIEW_DISABLED).toBe('리뷰가 꺼져 있음(평가 설정)')
+    // 내보내기 전(리뷰 없음)과 내보내기 뒤(건너뜀) 모두
+    expect(decisiveText(off)).toBe(REVIEW_DISABLED)
+    const skipped = {
+      ...off,
+      evidence: evidence({ review: { status: 'skipped', findings: [] } }),
+      gate: { ...base.gate, decisive: '리뷰를 건너뜀' },
+    } as WorkView
+    expect(decisiveText(skipped)).toBe(REVIEW_DISABLED)
+    expect(reviewNote({ status: 'skipped', findings: [] }, false, true)).toBe(REVIEW_DISABLED)
+    expect(reviewNote(null, false, true)).toBe(REVIEW_DISABLED)
+    expect(reviewMeta({ status: 'skipped', findings: [] }, true)).toBe(REVIEW_DISABLED)
+    expect(factText('리뷰를 건너뜀', off)).toBe(REVIEW_DISABLED)
+    expect(factText('명령 실패: unit', off)).toBe('명령 실패: unit')
+    // 켜져 있으면 그대로: 건너뜀의 다른 까닭, 언제 도는지
+    expect(factText('리뷰를 건너뜀', base)).toBe('리뷰를 건너뜀')
+    expect(reviewNote({ status: 'skipped', findings: [] }, false)).toMatch(/자동 후보에만/)
+    expect(reviewMeta({ status: 'skipped', findings: [] })).toBe('리뷰 건너뜀')
+    expect(reviewMeta(null)).toBe('리뷰 없음')
+    expect(reviewMeta({ status: 'done', findings: [] }, true)).toBe('리뷰 지적 0개')
+    // 다음 할 일, [끝내기] 단추와 확인 상자도 리뷰를 말하지 않는다
+    expect(nextStep(off)).toBe(
+      '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고 확인을 받습니다)',
+    )
+    expect(nextStep(off)).not.toMatch(/리뷰/)
+    expect(endTexts(off)).toEqual({
+      button: '내보내기 증거를 재고 [증거]에서 확인을 받습니다. Work는 [끝 확정]으로 끝납니다',
+      box: '내보내기 증거를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
+    })
+    expect(endReviewText(skipped)).toBe(REVIEW_DISABLED)
+    expect(endTexts(base).box).toBe(
+      '내보내기 증거와 리뷰를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
+    )
+    expect(endTexts(base).button).toMatch(/^내보내기 증거\(리뷰 포함\)를 재고/)
+  })
+
+  test('endReviewText: 확인 상자(V18) 안의 리뷰 한 줄(지적 수, 없음, 실패면 다시 누르라고)', () => {
+    const finding = { id: 'R1', severity: 'low' as const, text: '이름이 짧음' }
+    const withReview = (review: EvidenceBundle['review']): WorkView => ({
+      ...base,
+      evidence: evidence({ review }),
+    })
+    expect(endReviewText(withReview({ status: 'done', findings: [finding, finding] }))).toBe(
+      '리뷰 지적 2개',
+    )
+    expect(endReviewText(withReview({ status: 'done', findings: [] }))).toBe('리뷰 지적 없음')
+    expect(endReviewText(withReview({ status: 'failed', findings: [] }))).toBe(
+      '리뷰 실패: 지적을 받지 못함. 끝내기를 다시 누르면 리뷰를 다시 돌립니다',
+    )
+    expect(endReviewText(withReview({ status: 'skipped', findings: [] }))).toMatch(/^리뷰를 건너뜀/)
+  })
+
+  test('showEndBox: [끝내기]가 잰 head가 지금 HEAD인 구현 중 Work에만(V18)', () => {
+    const head = evidence().head
+    expect(showEndBox(base, head)).toBe(true)
+    expect(showEndBox({ ...base, state: 'recontract' }, head)).toBe(true)
+    expect(showEndBox(base, null)).toBe(false)
+    // 세션이 더 커밋해 HEAD가 바뀌면 거둔다
+    expect(showEndBox({ ...base, head: 'c'.repeat(40) }, head)).toBe(false)
+    expect(showEndBox({ ...base, state: 'done' }, head)).toBe(false)
+    // 거둔 까닭을 한 줄로: 상자의 head가 지금 HEAD가 아닌 구현 중 Work에만
+    const moved = { ...base, head: 'c'.repeat(40) }
+    expect(endMovedText(moved, head)).toBe(
+      `[끝내기] 뒤 세션이 새로 커밋했습니다(${head.slice(0, 7)} → ccccccc). 새 커밋의 증거와 리뷰를 보려면 끝내기를 다시 누르세요`,
+    )
+    expect(endMovedText({ ...moved, reviewDisabled: true }, head)).toMatch(
+      /새 커밋의 증거를 보려면/,
+    )
+    expect(endMovedText(base, head)).toBeNull()
+    expect(endMovedText(moved, null)).toBeNull()
+    expect(endMovedText({ ...moved, state: 'done' }, head)).toBeNull()
+  })
+
+  test('품질 기준 알림(V20)과 [초안 만들기]의 답', () => {
+    expect(qualityNotice('present')).toBeNull()
+    expect(qualityNotice('missing')).toBe(
+      '이 레포에는 품질 기준(.relay/quality.json)이 없습니다. 앱이 명령을 돌리지 못해 증거가 비고, 결론은 늘 사람 머지입니다.',
+    )
+    expect(qualityNotice('invalid')).toMatch(
+      /^이 레포의 품질 기준\(\.relay\/quality\.json\)이 깨져/,
+    )
+    expect(draftResultText({ written: true, path: '/r/.relay/quality.json' })).toBe(
+      '초안을 썼습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).',
+    )
+    expect(draftPending('main')).toBe(
+      '작업 트리에 초안(.relay/quality.json)이 있습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).',
+    )
+    expect(draftResultText({ written: false, path: '/r/.relay/quality.json' })).toMatch(
+      /^이미 있어 덮지 않았습니다: \/r\/\.relay\/quality\.json\. 검토하고/,
+    )
+    // 기준을 origin/<기본>에서 읽으면 로컬 커밋만으로는 쓰이지 않는다: push까지 말한다
+    expect(draftPending('origin/main')).toBe(
+      '작업 트리에 초안(.relay/quality.json)이 있습니다. 검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(V9: 기준은 origin/main에서 읽음).',
+    )
+    expect(
+      draftResultText({ written: true, path: '/r/.relay/quality.json' }, 'origin/main'),
+    ).toMatch(/^초안을 썼습니다\. 검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면/)
   })
 
   test('outcomeOf: 끝난 Work의 결과 한 줄', () => {

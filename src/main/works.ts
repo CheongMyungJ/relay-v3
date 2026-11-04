@@ -1,13 +1,11 @@
 // Work 조율 (docs/m2-modules.md 3절 works.ts, docs/m2-app.md). Electron을 모른다: [흐름] 시험이 Node에서 조립해 돌린다.
 // 프로젝트와 Work를 저장소에 두고, Work마다 worktree·작업 브랜치·세션(PTY의 claude)을 만든다. 훅과 MCP 도구 호출을 받아
 // 상태 기계(core/work.ts)를 움직인다. 계약 창구는 works-contract.ts, 증거·관문·머지·PR은 works-evidence.ts,
-// worktree와 세션 띄우기는 works-worktree.ts.
+// worktree와 세션 띄우기는 works-worktree.ts, 프로젝트와 품질 기준 상태는 works-projects.ts.
 
-import { basename } from 'node:path'
-import { git, killActive } from '../adapters/exec.ts'
+import { killActive } from '../adapters/exec.ts'
 import { killRunFiles } from '../adapters/pty.ts'
-import { defaultBase, repoRoot } from '../adapters/git.ts'
-import { readJson, repoKey } from '../adapters/store.ts'
+import { readJson } from '../adapters/store.ts'
 import { parseContract } from '../core/contract.ts'
 import { guardCommand } from '../core/git-guard.ts'
 import { TOOL_CHANGE, TOOL_CHECK, TOOL_SUBMIT, type HookEvent } from '../core/instructions.ts'
@@ -15,11 +13,12 @@ import { evidenceFacts } from '../core/review.ts'
 import type { DebtItem, EvidenceBundle } from '../core/types.ts'
 import { nextState, type WorkEvent } from '../core/work.ts'
 import {
-  DEFAULT_SETTINGS,
   EVENTS,
   type ChangeAnswer,
+  type DraftQualityResult,
   type MergeResult,
   type NewWorkInput,
+  type PreparedEnd,
   type ProjectSettings,
   type ProjectView,
   type WorkList,
@@ -29,35 +28,20 @@ import { toolCommand, type HookReply } from './hooks.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
 import { ContractDesk } from './works-contract.ts'
 import { EvidenceRunner, headOf, isExportCommand } from './works-evidence.ts'
+import { ProjectDesk } from './works-projects.ts'
 import { isActive, measures, type Runtime, type WorkCtx, type WorksDeps } from './works-types.ts'
 import { launch, newWork, workDebt, workDiff } from './works-worktree.ts'
 
 export type { ReviewInput, WorksDeps } from './works-types.ts'
-export { claudeReview } from './works-evidence.ts'
+export { claudeReview } from './works-review.ts'
 export { shortName } from './works-worktree.ts'
 
 /** 앱이 끝날 때 증거 재기를 기다리는 상한 */
 const SHUTDOWN_WAIT_MS = 10_000
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v)
-
-function settingsOf(raw: unknown): ProjectSettings {
-  const s = isObject(raw) ? raw : {}
-  const pick = <K extends keyof ProjectSettings>(k: K, ok: (v: unknown) => boolean) =>
-    (ok(s[k]) ? s[k] : DEFAULT_SETTINGS[k]) as ProjectSettings[K]
-  return {
-    auto_merge: pick('auto_merge', (v) => typeof v === 'boolean'),
-    min_shadow: pick('min_shadow', (v) => Number.isInteger(v) && (v as number) >= 0),
-    review: pick('review', (v) => v === 'all' || v === 'auto_only'),
-    merge_method: pick('merge_method', (v) => v === 'merge' || v === 'squash' || v === 'rebase'),
-    question_mode: pick('question_mode', (v) => v === 'confirm_each' || v === 'draft_first'),
-  }
-}
-
 export class Works implements WorkCtx {
   readonly deps: WorksDeps
-  private readonly projects = new Map<string, ProjectRecord>()
+  private readonly projects: ProjectDesk
   private readonly works = new Map<string, WorkRecord>()
   private readonly rts = new Map<string, Runtime>()
   private readonly desk: ContractDesk
@@ -66,6 +50,7 @@ export class Works implements WorkCtx {
 
   constructor(deps: WorksDeps) {
     this.deps = deps
+    this.projects = new ProjectDesk(deps)
     this.desk = new ContractDesk(this)
     this.evidence = new EvidenceRunner(this)
   }
@@ -73,11 +58,10 @@ export class Works implements WorkCtx {
   /** 저장소에서 프로젝트와 Work를 읽는다. 세션은 모두 멈춘 것으로 보이고 [다시 열기]로 --resume 한다 */
   async init(): Promise<void> {
     const { store } = this.deps
-    for (const p of await store.readProjects())
-      this.projects.set(p.id, { ...p, settings: settingsOf(p.settings) })
+    await this.projects.load()
     for (const id of await store.listWorkIds()) {
       const rec = await store.readWork(id)
-      if (!rec || !this.projects.has(rec.project)) continue
+      if (!rec || !this.projects.get(rec.project)) continue
       // session_started가 없는 옛 기록은 세션이 떴던 것으로 본다(--resume)
       this.works.set(id, {
         ...rec,
@@ -181,68 +165,28 @@ export class Works implements WorkCtx {
     await this.deps.sessions.kill(id)
   }
 
-  // ── 프로젝트 ───────────────────────────────────────────────────────────────
-
-  private projectView(p: ProjectRecord): ProjectView {
-    return {
-      id: p.id,
-      path: p.path,
-      name: p.name,
-      defaultBranch: p.defaultBranch,
-      settings: { ...p.settings },
-    }
+  refreshQuality(projectId: string): void {
+    void this.projects.refresh(projectId).catch((e) => this.log('품질 기준 확인 실패', e))
   }
 
-  private async saveProjects(): Promise<void> {
-    await this.deps.store.writeProjects([...this.projects.values()])
-    this.deps.emit(
-      EVENTS.projects,
-      [...this.projects.values()].map((p) => this.projectView(p)),
-    )
+  // ── 프로젝트 (works-projects.ts) ───────────────────────────────────────────
+
+  addProject(path: string): Promise<ProjectView> {
+    return this.projects.add(path)
   }
 
-  async addProject(path: string): Promise<ProjectView> {
-    let root: string
-    try {
-      root = await repoRoot(path)
-    } catch {
-      throw new Error(`git 레포가 아님: ${path}`)
-    }
-    const id = repoKey(root)
-    const existing = this.projects.get(id)
-    if (existing) return this.projectView(existing)
-    const base = await defaultBase(root).catch(() => null)
-    const p: ProjectRecord = {
-      id,
-      path: root,
-      name: basename(root),
-      defaultBranch: base === null ? null : base.replace(/^origin\//, '').replace(/^HEAD$/, ''),
-      settings: { ...DEFAULT_SETTINGS },
-      added_at: this.deps.now(),
-    }
-    if (base === 'origin/HEAD') {
-      const ref = await git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], root).catch(
-        () => '',
-      )
-      p.defaultBranch = ref.trim().replace(/^origin\//, '') || null
-    }
-    this.projects.set(id, p)
-    await this.saveProjects()
-    return this.projectView(p)
+  updateSettings(projectId: string, s: Partial<ProjectSettings>): Promise<ProjectView> {
+    return this.projects.updateSettings(projectId, s)
   }
 
-  async updateSettings(projectId: string, s: Partial<ProjectSettings>): Promise<ProjectView> {
-    const p = this.projects.get(projectId)
-    if (!p) throw new Error(`프로젝트가 없음: ${projectId}`)
-    const merged = { ...p.settings, ...s }
-    const checked = settingsOf(merged)
-    const bad = (Object.keys(s) as (keyof ProjectSettings)[]).filter(
-      (k) => k in checked && checked[k] !== merged[k],
-    )
-    if (bad.length > 0) throw new Error(`설정 값이 잘못됨: ${bad.join(', ')}`)
-    p.settings = checked
-    await this.saveProjects()
-    return this.projectView(p)
+  /** 기본 브랜치의 품질 기준 상태를 다시 잰다(V20, 목록을 다시 읽을 때) */
+  refreshProjects(): Promise<void> {
+    return this.projects.refresh()
+  }
+
+  /** [초안 만들기](V20): 품질 기준 초안을 프로젝트의 작업 트리에 쓴다. 이미 있으면 덮지 않는다. 커밋은 사람이 한다 */
+  draftQuality(projectId: string): Promise<DraftQualityResult> {
+    return this.projects.draft(projectId)
   }
 
   // ── Work 만들기와 세션 ─────────────────────────────────────────────────────
@@ -251,6 +195,7 @@ export class Works implements WorkCtx {
     const project = this.projects.get(o.project)
     if (!project) throw new Error(`프로젝트가 없음: ${o.project}`)
     const rec = await newWork(this.deps, project, o)
+    this.refreshQuality(project.id)
     this.works.set(rec.id, rec)
     this.runtime(rec.id).head = await headOf(rec.worktree).catch(() => null)
     await this.save(rec)
@@ -334,6 +279,8 @@ export class Works implements WorkCtx {
       case 'PostToolUse':
       case 'PostToolUseFailure':
         rt.session = 'running'
+        // 셸 명령은 차례 안에서 커밋할 수 있다: 화면의 HEAD를 바로 고친다(낡은 head의 끝내기 확인 상자를 거둔다, V18)
+        if (command !== null) void this.followHead(workId)
         if (event === 'PostToolUse' && command !== null && isExportCommand(command))
           void this.evidence.onPush(workId).catch((e) => this.log('PR 확인 실패', e))
         break
@@ -427,11 +374,12 @@ export class Works implements WorkCtx {
     void this.evidence.run(id, { exportCandidate }).catch((e) => this.log('증거 실패', e))
   }
 
+  /** [증거 다시 재기]: 이미 잰 head도 다시 잰다(흔들린 명령, 바깥이 바뀐 CI) */
   runEvidence(id: string, o: { exportCandidate: boolean }): Promise<void> {
     const rec = this.record(id)
     if (!isActive(rec.state)) throw new Error('끝난 Work는 증거를 재지 않음')
     this.evidence.cancelDebounce(id)
-    return this.evidence.run(id, o)
+    return this.evidence.run(id, { ...o, again: true })
   }
 
   async merge(id: string): Promise<MergeResult> {
@@ -439,18 +387,73 @@ export class Works implements WorkCtx {
     return r.ok ? { ok: true } : { ok: false, error: r.error ?? '머지하지 못함' }
   }
 
-  /** [끝]: 내보내기 후보로 재고(리뷰, 장부) Work를 끝낸다. 세션도 끝낸다 */
-  async end(id: string): Promise<void> {
+  /**
+   * [끝내기]의 첫 단계(V18): 지금 HEAD의 내보내기 증거(check → 리뷰 → 관문 → 장부)가 없거나 그 리뷰가 실패했으면 잰다.
+   * Work는 그대로(구현 중)다. 사람은 [증거]에서 리뷰 지적과 증거를 보고, 고칠 것이 있으면 터미널에서 세션에게 말하고,
+   * 없으면 [끝 확정](end) 한다. 리뷰 결과는 세션에 넣지 않는다(V4, V8). 재는 사이 정책이 머지해 끝났으면 head는 null.
+   * 내보내기 증거를 재지 못했거나 그사이 HEAD가 바뀌었으면 던진다(다시 누른다)
+   */
+  async prepareEnd(id: string): Promise<PreparedEnd> {
     const rec = this.record(id)
     const ok = nextState(rec.state, { type: 'ended' })
     if (!ok.ok) throw new Error(ok.errors.join('; '))
-    const head = await headOf(rec.worktree).catch(() => null)
-    const exported = head !== null && rec.exported_head === head && this.evidence.measured(id, head)
-    if (measures(rec.state) && head !== null && !exported)
-      await this.evidence.run(id, { exportCandidate: true })
+    await this.exportHead(id, { retryFailedReview: true })
+    if (!isActive(rec.state)) return { head: null }
+    const head = await headOf(rec.worktree)
+    if (this.evidence.exported(id, head)) return { head }
+    throw new Error(rec.error ?? '재는 사이 세션이 커밋해 HEAD가 바뀜: 끝내기를 다시 누르세요')
+  }
+
+  /**
+   * [끝 확정]: 확인 상자의 head(prepareEnd의 답)가 지금 HEAD일 때만 Work와 세션을 끝낸다. 상자 뒤 세션이 커밋했으면(Stop이
+   * 아직 오지 않아 상자가 남았어도) 끝내지 않고 던진다: 사람은 새 커밋의 증거와 리뷰를 본 적이 없다. 그 head를 내보내기로
+   * 재지 않았으면(계약이 바뀐 뒤 등) 먼저 잰다(안전망, 리뷰와 장부). 재는 사이 HEAD가 바뀌어도 끝내지 않는다
+   */
+  async end(id: string, head: string): Promise<void> {
+    const rec = this.record(id)
+    const ok = nextState(rec.state, { type: 'ended' })
+    if (!ok.ok) throw new Error(ok.errors.join('; '))
+    await this.sameHead(id, head)
+    await this.exportHead(id)
     // 그 증거로 정책이 머지했으면 이미 끝났다
     if (!isActive(rec.state)) return
+    await this.sameHead(id, head)
     await this.transition(rec, { type: 'ended' })
+  }
+
+  /** 지금 HEAD가 head가 아니면 화면의 HEAD를 고치고(확인 상자를 거둔다) 던진다. HEAD를 읽지 못하면 보지 않는다 */
+  private async sameHead(id: string, head: string): Promise<void> {
+    const now = await headOf(this.record(id).worktree).catch(() => null)
+    if (now === null || now === head) return
+    this.runtime(id).head = now
+    this.publish(id)
+    throw new Error(
+      `HEAD가 바뀜(${head.slice(0, 7)} → ${now.slice(0, 7)}): 끝내기를 다시 눌러 새 커밋의 증거와 리뷰를 보세요`,
+    )
+  }
+
+  /** 지금 HEAD를 화면에 보인다(Stop을 기다리지 않고) */
+  private async followHead(id: string): Promise<void> {
+    const rec = this.works.get(id)
+    if (!rec) return
+    const head = await headOf(rec.worktree).catch(() => null)
+    const rt = this.runtime(id)
+    if (head === null || head === rt.head) return
+    rt.head = head
+    this.publish(id)
+  }
+
+  /**
+   * 지금 HEAD를 내보내기(리뷰 포함)로 재지 않았으면 잰다. 이미 도는 같은 HEAD의 내보내기에는 합친다. retryFailedReview면
+   * 잰 head라도 리뷰가 실패했으면 다시 잰다([끝내기]: PR이 없으면 그 head의 리뷰를 받을 길이 이것뿐이다)
+   */
+  private async exportHead(id: string, o: { retryFailedReview?: boolean } = {}): Promise<void> {
+    const rec = this.record(id)
+    const head = await headOf(rec.worktree).catch(() => null)
+    if (!measures(rec.state) || head === null) return
+    if (!this.evidence.exported(id, head)) return this.evidence.run(id, { exportCandidate: true })
+    if (o.retryFailedReview && this.runtime(id).evidence?.review?.status === 'failed')
+      await this.evidence.run(id, { exportCandidate: true, again: true })
   }
 
   async abandon(id: string): Promise<void> {
@@ -495,6 +498,7 @@ export class Works implements WorkCtx {
       pr: rec.pr,
       evidenceRunning: rt.evidenceRunning,
       reviewRunning: rt.reviewRunning,
+      reviewDisabled: this.deps.reviewDisabled === true,
       contractId: rec.contract_id,
       hint: rec.hint,
       groundings: rec.groundings,
@@ -506,7 +510,7 @@ export class Works implements WorkCtx {
 
   list(): WorkList {
     return {
-      projects: [...this.projects.values()].map((p) => this.projectView(p)),
+      projects: this.projects.views(),
       works: [...this.works.values()]
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .map((w) => this.view(w.id)),

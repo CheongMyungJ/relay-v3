@@ -37,6 +37,8 @@ export interface OpenAppOptions {
   prPollMs?: number
   /** 세션의 claude. 기본 가짜 claude */
   claudeBin?: string
+  /** 평가에서 리뷰를 뺀 쪽(RELAY_ABLATE=review)처럼 리뷰를 끈다 */
+  reviewDisabled?: boolean
   log?: (message: string, error?: unknown) => void
 }
 
@@ -75,6 +77,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     ...(o.claudeVersion ? { claudeVersion: o.claudeVersion } : {}),
     debounceMs: o.debounceMs ?? 200,
     prPollMs: o.prPollMs ?? 60_000,
+    ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
     log,
   })
   await works.init()

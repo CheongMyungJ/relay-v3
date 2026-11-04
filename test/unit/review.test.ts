@@ -163,3 +163,24 @@ describe('evidenceFacts', () => {
     )
   })
 })
+
+describe('리뷰 지적의 말', () => {
+  test('사람이 읽는 지적 글은 한국어로 쓰게 한다', () => {
+    const p = reviewPrompt({
+      contract: {
+        version: 1,
+        id: 'c',
+        goal: 'g',
+        lines: [],
+        non_goals: [],
+        human_rules: [],
+        examples: [],
+        tidy: [],
+      },
+      diffStat: '',
+      diff: '',
+      evidenceSummary: [],
+    })
+    expect(p).toContain('write it in Korean')
+  })
+})

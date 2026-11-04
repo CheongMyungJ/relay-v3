@@ -28,7 +28,11 @@ export function registerIpc(o: {
 }): () => void {
   const { works, sessions } = o
   const handlers: Record<string, Handler> = {
-    [IPC.list]: () => works.list(),
+    // 처음 목록(창을 열거나 다시 읽을 때): 기본 브랜치의 품질 기준 상태를 다시 잰다(V20)
+    [IPC.list]: async () => {
+      await works.refreshProjects()
+      return works.list()
+    },
     [IPC.addProject]: async () => {
       const win = o.window()
       const options = { title: '프로젝트 폴더 고르기', properties: ['openDirectory' as const] }
@@ -62,7 +66,8 @@ export function registerIpc(o: {
       })
     },
     [IPC.merge]: (id) => works.merge(str(id, 'id')),
-    [IPC.end]: (id) => works.end(str(id, 'id')),
+    [IPC.prepareEnd]: (id) => works.prepareEnd(str(id, 'id')),
+    [IPC.end]: (id, head) => works.end(str(id, 'id'), str(head, 'head')),
     [IPC.abandon]: (id) => works.abandon(str(id, 'id')),
     // [증거 다시 재기]: 열린 PR이 지금 HEAD를 가리키고 Work의 기준으로 가면 내보내기 후보로(리뷰 포함). PR이 뒤처진
     // HEAD를 내보내기로 재지 않는다(PR head가 아니면 머지할 수 없다)
@@ -78,6 +83,7 @@ export function registerIpc(o: {
     },
     [IPC.diff]: (id) => works.diff(str(id, 'id')),
     [IPC.debt]: (id) => works.debt(str(id, 'id')),
+    [IPC.draftQuality]: (id) => works.draftQuality(str(id, 'projectId')),
   }
   for (const [channel, fn] of Object.entries(handlers)) {
     ipcMain.handle(channel, async (_e, ...args: unknown[]): Promise<IpcResult<unknown>> => {

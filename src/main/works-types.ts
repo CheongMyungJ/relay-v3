@@ -7,7 +7,7 @@ import type { HookEvent } from '../core/instructions.ts'
 import type { SessionHost } from './sessions.ts'
 import type { ProjectRecord, Store, WorkRecord } from './store.ts'
 
-/** 독립 리뷰(V4)에 주는 것. 기본 구현은 works-evidence.ts의 claudeReview(claude -p, 읽기 도구만) */
+/** 독립 리뷰(V4)에 주는 것. 기본 구현은 works-review.ts의 claudeReview(claude -p, 읽기 도구만) */
 export interface ReviewInput {
   /** Work의 worktree. 리뷰어가 파일을 읽는 곳 */
   cwd: string
@@ -55,6 +55,11 @@ export interface WorksDeps {
   model?: string
   /** 처리 실패를 알린다. 기본 console.error */
   log?: (message: string, error?: unknown) => void
+  /**
+   * 평가에서 독립 리뷰를 뺀 쪽(RELAY_ABLATE=review, docs/experiments/m2/protocol.md). 제품 설정이 아니다. 리뷰를 부르지
+   * 않고 status 'skipped'로 두며, 화면은 '리뷰가 꺼져 있음(평가 설정)'으로 보인다
+   */
+  reviewDisabled?: boolean
 }
 
 /** Work마다 메모리에만 두는 것 */
@@ -75,8 +80,11 @@ export interface Runtime {
   measuring: string | null
   debounce: ReturnType<typeof setTimeout> | null
   poll: ReturnType<typeof setInterval> | null
-  /** 차례를 기다리는 증거 재기(아직 시작하지 않음). 겹친 요청은 하나로 합친다 */
-  pending: { exportCandidate: boolean; done: Promise<void> } | null
+  /**
+   * 차례를 기다리는 증거 재기(아직 시작하지 않음). 겹친 요청은 하나로 합친다. again은 [증거 다시 재기]: 이미 잰 head도
+   * 다시 잰다(아니면 시작할 때 앞 재기가 이미 잰 head는 건너뛴다)
+   */
+  pending: { exportCandidate: boolean; again: boolean; done: Promise<void> } | null
   /** 마지막 증거 재기가 끝나는 때 */
   chain: Promise<void>
   /** sessions.onData·onExit을 걸었나 */
@@ -110,6 +118,8 @@ export interface WorkCtx {
   tell(id: string, text: string): Promise<void>
   /** Work가 끝났다(done, abandoned): 타이머를 멈추고 세션을 끝낸다 */
   finish(id: string): Promise<void>
+  /** 프로젝트의 품질 기준 상태(V20)를 뒤에서 다시 잰다(실패는 삼킨다) */
+  refreshQuality(projectId: string): void
   log(message: string, error?: unknown): void
 }
 

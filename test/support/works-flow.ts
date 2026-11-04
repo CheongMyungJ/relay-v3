@@ -99,7 +99,10 @@ export interface FlowKit {
   /** 가짜 claude의 기록(마지막 시나리오) */
   fake(): Promise<Entry[]>
   mcpResults(tool: string): Promise<Entry[]>
-  openApp(home: string, o?: { prPollMs?: number; claudeBin?: string }): Promise<TestApp>
+  openApp(
+    home: string,
+    o?: { prPollMs?: number; claudeBin?: string; reviewDisabled?: boolean },
+  ): Promise<TestApp>
   /** 시험이 열고 스스로 닫은 앱을 목록에서 뺀다 */
   forget(app: TestApp): void
   until(ok: () => boolean | Promise<boolean>, what: string): Promise<void>
@@ -192,6 +195,7 @@ export function flowKit(): FlowKit {
         log,
         ...(o.prPollMs ? { prPollMs: o.prPollMs } : {}),
         ...(o.claudeBin ? { claudeBin: o.claudeBin } : {}),
+        ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
       })
       apps.push(app)
       return app

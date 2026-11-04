@@ -1,10 +1,9 @@
 // 증거 → (리뷰) → 관문 → 장부, 머지, PR 상태 (docs/m2-modules.md 3절 works.ts, docs/m2-app.md 1절 5~9).
 // 계기: Stop 뒤 지금 계약으로 재지 않은 head면 debounceMs 몰아서(내보내기 아님), 세션이 git push·gh pr 뒤(또는 PR 확인에서)
-// PR이 그 head를 가리키면 내보내기 후보(리뷰 포함), [끝]. '이미 잰 것'은 (head, 계약 hash)다. 한 Work의 증거 재기는 한 번에
-// 하나이고, 기다리는 요청은 하나로 합친다. 내보내기는 결정론적 증거와 관문을 먼저 보이고 리뷰가 끝나면 다시 정한다(리뷰는
+// PR이 그 head를 가리키면 내보내기 후보(리뷰 포함), [끝내기]·[끝 확정](V18). '이미 잰 것'은 (head, 계약 hash)다. 한 Work의
+// 증거 재기는 한 번에 하나이고, 기다리는 요청은 하나로 합친다(시작할 때 이미 잰 head면 건너뛴다). 내보내기는 결정론적 증거와 관문을 먼저 보이고 리뷰가 끝나면 다시 정한다(리뷰는
 // 사람을 막지 않는다, V4). 엔진 check는 in-process로 부른다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
 
-import { claudeJson } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
 import type { PrCheck } from '../adapters/gh.ts'
 import { showFile } from '../adapters/git.ts'
@@ -13,61 +12,19 @@ import { contractHash } from '../core/contract.ts'
 import { gate } from '../core/gate.ts'
 import { trackRecord, type LedgerEntry } from '../core/ledger.ts'
 import { parseQuality } from '../core/quality.ts'
-import { evidenceFacts, parseReview, REVIEW_SCHEMA, reviewPrompt } from '../core/review.ts'
+import { evidenceFacts } from '../core/review.ts'
 import type { Contract, EvidenceBundle, GateResult, Policy } from '../core/types.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
-import {
-  isActive,
-  measures,
-  message,
-  type ReviewInput,
-  type ReviewResult,
-  type WorkCtx,
-} from './works-types.ts'
+import { isActive, measures, message, type WorkCtx } from './works-types.ts'
 
 const DEBOUNCE_MS = 20_000
 const PR_POLL_MS = 120_000
-const REVIEW_TIMEOUT_MS = 15 * 60 * 1000
-/** 리뷰어가 쓰는 읽기 도구 */
-export const REVIEW_TOOLS = ['Read', 'Grep', 'Glob']
 
 /** 세션이 PR을 열거나 갱신했을 수 있는 Bash 명령 */
 const EXPORT_COMMAND = /\bgit\b[^;&|\n]*\bpush\b|\bgh\b[^;&|\n]*\bpr\b/
-
-/** 독립 리뷰의 기본 구현: 새 맥락의 읽기 전용 claude -p (V4). 실패는 status 'failed'(지적 없음) */
-export function claudeReview(o: {
-  bin: string
-  model?: string
-  timeoutMs?: number
-  log?: (message: string, error?: unknown) => void
-}): (i: ReviewInput) => Promise<ReviewResult> {
-  return async (i) => {
-    const r = await claudeJson({
-      bin: o.bin,
-      cwd: i.cwd,
-      prompt: reviewPrompt(i),
-      schema: REVIEW_SCHEMA,
-      allowedTools: REVIEW_TOOLS,
-      timeoutMs: o.timeoutMs ?? REVIEW_TIMEOUT_MS,
-      ...(o.model ? { model: o.model } : {}),
-      ...(i.signal ? { signal: i.signal } : {}),
-    })
-    if (!r.ok) {
-      o.log?.(`리뷰 실패: ${r.error}`)
-      return { status: 'failed', findings: [] }
-    }
-    const usage = r.usage ? { usage: r.usage as Record<string, unknown> } : {}
-    const parsed = parseReview(r.value)
-    if (!parsed.ok) {
-      o.log?.(`리뷰 결과를 읽지 못함: ${parsed.errors.join('; ')}`)
-      return { status: 'failed', findings: [], ...usage }
-    }
-    return { status: 'done', findings: parsed.value, ...usage }
-  }
-}
 
 export async function headOf(worktree: string): Promise<string> {
   return (await git(['rev-parse', 'HEAD'], worktree)).trim()
@@ -100,6 +57,9 @@ export function blockingChecks(checks: PrCheck[]): { failed: string[]; pending: 
   return { failed: names(['fail', 'cancel']), pending: names(['pending']) }
 }
 
+/** 줄 선 증거 재기. again이면 이미 잰 head도 다시 잰다([증거 다시 재기]) */
+type Job = { exportCandidate: boolean; again: boolean }
+
 /** merge의 답. wait는 정책 머지가 기다릴 일(CI가 도는 중 등)이라 PR 확인에서 다시 해 볼 것 */
 export type MergeOutcome = MergeResult & { wait?: boolean }
 
@@ -122,6 +82,11 @@ export class EvidenceRunner {
     return (
       rt.evidence !== null && rt.evidence.head === head && sameContract(rt.evidence, rt.contract)
     )
+  }
+
+  /** 지금 계약으로 이 head를 내보내기(리뷰까지)로 쟀나. 리뷰가 도는 동안은 아직 아니다 */
+  exported(id: string, head: string): boolean {
+    return this.ctx.record(id).exported_head === head && this.measured(id, head)
   }
 
   // ── 계기 ───────────────────────────────────────────────────────────────────
@@ -166,7 +131,7 @@ export class EvidenceRunner {
     rt.head = head ?? rt.head
     if (pr.baseRefName !== rec.base) return this.wrongBase(rec, pr)
     if (head === null || !exportable(pr, rec.base, head)) return
-    if (rec.exported_head === head && this.measured(id, head)) return
+    if (this.exported(id, head)) return
     this.cancelDebounce(id)
     await this.run(id, { exportCandidate: true })
   }
@@ -182,37 +147,47 @@ export class EvidenceRunner {
   // ── 증거 재기 ──────────────────────────────────────────────────────────────
 
   /**
-   * check → (내보내기면 리뷰) → gate → 장부. 돌고 있으면 그 뒤에 한 번 더 잰다(기다리는 요청은 합친다).
+   * check → (내보내기면 리뷰) → gate → 장부. 돌고 있으면 그 뒤에 한 번 더 잰다(기다리는 요청은 합친다). 차례가 와서
+   * 시작할 때 앞 재기가 이 head를 이미 쟀으면(내보내기면 리뷰까지) 재지 않는다: 세션의 git push와 gh pr이 잇달아 와도,
+   * 내보내기 리뷰가 도는 동안 gh pr이 또 와도 같은 head의 리뷰는 한 번이다. again([증거 다시 재기])이면 그래도 잰다.
    * 결론이 자동 머지 후보이고 PR이 있으면 바로 머지해 본다(by 'policy')
    */
-  run(id: string, o: { exportCandidate: boolean }): Promise<void> {
+  run(id: string, o: { exportCandidate: boolean; again?: boolean }): Promise<void> {
     const rt = this.ctx.runtime(id)
     if (rt.pending) {
       rt.pending.exportCandidate ||= o.exportCandidate
+      rt.pending.again ||= o.again === true
       return rt.pending.done
     }
-    const pending = { exportCandidate: o.exportCandidate, done: Promise.resolve() }
+    const pending: Job & { done: Promise<void> } = {
+      exportCandidate: o.exportCandidate,
+      again: o.again === true,
+      done: Promise.resolve(),
+    }
     pending.done = rt.chain.then(() => {
       rt.pending = null
-      return this.measure(id, pending.exportCandidate)
+      return this.measure(id, pending)
     })
     rt.pending = pending
     rt.chain = pending.done.catch(() => {})
     return pending.done
   }
 
-  private async measure(id: string, exportCandidate: boolean): Promise<void> {
+  private async measure(id: string, job: Job): Promise<void> {
     const rec = this.ctx.record(id)
     if (!isActive(rec.state)) return
     const rt = this.ctx.runtime(id)
     const { deps } = this.ctx
     const project = this.ctx.projectOf(rec)
-    rt.evidenceRunning = true
-    this.ctx.publish(id)
+    const { exportCandidate } = job
     try {
       const head = await headOf(rec.worktree)
       rt.head = head
+      if (!job.again && (exportCandidate ? this.exported(id, head) : this.measured(id, head)))
+        return
       rt.measuring = head
+      rt.evidenceRunning = true
+      this.ctx.publish(id)
       const contract = rt.contract
       const before = rt.evidence
       let bundle = await deps.check({
@@ -224,12 +199,13 @@ export class EvidenceRunner {
         home: deps.store.home,
         now: deps.now(),
       })
-      // 재는 사이 [버림]·[머지]로 끝났으면 관문도 장부도 남기지 않는다
-      if (!isActive(rec.state)) return
+      // 재는 사이 [버림]·[머지]로 끝났거나 앱을 닫았으면(명령이 끊김) 관문도 장부도 남기지 않는다
+      if (!isActive(rec.state) || rt.abort.signal.aborted) return
       const policy = await this.policy(rec, project, bundle)
       if (exportCandidate) {
         bundle = await this.withReview(rec, project, contract, bundle, policy)
-        if (!isActive(rec.state)) return
+        // 앱을 닫아 끊긴 리뷰(실패로 돌아옴)는 내보내기로 남기지 않는다: 다시 켜고 [끝내기]하면 다시 잰다
+        if (!isActive(rec.state) || rt.abort.signal.aborted) return
         rec.exported_head = bundle.head
       } else if (before?.review && before.head === bundle.head && sameContract(before, contract)) {
         // 같은 head·계약의 내보내기 묶음이 있으면 그 리뷰를 잇는다(다시 재도 지적이 사라지지 않게)
@@ -239,6 +215,8 @@ export class EvidenceRunner {
         await writeJson(evidencePath(deps.store.home, repoKey(bundle.repo), bundle.head), bundle)
       const result = await this.publishGate(rec, bundle, contract, policy)
       await deps.store.appendLedger(this.ledgerEntry(rec, project, bundle.head, result))
+      // 사람이 기본 브랜치에 품질 기준을 커밋했으면 알림(V20)을 거둔다
+      this.ctx.refreshQuality(project.id)
       this.ctx.note(id, {
         type: 'evidence',
         head: bundle.head,
@@ -284,7 +262,8 @@ export class EvidenceRunner {
   /**
    * 내보내기 후보의 리뷰(V4)를 붙인 묶음. 리뷰가 도는 동안 결정론적 증거와 리뷰 없는 관문을 먼저 보인다(리뷰는 시간으로
    * 사람을 막지 않는다). 프로젝트 설정 review가 'auto_only'면 리뷰가 됐다고 치고 관문을 먼저 돌려 자동 조건을 채웠을 때만
-   * 리뷰한다(사람 머지 경로만 줄일 수 있다). 계약이 없으면 리뷰하지 않는다
+   * 리뷰한다(사람 머지 경로만 줄일 수 있다). 계약이 없으면 리뷰하지 않는다. 평가에서 리뷰를 뺀 쪽(reviewDisabled)은
+   * 리뷰할 자리에서 부르지 않고 건너뜀으로 둔다(events.jsonl의 review 기록은 남긴다: 평가가 건너뛴 수를 센다)
    */
   private async withReview(
     rec: WorkRecord,
@@ -299,6 +278,10 @@ export class EvidenceRunner {
       const done: EvidenceBundle = { ...bundle, review: { status: 'done', findings: [] } }
       // head는 묶음의 head: 낡음은 리뷰 뒤의 관문이 지금 HEAD로 다시 본다
       if (gate(done, contract, policy, bundle.head).condition === null) return skipped
+    }
+    if (this.ctx.deps.reviewDisabled) {
+      this.ctx.note(rec.id, { type: 'review', status: 'skipped', findings: 0, disabled: true })
+      return skipped
     }
     const rt = this.ctx.runtime(rec.id)
     await this.publishGate(rec, bundle, contract, policy)
@@ -561,8 +544,7 @@ export class EvidenceRunner {
     if (pr.baseRefName !== rec.base) return this.wrongBase(rec, pr)
     const head = await headOf(rec.worktree).catch(() => null)
     if (head === null || !exportable(pr, rec.base, head)) return
-    if (rec.exported_head !== head || !this.measured(rec.id, head))
-      return this.run(rec.id, { exportCandidate: true })
+    if (!this.exported(rec.id, head)) return this.run(rec.id, { exportCandidate: true })
     if (rec.gate?.conclusion === 'auto_merge_candidate') await this.autoMerge(rec.id)
   }
 

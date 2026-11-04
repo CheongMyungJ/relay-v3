@@ -77,7 +77,7 @@ The change was made under the approved contract below. relay has already run the
 3. \`out_of_contract\`: behavior changed outside the contract's lines, or work listed in its non-goals.
 4. \`security\`: injection, path traversal, leaked secrets, unsafe shell or eval, weakened checks.
 
-Set \`raise\` only for findings of these four kinds. Other findings (naming, style, small suggestions) have no \`raise\`. Give \`file\` and \`line\` when you can point to one. Return an empty list if you find nothing. Keep each \`text\` short and concrete.
+Set \`raise\` only for findings of these four kinds. Other findings (naming, style, small suggestions) have no \`raise\`. Give \`file\` and \`line\` when you can point to one. Return an empty list if you find nothing. Keep each \`text\` short and concrete, and write it in Korean: a person reads the findings in relay's Korean screen.
 
 ## Contract
 

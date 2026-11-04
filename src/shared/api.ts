@@ -34,6 +34,12 @@ export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   question_mode: 'confirm_each',
 }
 
+/**
+ * 기본 브랜치(origin/<기본>이 있으면 그것)의 품질 기준 `.relay/quality.json`(V20): 있음, 없음(브랜치를 모를 때도), 깨짐
+ * (읽지 못함). 없거나 깨졌으면 앱이 명령을 돌리지 못해 증거가 비고 결론은 늘 사람 머지다
+ */
+export type QualityState = 'present' | 'missing' | 'invalid'
+
 export interface ProjectView {
   /** 레포 키(폴더 이름 + 경로 해시) */
   id: string
@@ -43,6 +49,23 @@ export interface ProjectView {
   /** origin의 기본 브랜치(없으면 로컬 main·master). 모르면 null */
   defaultBranch: string | null
   settings: ProjectSettings
+  quality: QualityState
+  /**
+   * 기본 브랜치에는 품질 기준이 없는데(missing) 프로젝트의 작업 트리에는 .relay/quality.json이 있다: [초안 만들기]로 썼거나
+   * 사람이 만들고 아직 기본 브랜치에 커밋하지 않았다
+   */
+  qualityDraft: boolean
+  /**
+   * 품질 기준 상태를 읽는 ref: origin/<기본>이 있으면 그것, 없으면 로컬 기본 브랜치. 모르면 null. origin/이면 기본 브랜치에
+   * 커밋하고 push해야 쓰인다
+   */
+  qualityRef: string | null
+}
+
+/** [초안 만들기]의 답(V20). 이미 파일이 있으면 덮지 않고 written false. path는 작업 트리의 .relay/quality.json */
+export interface DraftQualityResult {
+  written: boolean
+  path: string
 }
 
 // ── PR (adapters/gh.ts의 PrInfo와 같은 모양. shared는 adapters를 가져오지 않는다) ─────────
@@ -87,6 +110,8 @@ export interface WorkView {
   pr: PrInfo | null
   evidenceRunning: boolean
   reviewRunning: boolean
+  /** 평가 설정(RELAY_ABLATE=review)으로 독립 리뷰가 꺼져 있다. 제품 설정이 아니다 */
+  reviewDisabled: boolean
   // ── 아래는 m2-modules 3절의 목록에 더한 칸(화면에 필요한 것) ──
   /** 지침이 세션에 준 계약 id(시험 태그 [<id>:C1.1]) */
   contractId: string
@@ -126,6 +151,14 @@ export interface ChangeAnswer {
 export interface MergeResult {
   ok: boolean
   error?: string
+}
+
+/**
+ * [끝내기]의 첫 단계(prepareEnd, V18)의 답: 내보내기 증거(리뷰 포함)를 잰 지금 HEAD. 화면은 HEAD가 이것인 동안만 확인
+ * 상자를 보인다. 재는 사이 Work가 끝났으면(정책 머지) null
+ */
+export interface PreparedEnd {
+  head: string | null
 }
 
 /** terminal.attach의 답: 최근 출력(최대 200KB)과 그다음 조각의 번호. 이후 조각은 seq ≥ 이 값만 받는다 */
@@ -183,8 +216,13 @@ export interface RelayApi {
   askChanges(id: string, message: string): Promise<void>
   answerChange(id: string, o: ChangeAnswer): Promise<void>
   merge(id: string): Promise<MergeResult>
-  /** [끝]: 내보내기 증거(리뷰)를 재고 Work를 끝낸다 */
-  end(id: string): Promise<void>
+  /** [끝내기](V18): 지금 HEAD의 내보내기 증거(리뷰 포함)가 없으면 잰다. Work는 끝내지 않는다 */
+  prepareEnd(id: string): Promise<PreparedEnd>
+  /**
+   * [끝 확정]: head(확인 상자의 head, prepareEnd의 답)가 지금 HEAD일 때만 Work를 끝낸다. 다르면 던진다([끝내기]를 다시).
+   * 지금 HEAD의 내보내기 증거가 없으면 먼저 잰다(안전망)
+   */
+  end(id: string, head: string): Promise<void>
   abandon(id: string): Promise<void>
   /** [증거 다시 재기]. 열린 PR이 있으면 내보내기 후보로(리뷰 포함) 잰다 */
   runEvidence(id: string): Promise<void>
@@ -197,6 +235,8 @@ export interface RelayApi {
   diff(id: string): Promise<string>
   /** 이 Work가 건드린 경로의 빚 항목 */
   debt(id: string): Promise<DebtItem[]>
+  /** [초안 만들기](V20): 품질 기준 초안을 프로젝트의 작업 트리에 쓴다. 커밋은 사람이 한다 */
+  draftQuality(projectId: string): Promise<DraftQualityResult>
   /** 이벤트를 받는다. 돌려준 함수를 부르면 그만 받는다 */
   on<E extends RelayEvent>(event: E, cb: (payload: RelayEventPayload[E]) => void): () => void
 }
@@ -212,6 +252,7 @@ export const IPC = {
   askChanges: 'relay:ask-changes',
   answerChange: 'relay:answer-change',
   merge: 'relay:merge',
+  prepareEnd: 'relay:prepare-end',
   end: 'relay:end',
   abandon: 'relay:abandon',
   runEvidence: 'relay:run-evidence',
@@ -220,6 +261,7 @@ export const IPC = {
   terminalResize: 'relay:terminal-resize',
   diff: 'relay:diff',
   debt: 'relay:debt',
+  draftQuality: 'relay:draft-quality',
 } as const
 
 /** ipcMain.handle의 답. 메인은 던지지 않고 이것으로 돌려주고, preload가 실패를 Error로 바꾼다 */
