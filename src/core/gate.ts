@@ -81,10 +81,11 @@ export function openItems(
   return [...(change === null ? [] : [change]), ...humanFacts(evidence, contract, head, review)]
 }
 
-/** 통합 증거(V22)의 열린 것: 리뷰를 빼고 계약 전체로 */
-function integrationFacts(w: Integration): string[] {
-  if (w.evidence === null) return ['통합 증거 없음']
-  return openItems(w.evidence, w.contract, w.head, false).map((f) => `통합 증거: ${f}`)
+/** 통합 증거(V22)의 열린 것: 앱이 본 통합의 사실과, 리뷰를 빼고 계약 전체로 본 묶음의 열린 것 */
+export function integrationFacts(w: Integration): string[] {
+  const own = w.evidence === null ? [] : openItems(w.evidence, w.contract, w.head, false)
+  const facts = [...(w.facts ?? []), ...own].map((f) => `통합 증거: ${f}`)
+  return w.evidence === null ? ['통합 증거 없음', ...facts] : facts
 }
 
 function human(reasons: string[], condition: string | null, shadow: boolean): GateResult {

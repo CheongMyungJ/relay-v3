@@ -4,7 +4,8 @@
 // works-end.ts)는 모든 내보내기. '이미 잰 것'은 (head, 계약 hash)이고 다시 재지 않는다. 내보내기는 같은 head·계약의 끝난
 // 리뷰를 다시 쓴다(V23, works-review.ts). 재는 자리(V22): one_branch는 Work 브랜치 하나가 내보내기다. branch_per_unit은 먼저
 // Work 브랜치를 계약 전체로 결정론만 재고(통합 증거, 리뷰 없음), 단위 브랜치마다 계약의 조각(contract.<단위>.json)으로 잰다.
-// 내보내기의 관문은 통합 증거를 함께 본다(core gate의 whole). 선언한 단위 브랜치가 없으면 그 내보내기는 '단위 브랜치 없음'이다.
+// 내보내기의 관문은 통합 증거를 함께 본다(core gate의 whole: 단위 브랜치의 커밋이 Work 브랜치에 다 있지 않으면 그것도 통합
+// 증거의 열린 것이다). 선언한 단위 브랜치가 없으면 그 내보내기는 '단위 브랜치 없음'이다.
 // 한 Work의 증거 재기는 한 번에 하나이고, 기다리는 요청은 하나로 합친다. 재기가 끝나면 다음 재기 전에 [끝내기]의 걸린 끝을
 // 다시 본다. 리뷰는 결정론적 증거와 관문을 먼저 보인 뒤 돌고 끝나면 다시 정한다(리뷰는 사람을 막지 않는다, V4). 장부 줄,
 // exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). exported_head는 지금 묶음이 내보내기로 잰 묶음일 때만 그
@@ -13,14 +14,12 @@
 // works-feedback.ts)을 본다(세션이 쉴 때만 보낸다).
 
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
-import { contractHash } from '../core/contract.ts'
 import { gate, openItems } from '../core/gate.ts'
-import { trackRecord } from '../core/ledger.ts'
 import type { Contract, EvidenceBundle, GateResult, Integration, Policy } from '../core/types.ts'
 import type { PrInfo } from '../shared/api.ts'
-import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
-import { ExportDesk, exportable, ledgerEntry, unitOf, versions } from './works-exports.ts'
-import { autoConditions, ReviewDesk, reusable } from './works-review.ts'
+import type { ExportRecord, WorkRecord } from './store.ts'
+import { ExportDesk, exportable, ledgerEntry, policyFor, unitOf } from './works-exports.ts'
+import { ReviewDesk, reusable } from './works-review.ts'
 import {
   contractFile,
   delivered,
@@ -28,9 +27,13 @@ import {
   isActive,
   measures,
   message,
+  missingFact,
+  outsideBranches,
+  outsideFact,
   perUnit,
   readTips,
   refHead,
+  sameContract,
   tipOf,
   type ExportTrigger,
   type MeasureJob,
@@ -49,14 +52,6 @@ const EXPORT_COMMAND = /\bgit\b[^;&|\n]*\bpush\b|\bgh\b[^;&|\n]*\bpr\b/
 export function isExportCommand(command: string): boolean {
   return EXPORT_COMMAND.test(command)
 }
-
-/** 이 계약으로 만든 묶음인가(계약이 없으면 계약 없이 만든 묶음). 관문의 '증거를 만든 뒤 계약이 바뀜'과 같은 견줌이다 */
-export function sameContract(e: EvidenceBundle, c: Contract | null): boolean {
-  return c === null ? e.contract === null : e.contract?.hash === contractHash(c)
-}
-
-/** 선언한 단위 브랜치가 없는 내보내기의 사실(V22). [끝내기]의 열린 것이기도 하다 */
-export const missingFact = (x: ExportRecord): string => `단위 브랜치 없음: ${x.branch}`
 
 export class EvidenceRunner {
   private readonly ctx: WorkCtx
@@ -143,23 +138,33 @@ export class EvidenceRunner {
     return some
   }
 
-  /** 지금의 통합 증거(V22). one_branch는 없음(undefined). 지금 Work 브랜치의 끝으로 낡음을 본다 */
-  whole(rec: WorkRecord, head: string | null): Integration | undefined {
+  /**
+   * 지금의 통합 증거(V22). one_branch는 없음(undefined). 지금 Work 브랜치의 끝으로 낡음을 보고, 커밋이 Work 브랜치에 다 있지
+   * 않은 단위 브랜치를 다시 본다
+   */
+  async whole(rec: WorkRecord, head: string | null, tips: Tips): Promise<Integration | undefined> {
     if (!perUnit(rec)) return undefined
     const rt = this.ctx.runtime(rec.id)
     const b = rt.bundles.get(rec.branch) ?? null
-    return { evidence: b && sameContract(b, rt.contract) ? b : null, contract: rt.contract, head }
+    const facts = head === null ? [] : (await outsideBranches(rec, head, tips)).map(outsideFact)
+    return {
+      evidence: b && sameContract(b, rt.contract) ? b : null,
+      contract: rt.contract,
+      head,
+      facts,
+    }
   }
 
   /** 정책 머지 직전(V22): 지금 끝들과 그때의 통합 증거로 이 내보내기가 아직 자동 머지 후보인가 */
   async stillAuto(rec: WorkRecord, x: ExportRecord): Promise<boolean> {
     const rt = this.ctx.runtime(rec.id)
     const bundle = rt.bundles.get(x.branch)
-    const policy = rt.policies.get(x.branch)
     const head = await workHead(rec).catch(() => null)
-    const tip = tipOf(x, head, await readTips(rec))
-    if (!bundle || !policy || tip === null) return false
-    const g = gate(bundle, exportContract(rt, x), policy, tip, this.whole(rec, head))
+    const tips = await readTips(rec)
+    const tip = tipOf(x, head, tips)
+    if (!bundle || tip === null) return false
+    const policy = await this.policyOf(rec, x, bundle)
+    const g = gate(bundle, exportContract(rt, x), policy, tip, await this.whole(rec, head, tips))
     return g.conclusion === 'auto_merge_candidate'
   }
 
@@ -300,6 +305,9 @@ export class EvidenceRunner {
       job.tips = tips
       rt.measuring = head
       const whole = perUnit(rec) ? await this.integrate(rec, head, job) : undefined
+      // 단위 브랜치의 커밋이 Work 브랜치에 다 있나(V22): Work 브랜치가 그대로여도 단위 브랜치가 움직이면 바뀐다
+      if (whole)
+        whole.facts = rt.outside = (await outsideBranches(rec, head, tips)).map(outsideFact)
       for (const x of rec.exports) {
         if (whole === null || !isActive(rec.state) || rt.abort.signal.aborted) return
         if (!delivered(x)) await this.measureExport(rec, x, tipOf(x, head, tips), job, whole)
@@ -384,9 +392,11 @@ export class EvidenceRunner {
     const mine = job.export !== null && (job.only === null || job.only.includes(x.branch))
     const trigger = mine ? job.export : null
     if (tip === null) return this.missing(rec, x)
-    const known =
-      !job.again && this.measured(id, x, tip) ? (rt.bundles.get(x.branch) ?? null) : null
-    if (known !== null) {
+    let known = !job.again && this.measured(id, x, tip) ? (rt.bundles.get(x.branch) ?? null) : null
+    // 통합 증거 때문에 건너뛴 내보내기 리뷰가 이제 필요하면 그 결정을 거둔다: 리뷰 없는 묶음으로 다시 정한다(V22)
+    const stale = known !== null && (await this.reviews.staleSkip(rec, x, project, known, whole))
+    if (known !== null && stale) known = { ...known, review: null }
+    else if (known !== null) {
       const done =
         trigger !== null
           ? this.exported(id, x, tip) && reusable(known.review)
@@ -401,7 +411,7 @@ export class EvidenceRunner {
       let bundle = known ?? (await this.check(rec, x, tip, trigger === null))
       // 재는 사이 [버림]·[머지]로 끝났거나 앱을 닫았으면(명령이 끊김) 관문도 장부도 남기지 않는다
       if (!isActive(rec.state) || rt.abort.signal.aborted) return
-      const policy = await this.policy(rec, project, bundle)
+      const policy = await policyFor(this.ctx, rec, project, bundle)
       // 리뷰가 도는 동안 보이는 리뷰 없는 묶음은 내보내기로 잰 것이 아니다
       const show = (b: EvidenceBundle) =>
         this.publishGate(rec, x, b, contract, policy, false, whole)
@@ -492,12 +502,24 @@ export class EvidenceRunner {
   ): Promise<void> {
     const rt = this.ctx.runtime(rec.id)
     const bundle = rt.bundles.get(x.branch)
-    const policy = rt.policies.get(x.branch)
-    if (whole === undefined || !bundle || !policy) return
-    const g = gate(bundle, exportContract(rt, x), policy, tip, whole)
+    if (whole === undefined || !bundle) return
+    const g = gate(bundle, exportContract(rt, x), await this.policyOf(rec, x, bundle), tip, whole)
     if (JSON.stringify(g) === JSON.stringify(x.gate)) return
     x.gate = g
     await this.ctx.save(rec)
+  }
+
+  /** 내보내기의 마지막 정책. 앱을 다시 켜면 메모리에 없으니 그 묶음으로 다시 만들어 둔다(V22의 관문 다시 계산과 정책 머지) */
+  private async policyOf(
+    rec: WorkRecord,
+    x: ExportRecord,
+    bundle: EvidenceBundle,
+  ): Promise<Policy> {
+    const rt = this.ctx.runtime(rec.id)
+    const policy =
+      rt.policies.get(x.branch) ?? (await policyFor(this.ctx, rec, this.ctx.projectOf(rec), bundle))
+    rt.policies.set(x.branch, policy)
+    return policy
   }
 
   /**
@@ -566,23 +588,5 @@ export class EvidenceRunner {
     rec.error = null
     await this.ctx.save(rec)
     return result
-  }
-
-  /** 관문의 정책: 프로젝트 설정, 묶음이 쓴 quality.json의 auto, 서버 보호, 그림자 실적 */
-  private async policy(
-    rec: WorkRecord,
-    project: ProjectRecord,
-    bundle: EvidenceBundle,
-  ): Promise<Policy> {
-    const { deps } = this.ctx
-    const conditions = await autoConditions(rec.worktree, bundle)
-    const server = await deps.gh.serverProtection(project.path, rec.base).catch(() => null)
-    const ledger = await deps.store.readLedger()
-    return {
-      auto_merge_enabled: project.settings.auto_merge,
-      conditions,
-      server,
-      track_record_ok: trackRecord(ledger, project.id, project.settings.min_shadow, versions(deps)),
-    }
   }
 }

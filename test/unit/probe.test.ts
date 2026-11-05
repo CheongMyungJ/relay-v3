@@ -10,6 +10,7 @@ import type {
   TestCase,
   TestStatus,
 } from '../../src/core/types.ts'
+import { fileTags } from '../../src/engine/probe.ts'
 import { probeErrors, probeProblems } from '../../src/main/works-probe.ts'
 
 function line(id: string, kind: LineKind, examples: string[]): ContractLine {
@@ -137,6 +138,32 @@ describe('probeVerdicts: 지킴 줄', () => {
     const [v] = probeVerdicts(contract(keep), other, tagged(['C2.1']))
     expect(v?.status).toBe('missing_evidence')
     expect(v?.examples[0]).toEqual({ id: 'C2.1', head: 'passed', base: 'missing' })
+  })
+})
+
+describe('fileTags: head의 시험 파일에서 이 계약의 태그', () => {
+  // 앞 Work가 머지한 시험(다른 계약 id를 글자 그대로 쓴 태그)과 같은 파일에 이 Work의 시험을 더한 경우
+  const text = [
+    "test('예전 동작 [old-work-a1b2:C2.1]', () => {})",
+    "test('새 동작 [w-1:C1.1]', () => {})",
+    'const T = "w-1"',
+    'test(`상수로 쓴 id [${T}:C3.1]`, () => {})',
+  ].join('\n')
+
+  test('계약 id를 글자 그대로 쓴 태그와 상수로 쓴 태그는 잡고, 다른 계약 id의 태그는 잡지 않는다', () => {
+    expect(fileTags(text, FILE, 'w-1').map((t) => t.name)).toEqual(['[w-1:C1.1]', '[w-1:C3.1]'])
+    expect(fileTags(text, FILE, 'w-2')).toEqual([])
+  })
+
+  test('남은 다른 계약의 태그 때문에 시험이 없는 지킴 줄을 돌려보내지 않는다(기준에서 그 파일을 불러오지 못해도)', () => {
+    const c = contract(line('C1', 'change', ['C1.1']), line('C2', 'keep', ['C2.1']))
+    const base = [tc(FILE, 'failed', { message: 'SyntaxError: no export parseMoney2' })]
+    const vs = probeVerdicts(c, base, fileTags(text, FILE, 'w-1'))
+    expect(vs.find((v) => v.line === 'C2')).toMatchObject({
+      status: 'missing_evidence',
+      examples: [{ id: 'C2.1', head: 'missing' }],
+    })
+    expect(vs.filter((v) => v.status === 'not_met')).toEqual([])
   })
 })
 

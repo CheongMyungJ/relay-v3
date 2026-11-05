@@ -51,6 +51,10 @@ export function spotsOf(rec: WorkRecord): Spot[] {
   return perUnit(rec) ? [{ branch: rec.branch, x: null }, ...exports] : exports
 }
 
+/** 단위 브랜치의 파일은 Work 브랜치를 함께 적는다(V22: 고침을 Work 브랜치에도 둔다) */
+const unitOf = (rec: WorkRecord, spot: Spot): { integration?: string } =>
+  spot.x?.unit ? { integration: rec.branch } : {}
+
 /** 되먹임을 미룬 까닭을 적은 때(head와 단위 브랜치의 끝): 같은 때에 같은 까닭을 다시 적지 않게 */
 function heldKey(head: string | null, tips: Tips): string | null {
   return head === null || Object.keys(tips).length === 0 ? head : `${head} ${JSON.stringify(tips)}`
@@ -146,13 +150,14 @@ export function checkReply(bundle: EvidenceBundle, head: string): Record<string,
 
 /**
  * relay_check의 답(V22): one_branch는 Work 브랜치의 답(checkReply), branch_per_unit은 통합 증거와 단위 브랜치마다(없는 단위
- * 브랜치는 missing)
+ * 브랜치는 missing). outside는 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치다(통합 증거의 not_on_work_branch)
  */
 export function checkReplies(
   rec: WorkRecord,
   bundles: Map<string, EvidenceBundle>,
   head: string,
   tips: Tips,
+  outside: string[] = [],
 ): Record<string, unknown> {
   const reply = (branch: string, at: string | null) => {
     const bundle = bundles.get(branch)
@@ -163,7 +168,11 @@ export function checkReplies(
   if (!perUnit(rec)) return reply(rec.branch, head)
   return {
     status: 'ok',
-    integration: { branch: rec.branch, ...reply(rec.branch, head) },
+    integration: {
+      branch: rec.branch,
+      ...reply(rec.branch, head),
+      ...(outside.length > 0 ? { not_on_work_branch: outside } : {}),
+    },
     exports: rec.exports.map((x) => ({
       unit: x.unit,
       branch: x.branch,
@@ -253,10 +262,7 @@ export class FeedbackDesk {
     const items = head === null ? [] : this.items(rec, head, tips)
     if (items.length === 0 || head === null || !resting()) return
     const since = rt.lastHumanInputAt === null ? Infinity : this.nowMs() - rt.lastHumanInputAt
-    const stop = this.blockedAll(
-      rec,
-      items.map((i) => i.e),
-    )
+    const stop = this.blockedAll(rec, head, tips)
     const reason: FeedbackHold | null =
       stop ?? (rt.draft ? 'draft' : since < this.quietMs ? 'human_input' : null)
     if (reason !== null) {
@@ -277,9 +283,19 @@ export class FeedbackDesk {
     await this.send(rec, items, 'relay')
   }
 
-  /** 자리들 가운데 하나라도 막으면 막는다(라운드 상한, 사람이 넘기지 않은 사람 몫의 올림) */
-  private blockedAll(rec: WorkRecord, bundles: EvidenceBundle[]): 'cap' | 'human_findings' | null {
-    const reasons = bundles.map((e) => blocked(rec, e))
+  /**
+   * 자리들 가운데 하나라도 막으면 막는다(라운드 상한, 사람이 넘기지 않은 사람 몫의 올림). 보낼 것이 없는 자리도 본다: 한
+   * 내보내기의 사람 몫 올림은 다른 자리(통합 증거 등)의 사실을 보내 세션이 커밋하면 사람이 보지 못할 수 있다
+   */
+  private blockedAll(
+    rec: WorkRecord,
+    head: string | null,
+    tips: Tips,
+  ): 'cap' | 'human_findings' | null {
+    const reasons = spotsOf(rec).map((spot) => {
+      const e = this.current(rec, spot, this.tip(spot, head, tips))
+      return e === null ? null : blocked(rec, e)
+    })
     return reasons.includes('cap')
       ? 'cap'
       : reasons.includes('human_findings')
@@ -348,7 +364,15 @@ export class FeedbackDesk {
       const path = store.feedbackPath(rec.id, n)
       await store.writeFileAtomic(
         path,
-        feedbackText({ n, head, workBranch: spot.branch, facts, findings, by }),
+        feedbackText({
+          n,
+          head,
+          workBranch: spot.branch,
+          ...unitOf(rec, spot),
+          facts,
+          findings,
+          by,
+        }),
       )
       const keys = [...facts.map((f) => f.key), ...findings.map(findingKey)]
       const round: FeedbackRound = {
@@ -382,11 +406,15 @@ export class FeedbackDesk {
     for (const line of lines) await this.ctx.tell(rec.id, line)
   }
 
-  /** [증거]의 되먹임 상태(그 자리의 지금 끝의 묶음으로). 자리를 주지 않으면 첫 자리(Work 브랜치) */
+  /**
+   * [증거]의 되먹임 상태(그 자리의 지금 끝의 묶음으로). 자리를 주지 않으면 첫 자리(Work 브랜치). 머지된 내보내기(V22)는 보는
+   * 자리가 아니다: 보낼 것도 넘길 지적도 없다
+   */
   view(rec: WorkRecord, spot: Spot | undefined = spotsOf(rec)[0]): FeedbackView {
     const rt = this.ctx.runtime(rec.id)
-    const at = spot === undefined ? null : this.tip(spot, rt.head, rt.tips)
-    const e = spot === undefined ? null : this.current(rec, spot, at)
+    const live = spot !== undefined && !(spot.x !== null && delivered(spot.x))
+    const at = live ? this.tip(spot, rt.head, rt.tips) : null
+    const e = live ? this.current(rec, spot, at) : null
     const sent = e === null ? [] : rec.feedback.sent.filter((r) => r.head === e.head)
     const keys = new Set(sent.flatMap((r) => r.keys))
     const findings: FeedbackView['findings'] = {}
@@ -409,7 +437,7 @@ export class FeedbackDesk {
       sent: sent.map((r) => ({ ...r, path: this.ctx.deps.store.feedbackPath(rec.id, r.n) })),
       findings,
       pending,
-      held: pending === 0 || e === null ? null : (blocked(rec, e) ?? typing),
+      held: pending === 0 || e === null ? null : (this.blockedAll(rec, rt.head, rt.tips) ?? typing),
     }
   }
 }

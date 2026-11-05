@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import {
+  containsTip,
   defaultBase,
   diffRaw,
   dirsOf,
@@ -98,6 +99,35 @@ describe('mergeBase', () => {
   test('-로 시작하는 ref는 막는다', async () => {
     const repo = await makeRepo({ files: { 'a.txt': '0\n' } })
     await expect(mergeBase(repo.dir, '--all', 'main')).rejects.toThrow('잘못된 ref')
+  })
+})
+
+describe('containsTip', () => {
+  const lines = (first: string, last: string) => `${first}\n2\n3\n4\n5\n6\n7\n${last}\n`
+
+  test('끝이 head의 조상이거나 옮겨 심은 커밋이라 head가 그 변경을 다 담으면 참, 더 고쳤거나 충돌하면 거짓', async () => {
+    const repo = await makeRepo({ files: { 'a.txt': lines('1', '8'), 'b.txt': 'b\n' } })
+    // Work 브랜치: 단위 둘의 변경(같은 파일의 다른 곳)
+    await repo.branch('work')
+    const csv = await repo.commit('csv', { 'a.txt': lines('one', '8') })
+    await repo.commit('money', { 'a.txt': lines('one', 'eight') })
+    // 단위 브랜치 money는 기준에서 그 변경만 옮겨 심었다
+    await repo.branch('money', 'main')
+    await repo.commit('money', { 'a.txt': lines('1', 'eight') })
+    expect(await containsTip(repo.dir, 'work', csv)).toBe(true)
+    expect(await containsTip(repo.dir, 'work', 'money')).toBe(true)
+    // 단위 브랜치에만 고침을 더함
+    await repo.commit('고침', { 'b.txt': 'fixed\n' })
+    expect(await containsTip(repo.dir, 'work', 'money')).toBe(false)
+    // Work 브랜치와 같은 곳을 다르게 고침(합칠 수 없음)
+    await repo.branch('clash', 'main')
+    await repo.commit('충돌', { 'a.txt': lines('ONE', '8') })
+    expect(await containsTip(repo.dir, 'work', 'clash')).toBe(false)
+  })
+
+  test('-로 시작하는 ref는 막는다', async () => {
+    const repo = await makeRepo({ files: { 'a.txt': '0\n' } })
+    await expect(containsTip(repo.dir, 'main', '--all')).rejects.toThrow('잘못된 ref')
   })
 })
 

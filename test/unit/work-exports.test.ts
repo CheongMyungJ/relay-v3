@@ -12,6 +12,7 @@ import {
   sameTips,
   tipOf,
 } from '../../src/main/works-types.ts'
+import { unitScope } from '../../src/main/works-review.ts'
 import { contract, C1, C2 } from '../support/gate.ts'
 
 const GATE = {
@@ -140,4 +141,21 @@ test('tipOf·sameTips: Work 브랜치는 head, 단위 브랜치는 그 끝(없�
   expect(sameTips({ a: 'x' }, { a: 'x' })).toBe(true)
   expect(sameTips({ a: 'x' }, { a: null })).toBe(false)
   expect(sameTips({ a: 'x' }, {})).toBe(false)
+})
+
+test('unitScope: 단위 브랜치의 리뷰어에게 채울 줄과 제 브랜치로 가는 다른 단위의 줄을 알린다(V30). Work 브랜치는 없음', () => {
+  const keep = { ...C1, id: 'C3', kind: 'keep' as const, examples: [] }
+  const c: Contract = { ...perUnitContract, lines: [...perUnitContract.lines, keep] }
+  const [csv, money] = planExports(record(), c)
+  const [scope] = unitScope(c, csv as never)
+  expect(scope).toContain('export of unit "csv" on branch relay/x-ab12--csv')
+  expect(scope).toContain(
+    'it must meet the lines of unit "csv" and the lines without a unit (C1, C3)',
+  )
+  expect(scope).toContain('The lines of the other units (C2 of money)')
+  expect(scope).toContain(
+    'a part of the request that no line of the contract covers is a request_gap',
+  )
+  expect(unitScope(c, money as never)[0]).toContain('(C2, C3)')
+  expect(unitScope(c, branchExport('relay/x-ab12'))).toEqual([])
 })

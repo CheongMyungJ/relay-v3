@@ -8,16 +8,19 @@
 // 남는다. head가 바뀌거나 계약이 바뀌거나 Work가 끝나면 지운다. 걸린 끝과 상자가 있는 동안은 쉬는 세션에 되먹임(V24)을
 // 보내지 않고, [취소]·[더 고치기] 뒤 다시 본다.
 
-import { openItems } from '../core/gate.ts'
+import { integrationFacts, openItems } from '../core/gate.ts'
 import { nextState } from '../core/work.ts'
 import type { EndInput, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
-import { missingFact, type EvidenceRunner } from './works-evidence.ts'
+import type { EvidenceRunner } from './works-evidence.ts'
 import {
   delivered,
   exportContract,
   isActive,
   measures,
+  missingFact,
+  outsideBranches,
+  outsideFact,
   perUnit,
   readTips,
   sameTips,
@@ -163,10 +166,11 @@ export class EndDesk {
   }
 
   /**
-   * 이 끝들의 내보내기 증거의 열린 것. one_branch는 그 묶음의 열린 것 그대로다. branch_per_unit은 통합 증거의 열린 것(리뷰
-   * 빼고, '통합 증거: '), 머지되지 않은 내보내기마다 '<단위>: '를 붙인 열린 것, 없는 단위 브랜치. 묶음이 없으면 null
+   * 이 끝들의 내보내기 증거의 열린 것. one_branch는 그 묶음의 열린 것 그대로다. branch_per_unit은 통합 증거의 열린 것(core
+   * integrationFacts: 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치와 리뷰를 뺀 묶음의 열린 것, '통합 증거: '), 머지되지 않은
+   * 내보내기마다 '<단위>: '를 붙인 열린 것, 없는 단위 브랜치. 묶음이 없으면 null
    */
-  private openOf(rec: WorkRecord, head: string, tips: Tips): string[] | null {
+  private async openOf(rec: WorkRecord, head: string, tips: Tips): Promise<string[] | null> {
     const rt = this.ctx.runtime(rec.id)
     if (!perUnit(rec)) {
       const b = rt.bundles.get(rec.branch)
@@ -174,7 +178,8 @@ export class EndDesk {
     }
     const whole = rt.bundles.get(rec.branch)
     if (!whole) return null
-    const out = openItems(whole, rt.contract, head, false).map((f) => `통합 증거: ${f}`)
+    const facts = (await outsideBranches(rec, head, tips)).map(outsideFact)
+    const out = integrationFacts({ evidence: whole, contract: rt.contract, head, facts })
     for (const x of rec.exports) {
       const tip = tipOf(x, head, tips)
       const b = rt.bundles.get(x.branch)
@@ -188,7 +193,7 @@ export class EndDesk {
 
   /** 이 끝들의 내보내기 증거로 정한다: 열린 것이 없으면 끝내고, 있으면 상자로 둔다 */
   private async decide(rec: WorkRecord, head: string, tips: Tips, how: How): Promise<PreparedEnd> {
-    const open = this.openOf(rec, head, tips)
+    const open = await this.openOf(rec, head, tips)
     if (open === null) throw new Error('증거가 없음: 끝내기를 다시 누르세요')
     if (open.length === 0) {
       await this.ctx.transition(rec, { type: 'ended' }, { how, head })
@@ -223,7 +228,7 @@ export class EndDesk {
     if (!isActive(rec.state)) return { head: null, ended: true, armed: false, open: [] }
     await this.sameHead(id, head)
     await this.checkTips(id, tips)
-    const open = this.openOf(rec, head, tips) ?? []
+    const open = (await this.openOf(rec, head, tips)) ?? []
     await this.ctx.transition(rec, { type: 'ended' }, { how: 'box', head, open: open.length })
     return { head, ended: true, armed: false, open }
   }

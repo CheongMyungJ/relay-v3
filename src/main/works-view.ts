@@ -46,7 +46,11 @@ export function workView(
     feedback: feedback.view(rec),
     probe,
     exports: units ? rec.exports.flatMap((x) => exportView(ctx, rec, x, feedback)) : [],
-    integration: units && evidence ? openItems(evidence, rt.contract, rt.head, false) : null,
+    // 통합 칸의 열린 것: 마지막 재기의 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치와 묶음의 열린 것(리뷰 빼고)
+    integration:
+      units && evidence
+        ? [...rt.outside, ...openItems(evidence, rt.contract, rt.head, false)]
+        : null,
   }
 }
 

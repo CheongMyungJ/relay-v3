@@ -1,5 +1,5 @@
 // git 읽기 (docs/m1-modules.md adapters/git.ts).
-// 레포를 바꾸지 않는다. 사용자 설정(diff.noprefix, color.ui 등)에 흔들리지 않게 옵션을 못 박는다.
+// 레포를 바꾸지 않는다(containsTip의 merge-tree는 트리 객체만 쓴다). 사용자 설정(diff.noprefix, color.ui 등)에 흔들리지 않게 옵션을 못 박는다.
 
 import { resolve } from 'node:path'
 import { git, gitBytes, GitError } from './exec.ts'
@@ -44,6 +44,28 @@ export async function mergeBase(repo: string, a: string, b: string): Promise<str
       throw new Error(`공통 조상이 없음: ${a}, ${b}`, { cause: e })
     }
     throw e
+  }
+}
+
+/**
+ * head가 tip의 변경을 모두 담나(V22: 단위 브랜치가 Work 브랜치에 있나). tip이 head의 조상이거나, tip을 head에 합쳐도 head의
+ * 트리가 그대로면(같은 변경을 옮겨 심은 커밋) 참. 합칠 수 없거나(충돌) git이 `merge-tree --write-tree`(2.38부터)를 모르면 거짓.
+ * merge-tree는 합친 트리 객체만 쓰고 ref와 작업 트리는 바꾸지 않는다
+ */
+export async function containsTip(repo: string, head: string, tip: string): Promise<boolean> {
+  checkRef(head)
+  checkRef(tip)
+  try {
+    await git(['merge-base', '--is-ancestor', tip, head], repo)
+    return true
+  } catch (e) {
+    if (!(e instanceof GitError && e.exit === 1)) throw e
+  }
+  try {
+    const [tree] = (await git(['merge-tree', '--write-tree', head, tip], repo)).split('\n')
+    return tree?.trim() === (await git(['rev-parse', `${head}^{tree}`], repo)).trim()
+  } catch {
+    return false
   }
 }
 

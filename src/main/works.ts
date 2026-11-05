@@ -38,6 +38,7 @@ import {
   delivered,
   isActive,
   measures,
+  outsideBranches,
   perUnit,
   readTips,
   tipOf,
@@ -135,6 +136,7 @@ export class Works implements WorkCtx {
         reviewRunning: false,
         head: null,
         tips: {},
+        outside: [],
         measuring: null,
         measuringAt: null,
         debounce: null,
@@ -419,7 +421,7 @@ export class Works implements WorkCtx {
       if (rt.measuring !== null || rt.pending) await rt.chain
       if (!this.evidence.measuredAll(rec, head, tips)) await this.evidence.run(rec.id, {})
     }
-    return checkReplies(rec, rt.bundles, head, tips)
+    return checkReplies(rec, rt.bundles, head, tips, await outsideBranches(rec, head, tips))
   }
 
   // ── 사람의 동작 ────────────────────────────────────────────────────────────

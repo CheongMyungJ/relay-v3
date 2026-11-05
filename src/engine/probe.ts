@@ -29,10 +29,11 @@ export interface ProbeOptions {
 }
 
 /**
- * 태그의 끝(`:C1.1]`). 계약 id가 든 시험 파일에서만 찾으므로, id를 상수로 쓴 꼴(`[${ID}:C1.1]`)도 잡는다. M2 평가의
- * relay3 쪽 끝 diff 가운데 태그를 쓴 152개 중 24개는 이 꼴의 태그만 썼다
+ * 태그(`[<계약 id>:C1.1]`)의 끝. 계약 id가 든 시험 파일에서만 찾으므로, id를 상수로 쓴 꼴(`[${ID}:C1.1]`)도 잡는다. M2 평가의
+ * relay3 쪽 끝 diff 가운데 태그를 쓴 152개 중 24개는 이 꼴의 태그만 썼다. 앞의 무리는 글자 그대로 쓴 계약 id다: 다른 계약의
+ * id면(같은 파일에 남은 앞 Work의 머지된 시험) 이 계약의 태그가 아니다
  */
-const TAG_TAIL = /:(C\d+\.\d+)\]/g
+const TAG_TAIL = /(?:\[([A-Za-z0-9][A-Za-z0-9._-]*))?:(C\d+\.\d+)\]/g
 
 /** 레포나 ref를 찾지 못하면 던진다(CheckInputError). 그 밖의 실패는 ran false와 note로 돌려준다 */
 export async function probeContract(o: ProbeOptions): Promise<ContractProbe> {
@@ -91,8 +92,8 @@ export async function probeContract(o: ProbeOptions): Promise<ContractProbe> {
 }
 
 /**
- * head의 얹을 경로 가운데 계약 id가 든 시험 파일에서 예시 태그를 찾는다. 태그 하나에 TestCase 하나(돌리지 않았다: file만
- * 본다). 지운 파일과 폴더(예시 자료 폴더)는 읽히지 않아 건너뛴다
+ * head의 얹을 경로 가운데 계약 id가 든 시험 파일에서 예시 태그를 찾는다(fileTags). 지운 파일과 폴더(예시 자료 폴더)는 읽히지
+ * 않아 건너뛴다
  */
 async function taggedTests(
   root: string,
@@ -103,10 +104,16 @@ async function taggedTests(
   const out: TestCase[] = []
   for (const path of paths) {
     const text = await showFile(root, head, path).catch(() => null)
-    if (text === null || !text.includes(contractId)) continue
-    const ids = new Set(Array.from(text.matchAll(TAG_TAIL), (m) => m[1] ?? ''))
-    for (const id of ids)
-      out.push({ name: exampleTag(contractId, id), file: path, status: 'passed' })
+    if (text !== null) out.push(...fileTags(text, path, contractId))
   }
   return out
+}
+
+/** 시험 파일 하나의 이 계약의 예시 태그. 태그 하나에 TestCase 하나(돌리지 않았다: file만 본다). 계약 id가 없는 파일은 없음 */
+export function fileTags(text: string, path: string, contractId: string): TestCase[] {
+  if (!text.includes(contractId)) return []
+  const ids = new Set<string>()
+  for (const m of text.matchAll(TAG_TAIL))
+    if ((m[1] ?? contractId) === contractId) ids.add(m[2] ?? '')
+  return [...ids].map((id) => ({ name: exampleTag(contractId, id), file: path, status: 'passed' }))
 }

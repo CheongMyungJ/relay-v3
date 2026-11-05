@@ -84,13 +84,14 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `commandRatchet(spec, base: string | null, head: string | null): RatchetResult` — 표준 출력의 마지막 숫자 줄. 못 읽으면 unknown.
 
 ### `src/core/gate.ts`
-- `gate(evidence: EvidenceBundle, contract: Contract | null, policy: Policy, head: string | null, whole?: Integration): GateResult` — V5. head는 지금 브랜치 끝의 SHA(모르면 null). whole은 단위 브랜치를 내보낼 때(V22)의 통합 증거 `{ evidence: EvidenceBundle | null; contract; head }`(Work 브랜치를 계약 전체로 잰 결정론 증거, 지금 Work 브랜치의 끝)다. 순서:
+- `gate(evidence: EvidenceBundle, contract: Contract | null, policy: Policy, head: string | null, whole?: Integration): GateResult` — V5. head는 지금 브랜치 끝의 SHA(모르면 null). whole은 단위 브랜치를 내보낼 때(V22)의 통합 증거 `{ evidence: EvidenceBundle | null; contract; head; facts?: string[] }`(Work 브랜치를 계약 전체로 잰 결정론 증거, 지금 Work 브랜치의 끝, 앱이 본 통합의 사실: 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치)다. 순서:
   1. `contract_change_requested` → recontract.
   2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe, 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 커밋된 예시 자료(`examples_file`, V27)가 없음('예시 자료 파일이 커밋되지 않음: <경로>')·다름('예시 자료가 승인본과 다름: C1.2 output (기대 10, 실제 8)', 차이는 셋까지)·읽지 못함(same이거나 null·없는 칸이면 사실이 아니다), 리뷰 status가 done이 아님, done인데 리뷰가 요청을 보지 않음(`review.request`가 참이 아님, V30이 V15를 넓힘: '리뷰가 요청을 보지 않음'), 리뷰 지적 중 올림인 것(review.ts `raises`, V26: structure/low와 raise가 없는 지적은 메모라 사실이 아니다), `missing`이 빈 배열이 아님, quality.from이 none.
-  3. 하나라도 있으면 human_merge, decisive는 첫 사실, reasons는 전부, condition null, shadow false. whole이 있으면 이어서 통합 증거의 열린 것(`openItems(…, false)`: 리뷰를 뺀 2의 사실. 앞에 '통합 증거: '를 붙이고, 묶음이 없으면 '통합 증거 없음')을 보고, 있으면 같은 꼴의 human_merge다.
+  3. 하나라도 있으면 human_merge, decisive는 첫 사실, reasons는 전부, condition null, shadow false. whole이 있으면 이어서 통합 증거의 열린 것(`integrationFacts(whole)`)을 보고, 있으면 같은 꼴의 human_merge다.
   4. 없으면 policy.conditions에서 처음 채운 조건(diff에 대한 술어: max_changed_lines, paths, no_new_dependencies, no_new_modules, require_all_lines_tested)을 찾는다. whole이 있으면 같은 조건을 Work 전체 diff(통합 증거)로도 채워야 한다(못 채운 까닭 앞에 'Work 전체'). 그래서 브랜치를 나눠도 한 diff로 낼 때보다 자동 조건을 쉽게 채우지 못한다. `hasRealLimit`이 거짓인 조건은 채우지 못한다. max_changed_lines는 `diff.binary`가 비어 있어야 채운다(바이너리는 줄 수로 크기를 잴 수 없다). 없으면 human_merge('채운 자동 조건 없음').
   5. 채웠으면: auto_merge_enabled, server(branch_protected && required_checks && (merge_queue || up_to_date_required)), track_record_ok[id] 셋이 모두 참이면 auto_merge_candidate(shadow false). 하나라도 거짓이면 human_merge이고 shadow true, decisive는 막은 것('프로젝트에서 자동 머지가 꺼져 있음' 등), condition은 그 id.
   - 결론은 엄격한 쪽으로만: 리뷰가 없거나 실패이거나 요청을 보지 않았으면 자동으로 가지 않는다. 올림의 갈래 이름(`RAISE_LABEL`): 예시와 시험 불일치, 보안, 계약 밖 변경, 구조, 요청과 어긋남(request_gap, V30).
+- `integrationFacts(w: Integration): string[]` — 통합 증거(V22)의 열린 것: `w.facts`와 리뷰를 뺀 묶음의 열린 것(`openItems(…, false)`)에 앞에 '통합 증거: '를 붙인다. 묶음이 없으면 맨 앞에 '통합 증거 없음'. gate와 앱의 [끝내기]가 같이 쓴다.
 - `openItems(evidence: EvidenceBundle, contract: Contract | null, head: string | null, review = true): string[]` — 열린 것(V25, 앱의 [끝내기]): 위 1의 계약 변경 요청(있으면 맨 앞)과 2의 사실 그대로다. gate와 같은 함수로 계산하고 새 판단은 없다. 4·5(자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적)와 리뷰 메모(올림이 아닌 지적, V26)는 넣지 않는다. review가 거짓이면 리뷰 사실(리뷰 없음, 올림 등)을 보지 않는다(V22의 통합 증거는 리뷰하지 않는다). 비면 [끝내기]가 상자 없이 끝낸다.
 
 ### `src/core/debt.ts`
@@ -112,6 +113,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 
 ### `src/adapters/git.ts`
 - `repoRoot(cwd)`, `revParse(repo, ref)`, `mergeBase(repo, a, b)`, `defaultBase(repo)`(origin/HEAD → origin/main → main → master 순으로 있는 것).
+- `containsTip(repo, head, tip): Promise<boolean>` — head가 tip의 변경을 모두 담나(V22: 단위 브랜치가 Work 브랜치에 있나). tip이 head의 조상이거나(`merge-base --is-ancestor`), tip을 head에 합쳐도 head의 트리가 그대로면(옮겨 심은 커밋, `merge-tree --write-tree`, git 2.38부터) 참. 충돌하거나 그 명령을 모르면 거짓. merge-tree는 트리 객체만 쓰고 ref는 바꾸지 않는다.
 - `diffRaw(repo, base, head): Promise<{ nameStatus: string; numstat: string; patch: string }>`.
 - `showFile(repo, sha, path): Promise<string | null>` — 없으면 null.
 - `lsTree(repo, sha): Promise<string[]>` — 파일 목록(`ls-tree -r --name-only -z`).
@@ -148,7 +150,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ### `src/engine/probe.ts` — 제출 때 기준 확인 (V28)
 - `probeContract(o: { repo: string; head: string; base: string; contract: Contract; home: string; lockWaitMs?: number }): Promise<ContractProbe>` — `ContractProbe { head; base; contract: contractHash(o.contract); ran: boolean; note: string | null; lines: LineVerdict[]; ms: number }`(core/types.ts).
   1. `resolveRefs`(레포나 ref를 찾지 못하면 CheckInputError를 던진다), `loadQuality`(V9). 수용 명령이 없으면 ran false('품질 기준에 수용 시험 명령이 없음').
-  2. `overlayPaths(readDiff(..), q)` 가운데 head에서 읽히고 계약 id가 든 파일에서 `:C<n>.<m>]`로 끝나는 태그를 찾는다(`[<id>:C1.1]`과 id를 상수로 쓴 `[${T}:C1.1]`). 시험으로 확인하는 바뀜·지킴 줄의 예시 태그가 없으면 ran false('바뀜·지킴 줄의 예시 태그를 단 시험 파일이 head에 없음').
+  2. `overlayPaths(readDiff(..), q)` 가운데 head에서 읽히고 계약 id가 든 파일에서 `:C<n>.<m>]`로 끝나는 태그를 찾는다(`fileTags(text, path, contractId): TestCase[]`, 순수: `[<id>:C1.1]`과 id를 상수로 쓴 `[${T}:C1.1]`. 다른 계약 id를 글자 그대로 쓴 태그는 같은 파일에 남은 앞 Work의 시험이라 세지 않는다). 시험으로 확인하는 바뀜·지킴 줄의 예시 태그가 없으면 ran false('바뀜·지킴 줄의 예시 태그를 단 시험 파일이 head에 없음').
   3. worktree 잠금(check와 같다, 못 잡으면 ran false), `workspace(..).overlaidBaseRun(acceptance, overlayPaths, [canonicalExamples(q, contract)])`를 한 번. 돌리지 못함, 시간 초과('시간 제한 N초를 넘음'), JUnit 없음은 ran false와 note.
   4. `probeVerdicts(contract, run.tests, tagged)`. ms는 부른 때부터.
 

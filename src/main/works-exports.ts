@@ -6,12 +6,13 @@
 // 내보내기로 재지 않았으면 잰다(push 뒤 GitHub가 PR을 늦게 갱신한 경우).
 
 import type { PrCheck } from '../adapters/gh.ts'
-import type { GateResult } from '../core/types.ts'
-import type { LedgerEntry } from '../core/ledger.ts'
+import type { EvidenceBundle, GateResult, Policy } from '../core/types.ts'
+import { trackRecord, type LedgerEntry } from '../core/ledger.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
+import { autoConditions } from './works-review.ts'
 import {
   exportContract,
   isActive,
@@ -82,6 +83,25 @@ export function ledgerEntry(
     ...(x.unit === null ? {} : { export: x.unit }),
     ...versions(deps),
     ...extra,
+  }
+}
+
+/** 관문의 정책: 프로젝트 설정, 묶음이 쓴 quality.json의 auto, 서버 보호, 그림자 실적 */
+export async function policyFor(
+  ctx: WorkCtx,
+  rec: WorkRecord,
+  project: ProjectRecord,
+  bundle: EvidenceBundle,
+): Promise<Policy> {
+  const { deps } = ctx
+  const conditions = await autoConditions(rec.worktree, bundle)
+  const server = await deps.gh.serverProtection(project.path, rec.base).catch(() => null)
+  const ledger = await deps.store.readLedger()
+  return {
+    auto_merge_enabled: project.settings.auto_merge,
+    conditions,
+    server,
+    track_record_ok: trackRecord(ledger, project.id, project.settings.min_shadow, versions(deps)),
   }
 }
 

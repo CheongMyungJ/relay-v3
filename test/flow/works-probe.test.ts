@@ -3,6 +3,9 @@
 // 계약 판(WorkView.probe)이 예시마다 기준 결과를 보인다. 시험은 예시 자료를 읽으므로 계약만 고쳐도 된다. 계약 바꾸기 요청도
 // 같다: 지킴 예시가 기준에서 실패하면 invalid이고 상태는 그대로다. 줄 규칙은 [단위] probe.test.ts, 기준 실행은 [흐름] probe.test.ts.
 import { expect, test } from 'vitest'
+import { repoRoot } from '../../src/adapters/git.ts'
+import { repoKey } from '../../src/adapters/store.ts'
+import { lockWorktrees } from '../../src/adapters/worktrees.ts'
 import { calc } from '../support/calc.ts'
 import { makeTempDir, runGit } from '../support/repo.ts'
 import { CONTRACT, flowKit, REQUEST, type Entry } from '../support/works-flow.ts'
@@ -111,4 +114,50 @@ test('시험을 먼저 커밋한 제출: 기준에서도 통과하는 바뀜 예
     ['request_contract_change', true, 1, 'number'],
   ])
   expect(await events('contract_invalid')).toHaveLength(2)
+})
+
+test('확인이 도는 사이 끊긴 제출은 뒤의 제출을 덮지 않는다: 늦게 끝난 확인은 cancelled이고 승인을 기다리는 것은 뒤의 계약이다', async () => {
+  await scenario([
+    { do: 'commit', message: '시험 먼저', files: { 'test/probe.test.js': PROBE_TESTS } },
+    { do: 'stop' },
+    { do: 'waitInput' },
+  ])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const project = await works.addProject(kit.repo.dir)
+  const { id } = await works.createWork({ project: project.id, request: REQUEST })
+  await until(
+    async () => (await kit.fake()).some((e) => e.type === 'hook' && e.event === 'Stop'),
+    '시험 커밋',
+  )
+  const rec = works.record(id)
+  const fill = (c: object) =>
+    JSON.parse(JSON.stringify(c).replaceAll('{contractId}', rec.contract_id)) as Entry
+  // 앞 제출(C1)은 태그 시험이 있어 기준 확인이 worktree 잠금을 기다린다(다른 Work의 check가 쓰는 중)
+  const release = await lockWorktrees(app.store.home, repoKey(await repoRoot(rec.worktree)), 5_000)
+  const first = new AbortController()
+  const older = works.onControl(id, 'submit_contract', fill(CONTRACT), first.signal)
+  // 사람이 Esc로 그 호출을 끊고, 세션이 태그 시험이 없는 예시로 고친 계약(C2)을 낸다: 확인 없이 승인을 기다린다
+  first.abort()
+  const revised = fill({
+    ...CONTRACT,
+    goal: '고친 계약',
+    lines: CONTRACT.lines.map((l) => ({ ...l, examples: [`${l.id}.9`] })),
+    examples: [
+      { id: 'C1.9', input: [20, 0, 10], output: 10 },
+      { id: 'C2.9', input: [1, 1], output: 2 },
+    ],
+  })
+  const newer = works.onControl(id, 'submit_contract', revised, new AbortController().signal)
+  await until(
+    () => works.view(id).pendingContract?.goal === '고친 계약',
+    '고친 계약이 승인을 기다림',
+  )
+  await release()
+  expect(await older).toEqual({ status: 'cancelled' })
+  expect(works.view(id)).toMatchObject({ state: 'awaiting_approval' })
+  expect(works.view(id).pendingContract?.goal).toBe('고친 계약')
+  // 뒤의 호출이 그대로 사람의 답을 받는다
+  await works.approveContract(id)
+  expect(await newer).toMatchObject({ status: 'approved', contract: { goal: '고친 계약' } })
 })

@@ -375,6 +375,8 @@ export interface Integration {
   evidence: EvidenceBundle | null
   contract: Contract | null
   head: string | null
+  /** 앱이 본 통합의 사실(커밋이 Work 브랜치에 다 있지 않은 단위 브랜치). 통합 증거의 열린 것이다 */
+  facts?: string[]
 }
 
 export interface GateResult {

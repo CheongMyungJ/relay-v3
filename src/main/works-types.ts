@@ -3,8 +3,8 @@
 // 화면(works-view.ts)을 나눴다. 이 파일의 WorkCtx로 Works를 본다. 모두가 읽는 Work의 head(Work 브랜치의 끝, V21)와 재는
 // 자리(V22: 내보내기와 통합 증거)도 여기에 둔다. Electron을 모른다.
 
-import { revParse } from '../adapters/git.ts'
-import { sliceContract, unitBranch, unitsOf } from '../core/contract.ts'
+import { containsTip, revParse } from '../adapters/git.ts'
+import { contractHash, sliceContract, unitBranch, unitsOf } from '../core/contract.ts'
 import type { Contract, EvidenceBundle, Policy } from '../core/types.ts'
 import type { SessionState, WorkEvent } from '../core/work.ts'
 import type { HookEvent } from '../core/instructions.ts'
@@ -100,6 +100,8 @@ export interface Runtime {
   head: string | null
   /** 단위 브랜치(V22)의 끝(마지막으로 읽은 것). 브랜치가 없으면 null */
   tips: Tips
+  /** 마지막 재기에서 커밋이 Work 브랜치에 다 있지 않던 단위 브랜치의 사실(V22, 화면의 통합 칸) */
+  outside: string[]
   /** 지금 재고 있는 head */
   measuring: string | null
   /** 지금 재고 있는 자리(브랜치) */
@@ -270,6 +272,14 @@ export function contractFile(x: Pick<ExportRecord, 'unit'>): WorkFile {
   return x.unit === null ? 'contract.json' : `contract.${x.unit}.json`
 }
 
+/** 이 계약으로 만든 묶음인가(계약이 없으면 계약 없이 만든 묶음). 관문의 '증거를 만든 뒤 계약이 바뀜'과 같은 견줌이다 */
+export function sameContract(e: EvidenceBundle, c: Contract | null): boolean {
+  return c === null ? e.contract === null : e.contract?.hash === contractHash(c)
+}
+
+/** 선언한 단위 브랜치가 없는 내보내기의 사실(V22). [끝내기]의 열린 것이기도 하다 */
+export const missingFact = (x: ExportRecord): string => `단위 브랜치 없음: ${x.branch}`
+
 /** 머지된 내보내기는 다 갔다(V22): 다시 재지 않고 [끝내기]의 열린 것에 넣지 않는다 */
 export const delivered = (x: ExportRecord): boolean => x.pr?.state === 'MERGED'
 
@@ -278,6 +288,28 @@ export async function readTips(rec: WorkRecord): Promise<Tips> {
   const out: Tips = {}
   for (const x of rec.exports)
     if (x.unit !== null) out[x.branch] = await refHead(rec.worktree, x.branch).catch(() => null)
+  return out
+}
+
+/** 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치의 사실(V22, 통합 증거의 열린 것) */
+export const outsideFact = (branch: string): string =>
+  `단위 브랜치의 커밋이 Work 브랜치에 없음: ${branch}`
+
+/**
+ * 머지되지 않았고 있는 단위 브랜치 가운데 그 끝의 변경이 Work 브랜치의 끝(head)에 다 있지 않은 것(V22). 통합 증거는 그 커밋을
+ * 재지 않았다: Work 브랜치가 통합 브랜치라는 약속이 깨졌다. 확인하지 못하면 없는 것으로 본다(엄격한 쪽)
+ */
+export async function outsideBranches(
+  rec: WorkRecord,
+  head: string,
+  tips: Tips,
+): Promise<string[]> {
+  const out: string[] = []
+  for (const x of rec.exports) {
+    const tip = tipOf(x, head, tips)
+    if (x.unit === null || delivered(x) || tip === null) continue
+    if (!(await containsTip(rec.worktree, head, tip).catch(() => false))) out.push(x.branch)
+  }
   return out
 }
 

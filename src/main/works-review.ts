@@ -2,16 +2,16 @@
 // 파일은 리뷰를 부르고 묶음에 붙인다: 기본 구현(claudeReview: 새 맥락의 읽기 전용 claude -p), 내보내기의 리뷰(같은 head·
 // 계약의 끝난 리뷰를 다시 씀, 건너뜀), 미리 리뷰(세션이 쉬고 증거가 리뷰 준비인 head. 내보내기마다 4번까지: 처음 1번과
 // 되먹임 라운드 상한 3, works-feedback.ts PREPARED_MAX). 리뷰는 내보내기(V22: Work 브랜치 하나, 또는 단위 브랜치마다 계약의
-// 조각)의 (head, 계약 hash, 프롬프트 판)에 붙는다. 단위 브랜치의 리뷰어에게는 증거 요약에 그 범위를 알린다(다른 단위는 제
-// 브랜치로 간다). 리뷰마다 AbortController를 따로 두고, 읽은 그 브랜치의 끝이나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는
-// Runtime.abort가 끊는다. 리뷰어는
-// request.md를 받고, 받았으면 리뷰 결과에 request: true를 붙인다(V30. 없으면 관문이 '리뷰가 요청을 보지 않음'으로 사람
-// 머지). 리뷰 결과 가운데 세션 몫은 works-feedback.ts가 쉬는 세션에 보낸다(V24).
+// 조각)의 (head, 계약 hash, 프롬프트 판)에 붙는다. 단위 브랜치의 리뷰어는 승인된 계약 전체를 받고, 증거 요약에 그 범위를
+// 알린다(채울 줄, 제 브랜치로 가는 다른 단위의 줄). 리뷰마다 AbortController를 따로 두고, 읽은 그 브랜치의 끝이나 계약이
+// 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰어는 request.md를 받고, 받았으면 리뷰 결과에 request:
+// true를 붙인다(V30. 없으면 관문이 '리뷰가 요청을 보지 않음'으로 사람 머지). 리뷰 결과 가운데 세션 몫은 works-feedback.ts가
+// 쉬는 세션에 보낸다(V24).
 
 import { claudeJson } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
 import { showFile } from '../adapters/git.ts'
-import { contractHash, sliceContract, unitsOf } from '../core/contract.ts'
+import { contractHash, sliceContract } from '../core/contract.ts'
 import { gate } from '../core/gate.ts'
 import { parseQuality } from '../core/quality.ts'
 import {
@@ -58,12 +58,19 @@ export interface ReviewJob {
   whole: Integration | undefined
 }
 
-/** 단위 브랜치의 리뷰어에게 주는 범위(영어, 증거 요약의 한 줄): 다른 단위는 제 브랜치로 가므로 이 diff에 없다 */
+/**
+ * 단위 브랜치의 리뷰어에게 주는 범위(영어, 증거 요약의 한 줄, V22·V30). 리뷰어는 승인된 계약 전체를 받는다(m2.1-design 11절):
+ * 이 내보내기가 채울 줄(그 단위와 단위가 없는 줄)과 제 브랜치로 가는 다른 단위의 줄을 가른다. 요청 가운데 다른 단위의 줄이
+ * 다루는 몫만 이 diff의 빈틈이 아니고, 어느 줄도 다루지 않는 몫은 request_gap이다
+ */
 export function unitScope(contract: Contract, x: ExportRecord): string[] {
   if (x.unit === null) return []
-  const others = unitsOf(contract).filter((u) => u !== x.unit)
+  const own = sliceContract(contract, x.unit).lines.map((l) => l.id)
+  const others = contract.lines
+    .filter((l) => l.unit !== undefined && l.unit !== x.unit)
+    .map((l) => `${l.id} of ${l.unit ?? ''}`)
   return [
-    `scope: this change is the export of unit "${x.unit}" on branch ${x.branch}. The contract above is the part of the approved contract for this unit (its lines and the lines without a unit). The other units (${others.join(', ') || 'none'}) are exported on their own branches: the parts of the request that belong to them are not in this diff and are not a gap of it.`,
+    `scope: this diff is the export of unit "${x.unit}" on branch ${x.branch}. Of the contract above, it must meet the lines of unit "${x.unit}" and the lines without a unit (${own.join(', ')}); a change for a line of another unit is out of contract here. The lines of the other units (${others.join(', ') || 'none'}) are delivered on their own branches: a part of the request that those lines cover is not a gap of this diff, but a part of the request that no line of the contract covers is a request_gap.`,
   ]
 }
 
@@ -172,6 +179,25 @@ export class ReviewDesk {
     whole: Integration | undefined,
   ): Promise<boolean> {
     if (!this.preparable(rec, x, bundle, head)) return false
+    const conditions = await autoConditions(rec.worktree, bundle)
+    const contract = exportContract(this.ctx.runtime(rec.id), x)
+    return this.needed(project, contract, bundle, conditions, whole)
+  }
+
+  /**
+   * 'auto_only'에서 건너뛴 내보내기 리뷰가 이제 필요한가(V22): 그 건너뜀은 그때의 통합 증거로 정했다. 단위 브랜치가 그대로여도
+   * 통합 증거가 바뀌어 리뷰가 됐다고 친 관문이 자동 조건을 채우면 그 결정은 낡았다. one_branch의 건너뜀은 묶음만으로 정해져
+   * 낡지 않는다. 평가에서 리뷰를 뺀 쪽은 늘 건너뛴다
+   */
+  async staleSkip(
+    rec: WorkRecord,
+    x: ExportRecord,
+    project: ProjectRecord,
+    bundle: EvidenceBundle,
+    whole: Integration | undefined,
+  ): Promise<boolean> {
+    if (whole === undefined || bundle.review?.status !== 'skipped') return false
+    if (this.ctx.deps.reviewDisabled === true) return false
     const conditions = await autoConditions(rec.worktree, bundle)
     const contract = exportContract(this.ctx.runtime(rec.id), x)
     return this.needed(project, contract, bundle, conditions, whole)
@@ -302,7 +328,8 @@ export class ReviewDesk {
         ? null
         : await this.ctx.deps.review({
             cwd: rec.worktree,
-            contract,
+            // 단위 브랜치의 리뷰어도 승인된 계약 전체를 받는다(V30). 리뷰는 조각의 hash에 붙는다
+            contract: x.unit !== null && rt.contract ? rt.contract : contract,
             request,
             diffStat,
             diff,

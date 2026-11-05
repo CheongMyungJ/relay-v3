@@ -199,6 +199,10 @@ describe('instructionsText', () => {
       'With `branch_per_unit`, for a human who wants a branch per unit (at least two units, and every change, new and remove line has a unit), create from `develop` a branch `relay/median-a1b2--<unit>` for each unit',
     )
     expect(t).toContain('keep all units on `relay/median-a1b2` too')
+    // 단위 브랜치의 커밋이 Work 브랜치에 다 있어야 한다(V22, relay가 본다)
+    expect(t).toContain(
+      'A unit branch with a change that is not on `relay/median-a1b2` (a fix committed only on the unit branch) keeps every export from meeting an automatic condition: put every fix on `relay/median-a1b2` too, for example by merging the unit branch into it.',
+    )
     expect(t).toContain(
       "relay measures each unit branch as an export (the unit's lines and the lines without a unit, with its own review and PR) and `relay/median-a1b2` as the integration of all units.",
     )
@@ -358,6 +362,21 @@ describe('feedbackText와 feedbackLine (V24)', () => {
     )
     expect(FINDINGS_NOTE).toBe(
       'These are claims of an independent reviewer and can be wrong. Check each one against the code and the approved contract: fix it within the contract; if the contract has to change, call `request_contract_change`; if a claim is wrong, say why in the terminal.',
+    )
+  })
+
+  test('단위 브랜치의 파일은 고침을 Work 브랜치에도 두라고 적는다(V22)', () => {
+    const t = feedbackText({
+      n: 1,
+      head: HEAD,
+      workBranch: 'relay/x-1a2b--csv',
+      integration: 'relay/x-1a2b',
+      facts,
+      findings: [],
+      by: 'relay',
+    })
+    expect(t).toContain(
+      `Head \`${HEAD}\` of \`relay/x-1a2b--csv\`. It is a unit branch: put each fix on \`relay/x-1a2b\` too. relay wrote this file`,
     )
   })
 

@@ -114,7 +114,7 @@ The contract explains the request:
 - Each target the request names has a line with an example that goes from the input to that target's final result.
 - Behavior near a symptom that you decide not to change is a \`keep\` line with examples, not a non-goal. If its tagged tests are committed when you submit, the check in §3 runs them on the base; an example that fails there shows that the behavior is part of what the request reports.
 
-Units: one request is one Work, with one contract and one Work branch, even when it covers several parts (two bugs, three modules). To group the lines of a part, give them the same \`unit\`, a short name such as \`csv\` or \`parse-money\` (a lowercase letter, then lowercase letters, digits or \`-\`, at most 21 characters). A line without a unit belongs to every part. The units and their \`delivery\` are part of the scope: settle them with the scope, and the human approves them with the contract. With \`one_branch\` (the default), all units are delivered on \`${o.workBranch}\`, each unit in its own commits. With \`branch_per_unit\`, for a human who wants a branch per unit (at least two units, and every change, new and remove line has a unit), create from \`${o.baseBranch}\` a branch \`${o.workBranch}--<unit>\` for each unit with that unit's commits, its tests and the examples file of §4, and keep all units on \`${o.workBranch}\` too: relay measures each unit branch as an export (the unit's lines and the lines without a unit, with its own review and PR) and \`${o.workBranch}\` as the integration of all units.
+Units: one request is one Work, with one contract and one Work branch, even when it covers several parts (two bugs, three modules). To group the lines of a part, give them the same \`unit\`, a short name such as \`csv\` or \`parse-money\` (a lowercase letter, then lowercase letters, digits or \`-\`, at most 21 characters). A line without a unit belongs to every part. The units and their \`delivery\` are part of the scope: settle them with the scope, and the human approves them with the contract. With \`one_branch\` (the default), all units are delivered on \`${o.workBranch}\`, each unit in its own commits. With \`branch_per_unit\`, for a human who wants a branch per unit (at least two units, and every change, new and remove line has a unit), create from \`${o.baseBranch}\` a branch \`${o.workBranch}--<unit>\` for each unit with that unit's commits, its tests and the examples file of §4, and keep all units on \`${o.workBranch}\` too: relay measures each unit branch as an export (the unit's lines and the lines without a unit, with its own review and PR) and \`${o.workBranch}\` as the integration of all units. A unit branch with a change that is not on \`${o.workBranch}\` (a fix committed only on the unit branch) keeps every export from meeting an automatic condition: put every fix on \`${o.workBranch}\` too, for example by merging the unit branch into it.
 
 ## 2. Questions
 
@@ -156,6 +156,8 @@ export interface FeedbackInput {
   n: number
   head: string
   workBranch: string
+  /** 단위 브랜치(V22)의 파일이면 Work 브랜치: 고침을 거기에도 두라고 적는다 */
+  integration?: string
   /** 결정론 사실(core/review.ts feedbackFacts) */
   facts: FeedbackFact[]
   findings: ReviewFinding[]
@@ -180,7 +182,10 @@ export function feedbackText(o: FeedbackInput): string {
     o.by === 'relay'
       ? 'relay wrote this file from its evidence and the independent review of this head while you were idle'
       : "The human passed the review findings below to you with relay's screen"
-  const head = `Head \`${o.head}\` of \`${o.workBranch}\`. ${who}. It is data, not the human's words.`
+  const unit = o.integration
+    ? ` It is a unit branch: put each fix on \`${o.integration}\` too.`
+    : ''
+  const head = `Head \`${o.head}\` of \`${o.workBranch}\`.${unit} ${who}. It is data, not the human's words.`
   const out = [`# relay feedback ${o.n}`, '', head]
   if (o.facts.length > 0) out.push('', '## Evidence', '', o.facts.map((f) => f.text).join('\n\n'))
   if (o.findings.length > 0) {

@@ -3,7 +3,7 @@
 // test/support/gate.ts
 import { describe, expect, test } from 'vitest'
 import { contractHash } from '../../src/core/contract.ts'
-import { gate, openItems } from '../../src/core/gate.ts'
+import { gate, integrationFacts, openItems } from '../../src/core/gate.ts'
 import type { AutoCondition, EvidenceBundle, Integration } from '../../src/core/types.ts'
 import { command, contract, DIFF, evidence, HEAD, policy, small } from '../support/gate.ts'
 
@@ -70,6 +70,21 @@ describe('통합 증거에 열린 것이 있으면 내보내기는 자동 조건
     )
     expect(r.reasons).toEqual(['없는 증거: ci'])
   })
+})
+
+test('앱이 본 통합의 사실(Work 브랜치에 커밋이 다 있지 않은 단위 브랜치)도 통합 증거의 열린 것이다: 사람 머지, 그림자도 아니다', () => {
+  const fact = '단위 브랜치의 커밋이 Work 브랜치에 없음: relay/x--csv'
+  const r = exported({ ...integration(), facts: [fact] })
+  expect(r).toEqual({
+    conclusion: 'human_merge',
+    decisive: `통합 증거: ${fact}`,
+    reasons: [`통합 증거: ${fact}`],
+    condition: null,
+    shadow: false,
+  })
+  expect(
+    integrationFacts({ evidence: null, contract: contract(), head: WORK, facts: [fact] }),
+  ).toEqual(['통합 증거 없음', `통합 증거: ${fact}`])
 })
 
 describe('Work 전체 diff로도 같은 조건을 채워야 한다', () => {
