@@ -2,8 +2,16 @@
 // 리뷰는 막지 않고 올리기만 한다: 지적의 raise(예시와 시험 불일치, 보안, 계약 밖 변경, 구조)만 관문에 들어간다.
 // 프롬프트는 모델이 읽으므로 영어다. 리뷰·시험을 고치라는 지시를 세션에 넣지 않는다(V4, V8).
 
+import { exampleValueText } from './contract.ts'
 import { err, ok, type Result } from './result.ts'
-import type { Contract, EvidenceBundle, LineStatus, RaiseReason, ReviewFinding } from './types.ts'
+import type {
+  Contract,
+  EvidenceBundle,
+  ExamplesFileCheck,
+  LineStatus,
+  RaiseReason,
+  ReviewFinding,
+} from './types.ts'
 
 const SEVERITIES = ['high', 'medium', 'low'] as const
 const RAISES: readonly RaiseReason[] = [
@@ -72,7 +80,7 @@ export function reviewPrompt(o: {
 
 The change was made under the approved contract below. relay has already run the repository's commands and judged the contract lines from acceptance tests tagged like \`${tag}\` (contract id and example id). Look for what those checks cannot see:
 
-1. \`example_test_mismatch\`: a tagged test does not check its approved example (other input, a weaker assertion, other output or error), or an example has no test that really checks it.
+1. \`example_test_mismatch\`: a tagged test does not check its approved example (other input, a weaker assertion, other output or error), or an example has no test that really checks it. relay writes the approved examples to the examples file (see "examples file" in the evidence summary) from the approved contract, and the tests are meant to read the examples from that file. A tagged test that hard-codes example values instead of reading them from the file is also a mismatch.
 2. \`structure\`: structure and boundary values the tests do not cover (edge values, empty input, errors, cleanup), or a structural change that the contract does not call for.
 3. \`out_of_contract\`: behavior changed outside the contract's lines, or work listed in its non-goals.
 4. \`security\`: injection, path traversal, leaked secrets, unsafe shell or eval, weakened checks.
@@ -119,6 +127,7 @@ export function evidenceFacts(e: Omit<EvidenceBundle, 'review'>): string[] {
       .map(([st, of]) => `${st} ${of.map((l) => l.line).join(' ')}`)
     out.push(`contract lines: ${counts.join('; ') || 'none'}`)
   }
+  if (e.examples_file) out.push(examplesFileFact(e.examples_file))
   for (const r of e.ratchets)
     out.push(
       `ratchet ${r.id}: ${r.status}${r.base !== undefined && r.head !== undefined ? ` (${r.base} -> ${r.head})` : ''}`,
@@ -130,6 +139,24 @@ export function evidenceFacts(e: Omit<EvidenceBundle, 'review'>): string[] {
     missing.unshift('quality.json')
   if (missing.length > 0) out.push(`missing evidence: ${missing.join(', ')}`)
   return out
+}
+
+/** 커밋된 예시 자료(V27). 다르면 어느 예시의 어느 칸이 어떻게 다른지(앞의 셋) */
+function examplesFileFact(f: ExamplesFileCheck): string {
+  const at = `examples file ${f.path}`
+  if (f.status === 'same') return `${at}: same as the approved examples`
+  if (f.status === 'absent') return `${at}: not committed`
+  if (f.status !== 'differs') return `${at}: unreadable`
+  const value = (v: unknown) => (v === undefined ? 'nothing' : exampleValueText(v))
+  const items = f.diffs.slice(0, 3).map((d) => {
+    if (d.field !== undefined)
+      return `${d.id} ${d.field} (expected ${value(d.expected)}, found ${value(d.found)})`
+    if (d.found === undefined) return `${d.id} missing`
+    if (d.expected === undefined) return `${d.id} not in the approved examples`
+    return `${d.id} (expected ${value(d.expected)}, found ${value(d.found)})`
+  })
+  const more = f.diffs.length > 3 ? ` and ${f.diffs.length - 3} more` : ''
+  return `${at}: differs from the approved examples: ${items.join('; ')}${more}`
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>

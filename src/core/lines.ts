@@ -235,19 +235,6 @@ export function judgeLines(
 }
 
 /**
- * 커밋된 예시 자료가 승인된 예시와 다르면(checkExamplesFile의 differs) 그 예시를 쓰는
- * 시험 줄은 통과해도 못 미침이다. 시험이 바꾼 자료를 읽어 통과했을 수 있다.
- */
-export function applyExampleMismatch(verdicts: LineVerdict[], differs: string[]): LineVerdict[] {
-  if (differs.length === 0) return verdicts
-  return verdicts.map((v) => {
-    const bad = v.examples.map((e) => e.id).filter((id) => differs.includes(id))
-    if (bad.length === 0 || v.status === 'human' || v.status === 'observe') return v
-    return { ...v, status: 'not_met', detail: `예시 자료가 승인된 예시와 다름: ${bad.join(', ')}` }
-  })
-}
-
-/**
  * 바뀜 줄의 base 실행을 두 번 돌렸을 때 합친다(V7을 base 실패에도). 단언 실패는 두 번 모두
  * 실패해야 실패로 남는다. 한 번이라도 통과했으면 통과로 본다(우연한 실패를 증거로 쓰지 않는다).
  */

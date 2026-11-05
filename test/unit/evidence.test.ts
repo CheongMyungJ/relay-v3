@@ -79,6 +79,36 @@ describe('요약', () => {
     expect(summarize(evidence({ lines: [] }))).toContain('줄 판정: 줄 없음')
   })
 
+  test('예시 자료(V27)는 줄 판정 다음 한 줄, 다르면 다른 예시 id', () => {
+    const path = '.relay/examples/w1.json'
+    const line = (examples_file: EvidenceBundle['examples_file']) =>
+      summarize(evidence({ examples_file })).filter((l) => l.startsWith('예시 자료'))
+    expect(line({ path, status: 'same', diffs: [] })).toEqual([
+      '예시 자료 .relay/examples/w1.json: 승인본과 같음',
+    ])
+    expect(line({ path, status: 'absent', diffs: [] })).toEqual([
+      '예시 자료 .relay/examples/w1.json: 커밋되지 않음',
+    ])
+    expect(line({ path, status: 'unreadable', diffs: [] })).toEqual([
+      '예시 자료 .relay/examples/w1.json: 읽지 못함',
+    ])
+    const diffs = [
+      { id: 'C1.1', field: 'input', expected: 1, found: 2 },
+      { id: 'C1.1', field: 'output', expected: 1 },
+      { id: 'C2.1', found: 3 },
+    ]
+    expect(line({ path, status: 'differs', diffs })).toEqual([
+      '예시 자료 .relay/examples/w1.json: 승인본과 다름 (C1.1, C2.1)',
+    ])
+    expect(line(null)).toEqual([])
+    const all = summarize(
+      evidence({ lines: [], examples_file: { path, status: 'same', diffs: [] } }),
+    )
+    expect(all.indexOf('줄 판정: 줄 없음') + 1).toBe(
+      all.indexOf(`예시 자료 ${path}: 승인본과 같음`),
+    )
+  })
+
   test('래칫마다 상태와 detail을 쓴다', () => {
     const ratchets = [
       { id: 'tests', status: 'worse' as const, base: 3, head: 2, detail: '시험 수 3 → 2' },

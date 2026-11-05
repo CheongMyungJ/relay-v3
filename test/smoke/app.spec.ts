@@ -82,8 +82,8 @@ const SCENARIO = {
       message: 'clamp 고침',
       files: {
         'src/calc.js': calc('hi'),
+        // 예시 자료는 앱이 승인 때 worktree에 쓴 것을 함께 커밋한다(V27)
         'test/calc.test.js': TESTS_FIXED,
-        '.relay/examples/{contractId}.json': '{ "C1.1": { "input": [15, 0, 10], "output": 10 } }\n',
       },
     },
     { do: 'print', text: '커밋했습니다. PR을 열까요? (Enter)' },

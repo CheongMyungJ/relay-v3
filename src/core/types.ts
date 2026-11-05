@@ -222,6 +222,31 @@ export interface LineVerdict {
 
 export type GroundingCheck = { line: string; ground: Grounding; ok: boolean; detail: string }
 
+// ── 예시 자료 (V27) ─────────────────────────────────────────────────────────
+
+/**
+ * 커밋된 예시 자료와 승인본(앱이 계약에서 쓴 정규 파일)의 차이 하나. field가 있으면 그 예시의 한 칸(input, output, error,
+ * note, 또는 더 붙은 칸)이 다르다. 없으면 예시가 통째로 다르다: found가 없으면 파일에 없는 예시, expected가 없으면 승인본에 없는
+ * 예시다. 없는 쪽의 값은 칸을 비운다
+ */
+export interface ExampleFileDiff {
+  id: string
+  field?: string
+  expected?: unknown
+  found?: unknown
+}
+
+/** head에 커밋된 예시 자료(examples_dir/<계약 id>.json)를 승인본과 값으로 견준 결과 */
+export interface ExamplesFileCheck {
+  /** 레포 기준 경로 */
+  path: string
+  /** absent: 커밋되지 않음, unreadable: JSON이 아니거나 예시 id를 열쇠로 하는 객체가 아님 */
+  status: 'same' | 'absent' | 'differs' | 'unreadable'
+  diffs: ExampleFileDiff[]
+  /** unreadable의 까닭 */
+  error?: string
+}
+
 // ── 리뷰 (M2) ───────────────────────────────────────────────────────────────
 
 export type RaiseReason = 'example_test_mismatch' | 'security' | 'out_of_contract' | 'structure'
@@ -249,6 +274,10 @@ export interface EvidenceBundle {
   contract: { id: string; hash: string } | null
   commands: CommandEvidence[]
   lines: LineVerdict[] | null
+  /**
+   * 커밋된 예시 자료를 승인본과 견준 것(V27). 계약·품질 기준이 없거나 계약에 예시가 없으면 null. V27 앞의 묶음에는 칸이 없다
+   */
+  examples_file?: ExamplesFileCheck | null
   groundings: GroundingCheck[] | null
   ratchets: RatchetResult[]
   signals: Signal[]

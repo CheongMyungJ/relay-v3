@@ -1,7 +1,15 @@
-// 계약: 모양 검사, 근거 확인, 예시 태그, 예시 자료 확인.
+// 계약: 모양 검사, 근거 확인, 예시 태그, 예시 자료(정규 파일과 견줌).
 import { qualityHash } from './quality.ts'
 import { err, ok, type Result } from './result.ts'
-import type { Contract, ContractLine, Example, Grounding, LineKind } from './types.ts'
+import type {
+  Contract,
+  ContractLine,
+  Example,
+  ExampleFileDiff,
+  ExamplesFileCheck,
+  Grounding,
+  LineKind,
+} from './types.ts'
 
 // ── 모양 검사 도구 (quality.ts와 같은 방식) ────────────────────────────────────
 
@@ -342,41 +350,103 @@ function stableJson(v: unknown): string {
   return JSON.stringify(v) ?? 'null'
 }
 
-// ── 예시 자료 (examples_dir/<계약 id>.json) ──────────────────────────────────
+// ── 예시 자료 (examples_dir/<계약 id>.json, V27) ─────────────────────────────
+// 앱이 계약에서 정규 꼴의 파일을 쓰고(제출 때 초안, 승인과 받아들인 계약 바꾸기 때 승인본), 수용 시험을 그 파일을 얹어
+// 돌린다. 세션은 그 파일을 커밋한다. head에 커밋된 파일은 승인본과 값으로 견준다.
+
+const EXAMPLE_FIELDS = ['input', 'output', 'error', 'note'] as const
+
+/** 예시 id의 번호 차례(C1.2가 C1.10보다 앞) */
+function exampleOrder(a: string, b: string): number {
+  const num = (id: string) => (/^C(\d+)\.(\d+)$/.exec(id) ?? []).slice(1).map(Number)
+  const [x, y] = [num(a), num(b)]
+  return (x[0] ?? 0) - (y[0] ?? 0) || (x[1] ?? 0) - (y[1] ?? 0) || (a < b ? -1 : a > b ? 1 : 0)
+}
+
+/** 값 속 객체의 열쇠를 글자 차례로. fromEntries는 `__proto__` 열쇠도 제 칸으로 둔다 */
+function sortKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeys)
+  if (!isObj(v)) return v
+  return Object.fromEntries(
+    Object.keys(v)
+      .sort()
+      .map((k) => [k, sortKeys(v[k])]),
+  )
+}
+
+/** 승인본의 예시 id → { input, output?, error?, note? }. 예시 id는 번호 차례, 예시 안은 이 칸 차례 */
+function canonicalExamples(c: Contract): Obj {
+  const out: Obj = {}
+  for (const ex of [...c.examples].sort((a, b) => exampleOrder(a.id, b.id))) {
+    const entry: Obj = {}
+    for (const k of EXAMPLE_FIELDS) if (ex[k] !== undefined) entry[k] = sortKeys(ex[k])
+    out[ex.id] = entry
+  }
+  return out
+}
 
 /**
- * 커밋된 예시 자료가 승인된 예시와 같은지 본다 (philosophy 원칙 2).
- * 파일은 예시 id → { input, output?, error?, note? } 객체이거나 계약의 examples 같은 배열이다.
- * 파일에 있는 예시만 견준다(시험이 예시를 글로 옮겨 쓴 경우는 리뷰가 본다). 없는 파일은 null.
- * 돌려주는 differs는 input·output·error 가운데 하나라도 다른 예시 id.
+ * 계약의 예시 자료를 정규 꼴로: 예시 id에서 `{input, output?, error?, note?}`로 가는 객체, 열쇠는 정렬(예시 id는 번호 차례,
+ * 예시 안은 input·output·error·note, 값 속 객체는 글자 차례), 두 칸 들여쓰기와 끝 줄바꿈. 같은 계약은 늘 같은 글이다
  */
-export function checkExamplesFile(
-  contract: Contract,
-  text: string | null,
-): { differs: string[]; error?: string } {
-  if (text === null) return { differs: [] }
+export function examplesFileText(c: Contract): string {
+  return `${JSON.stringify(canonicalExamples(c), null, 2)}\n`
+}
+
+/** 견줌 결과(경로는 부르는 쪽이 붙인다: EvidenceBundle.examples_file) */
+export type ExamplesFileResult = Omit<ExamplesFileCheck, 'path'>
+
+/**
+ * head에 커밋된 예시 자료를 승인본(examplesFileText)과 값으로 견준다. 없으면 absent, JSON이 아니거나 객체가 아니면
+ * unreadable, 예시나 칸이 하나라도 다르면 differs(diffs에 예시 차례로, 승인본에 없는 예시는 끝에). 칸의 순서와 들여쓰기는
+ * 보지 않는다
+ */
+export function checkExamplesFile(contract: Contract, text: string | null): ExamplesFileResult {
+  if (text === null) return { status: 'absent', diffs: [] }
   let raw: unknown
   try {
     raw = JSON.parse(text.replace(/^\uFEFF/, ''))
   } catch (cause) {
-    return { differs: [], error: `JSON을 읽지 못함: ${(cause as Error).message}` }
+    return {
+      status: 'unreadable',
+      diffs: [],
+      error: `JSON을 읽지 못함: ${(cause as Error).message}`,
+    }
   }
-  const entries = new Map<string, Obj>()
-  if (Array.isArray(raw)) {
-    for (const x of raw) if (isObj(x) && typeof x['id'] === 'string') entries.set(x['id'], x)
-  } else if (isObj(raw)) {
-    for (const [id, x] of Object.entries(raw)) if (isObj(x)) entries.set(id, x)
-  } else {
-    return { differs: [], error: '객체나 배열이어야 함' }
+  if (!isObj(raw))
+    return { status: 'unreadable', diffs: [], error: '예시 id를 열쇠로 하는 객체가 아님' }
+  const want = canonicalExamples(contract)
+  const diffs: ExampleFileDiff[] = []
+  for (const [id, expected] of Object.entries(want)) {
+    if (!Object.hasOwn(raw, id)) diffs.push({ id, expected })
+    else diffs.push(...entryDiffs(id, expected as Obj, raw[id]))
   }
-  const differs: string[] = []
-  for (const ex of contract.examples) {
-    const got = entries.get(ex.id)
-    if (got === undefined) continue
-    const same = (['input', 'output', 'error'] as const).every(
-      (k) => stableJson(got[k]) === stableJson(ex[k]),
+  for (const id of Object.keys(raw))
+    if (!Object.hasOwn(want, id)) diffs.push({ id, found: raw[id] })
+  return { status: diffs.length === 0 ? 'same' : 'differs', diffs }
+}
+
+function entryDiffs(id: string, expected: Obj, found: unknown): ExampleFileDiff[] {
+  if (!isObj(found)) return [{ id, expected, found }]
+  const keys = [...new Set([...Object.keys(expected), ...Object.keys(found)])]
+  const out: ExampleFileDiff[] = []
+  for (const field of keys) {
+    const has = [Object.hasOwn(expected, field), Object.hasOwn(found, field)]
+    if (has[0] && has[1] && stableJson(expected[field]) === stableJson(found[field])) continue
+    out.push(
+      prune({
+        id,
+        field,
+        expected: has[0] ? expected[field] : undefined,
+        found: has[1] ? found[field] : undefined,
+      }),
     )
-    if (!same) differs.push(ex.id)
   }
-  return { differs }
+  return out
+}
+
+/** 차이를 보이는 값: 한 줄 JSON, 앞쪽 max자 */
+export function exampleValueText(v: unknown, max = 40): string {
+  const text = JSON.stringify(v) ?? String(v)
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
 }

@@ -69,13 +69,13 @@ test('위로 넘는 값은 hi로 [{contractId}:C1.1]', () => {
 })
 `
 
+// 예시 자료(.relay/examples/<계약 id>.json)는 앱이 승인 때 worktree에 쓴다(V27). 커밋(git add -A)에 함께 들어간다
 export const FIX_COMMIT = {
   do: 'commit',
   message: 'clamp 고침',
   files: {
     'src/calc.js': calc('hi'),
     'test/calc.test.js': TESTS_FIXED,
-    '.relay/examples/{contractId}.json': '{ "C1.1": { "input": [15, 0, 10], "output": 10 } }\n',
   },
 }
 

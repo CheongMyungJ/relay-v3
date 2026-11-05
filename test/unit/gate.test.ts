@@ -134,6 +134,44 @@ const FACTS: Fact[] = [
     '줄 C2 판정이 계약과 맞지 않음',
     withLine({ ...C2, check: 'human' }),
   ],
+  [
+    '예시 자료가 커밋되지 않음',
+    { examples_file: { path: '.relay/examples/w1.json', status: 'absent', diffs: [] } },
+    '예시 자료 파일이 커밋되지 않음: .relay/examples/w1.json',
+  ],
+  [
+    '예시 자료가 승인본과 다름',
+    {
+      examples_file: {
+        path: '.relay/examples/w1.json',
+        status: 'differs',
+        diffs: [
+          { id: 'C1.1', field: 'output', expected: 10, found: 8 },
+          { id: 'C1.2', field: 'note', expected: 'n' },
+          { id: 'C2.1', expected: { input: 2 } },
+          { id: 'C9.9', found: { input: 9 } },
+        ],
+      },
+    },
+    '예시 자료가 승인본과 다름: C1.1 output (기대 10, 실제 8), C1.2 note (기대 "n", 실제 없음), C2.1 없음 외 1개',
+  ],
+  [
+    '예시 자료를 읽지 못함',
+    {
+      examples_file: {
+        path: '.relay/examples/w1.json',
+        status: 'unreadable',
+        diffs: [],
+        error: 'JSON을 읽지 못함: x',
+      },
+    },
+    '예시 자료를 읽지 못함: .relay/examples/w1.json (JSON을 읽지 못함: x)',
+  ],
+  [
+    '예시 자료의 모르는 견줌 결과',
+    { examples_file: { path: 'e.json', status: 'weird' as never, diffs: [] } },
+    '예시 자료를 견준 결과를 모름: e.json',
+  ],
   ['리뷰 없음', { review: null }, '리뷰 없음'],
   ['리뷰 실패', { review: { status: 'failed', findings: [] } }, '리뷰 실패'],
   ['리뷰 건너뜀', { review: { status: 'skipped', findings: [] } }, '리뷰를 건너뜀'],
@@ -229,6 +267,36 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
       '품질 기준 없음',
     ])
     expect(r.decisive).toBe('사람 경로 (db/**) — db/1.sql')
+  })
+
+  test('예시 자료가 승인본과 같거나 견주지 않았으면(null, 앞 판의 묶음) 사실이 아니다', () => {
+    const same = { path: 'e.json', status: 'same' as const, diffs: [] }
+    for (const examples_file of [same, null, undefined])
+      expect(run({ examples_file }).conclusion).toBe('auto_merge_candidate')
+  })
+
+  test('예시 자료 사실은 줄 판정 다음, 리뷰 앞이다(V27)', () => {
+    const r = run({
+      review: null,
+      lines: [met('C1'), verdict('C2', 'not_met', 'x', 'new')],
+      examples_file: { path: 'e.json', status: 'absent', diffs: [] },
+    })
+    expect(r.reasons).toEqual([
+      '줄 C2 못 미침: x',
+      '예시 자료 파일이 커밋되지 않음: e.json',
+      '리뷰 없음',
+    ])
+  })
+
+  test('예시 자료의 차이에 다른 예시는 셋까지, 승인본에 없는 예시와 통째로 다른 예시를 적는다', () => {
+    const diffs = [
+      { id: 'C9.9', found: 1 },
+      { id: 'C1.1', expected: { input: 1 }, found: 'x' },
+    ]
+    const r = run({ examples_file: { path: 'e.json', status: 'differs', diffs } })
+    expect(r.decisive).toBe(
+      '예시 자료가 승인본과 다름: C9.9 승인본에 없는 예시, C1.1 (기대 {"input":1}, 실제 "x")',
+    )
   })
 
   test('리뷰 상태가 올림 지적보다 먼저고 올림 없는 지적은 빠진다', () => {

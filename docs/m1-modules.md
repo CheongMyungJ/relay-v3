@@ -35,7 +35,9 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `exampleTag(contractId: string, id: string): string` → `[<계약 id>:C1.1]`. 태그에 계약 id를 넣어, 머지된 앞 Work의 수용 시험이 레포에 남아도 새 계약의 C1.1 증거로 잡히지 않게 한다. `findExampleTags(testName: string, contractId: string): string[]` — 이름 속 `[<그 계약 id>:C<n>.<n>]`의 예시 id를 모두. 다른 계약의 태그와 계약 id 없는 `[C1.1]`은 찾지 않는다. `withoutExampleTags(testName: string): string` — 어느 계약이든 예시 태그를 뺀 이름(래칫이 같은 시험을 찾을 때).
 - `examplesFile(examplesDir: string, contractId: string): string` → `<dir>/<id>.json`.
 - `contractHash(c: Contract): string` — 키 순서와 상관없는 내용 해시. 묶음이 어느 계약(어느 판)으로 만들어졌는지 가린다.
-- `checkExamplesFile(contract: Contract, text: string | null): { differs: string[]; error?: string }` — 커밋된 예시 자료가 승인된 예시와 같은지. 파일은 예시 id → `{ input, output?, error?, note? }` 객체이거나 계약의 `examples` 같은 배열이다. 파일에 있는 예시만 input·output·error를 견준다(시험이 예시를 글로 옮겨 쓴 경우는 리뷰가 본다). 없는 파일은 견줄 것이 없다. 읽지 못하면 error.
+- `examplesFileText(c: Contract): string` — 예시 자료의 정규 꼴(V27). 예시 id에서 `{ input, output?, error?, note? }`로 가는 객체이고 열쇠는 정렬한다: 예시 id는 번호 차례(C1.2가 C1.10 앞), 예시 안은 input·output·error·note, 값 속 객체는 글자 차례. 두 칸 들여쓰기와 끝 줄바꿈. 같은 계약은 예시와 열쇠의 순서와 상관없이 같은 글이다. 앱이 Work의 worktree에 쓰고, check가 수용 시험에 얹는다.
+- `checkExamplesFile(contract: Contract, text: string | null): { status: 'same' | 'absent' | 'differs' | 'unreadable'; diffs: ExampleFileDiff[]; error?: string }` — head에 커밋된 예시 자료를 승인본과 값으로 견준다(V27). text가 null이면 absent. JSON이 아니거나 예시 id를 열쇠로 하는 객체가 아니면(계약의 `examples` 같은 배열도) unreadable과 까닭. 그 밖에는 승인본의 예시마다 칸(input, output, error, note, 더 붙은 칸)을 견주고 승인본에 없는 예시를 끝에 더한다. `ExampleFileDiff = { id, field?, expected?, found? }`: field가 없으면 예시가 통째로 없거나(found 없음) 승인본에 없거나(expected 없음) 객체가 아니다. 칸 순서, 들여쓰기, BOM은 보지 않는다.
+- `exampleValueText(v: unknown, max = 40): string` — 차이를 보이는 값(한 줄 JSON, 앞쪽 max자). gate와 review가 쓴다.
 
 ### `src/core/junit.ts`
 - `parseJUnit(xml: string): Result<TestCase[]>` — fast-xml-parser. `testsuites`/`testsuite` 중첩, 하나뿐인 testcase, `failure`·`error`·`skipped` 자식, 속성 `name`·`classname`·`file`. 감싼 testsuite 이름은 ` > `로 이어 `suite`에 둔다(맨 위 `testsuites`와 classname·file과 같은 이름은 뺀다. node:test는 describe 이름을 여기에만 낸다). 빈 파일은 오류.
@@ -51,7 +53,6 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
   - head가 null(수용 시험을 돌리지 못함)이면 test 줄은 모두 missing_evidence.
   - 태그를 단 testcase가 없으면 missing_evidence.
 - `allLinesTestedAndMet(verdicts: LineVerdict[]): boolean` — observe·human 줄이 없고 모두 met.
-- `applyExampleMismatch(verdicts, differs: string[]): LineVerdict[]` — differs(checkExamplesFile)의 예시를 쓰는 시험 줄은 not_met('예시 자료가 승인된 예시와 다름').
 - `confirmFailures(first: TestCase[], second: TestCase[]): TestCase[]` — 바뀜 줄의 base 실행을 두 번 돌렸을 때 합친다. failed는 두 번 모두 failed여야 남고, 한 번이라도 passed면 passed(V7을 base 실패에도).
 
 ### `src/core/flaky.ts`
@@ -81,7 +82,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ### `src/core/gate.ts`
 - `gate(evidence: EvidenceBundle, contract: Contract | null, policy: Policy, head: string | null): GateResult` — V5. head는 지금 브랜치 끝의 SHA(모르면 null). 순서:
   1. `contract_change_requested` → recontract.
-  2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe, 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 리뷰 status가 done이 아님, 리뷰 지적 중 raise가 있는 것, `missing`이 빈 배열이 아님, quality.from이 none.
+  2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe, 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 커밋된 예시 자료(`examples_file`, V27)가 없음('예시 자료 파일이 커밋되지 않음: <경로>')·다름('예시 자료가 승인본과 다름: C1.2 output (기대 10, 실제 8)', 차이는 셋까지)·읽지 못함(same이거나 null·없는 칸이면 사실이 아니다), 리뷰 status가 done이 아님, 리뷰 지적 중 raise가 있는 것, `missing`이 빈 배열이 아님, quality.from이 none.
   3. 하나라도 있으면 human_merge, decisive는 첫 사실, reasons는 전부, condition null, shadow false.
   4. 없으면 policy.conditions에서 처음 채운 조건(diff에 대한 술어: max_changed_lines, paths, no_new_dependencies, no_new_modules, require_all_lines_tested)을 찾는다. `hasRealLimit`이 거짓인 조건은 채우지 못한다. max_changed_lines는 `diff.binary`가 비어 있어야 채운다(바이너리는 줄 수로 크기를 잴 수 없다). 없으면 human_merge('채운 자동 조건 없음').
   5. 채웠으면: auto_merge_enabled, server(branch_protected && required_checks && (merge_queue || up_to_date_required)), track_record_ok[id] 셋이 모두 참이면 auto_merge_candidate(shadow false). 하나라도 거짓이면 human_merge이고 shadow true, decisive는 막은 것('프로젝트에서 자동 머지가 꺼져 있음' 등), condition은 그 id.
@@ -94,7 +95,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `vanished(items: DebtItem[], exists: (path: string) => boolean): DebtItem[]`.
 
 ### `src/core/evidence.ts`
-- `summarize(e: EvidenceBundle): string[]` — 사람이 읽는 몇 줄(diff 머리와 바이너리 수, 명령마다 결과, 줄 판정 수, 래칫, 신호, 없는 증거).
+- `summarize(e: EvidenceBundle): string[]` — 사람이 읽는 몇 줄(diff 머리와 바이너리 수, 명령마다 결과, 줄 판정 수, 예시 자료(V27: 승인본과 같음·커밋되지 않음·다름(예시 id)·읽지 못함), 래칫, 신호, 없는 증거).
 - `isStale(e: EvidenceBundle, head: string): boolean`.
 
 ## adapters
@@ -121,7 +122,8 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ### `src/adapters/worktrees.ts`
 - `prepareCheckout(home, repoKey, repoRoot, slot: 'base' | 'head', sha, setup?: SetupSpec): Promise<{ dir: string; setupRan: boolean; setupError?: string }>` — V10. 처음이면 `git worktree add --force --detach <dir> <sha>`(폴더가 없는데 등록만 남은 자리를 다시 쓴다. 사용자의 다른 worktree를 지우는 `worktree prune`은 부르지 않는다), 아니면 `git checkout --force --detach <sha>` + `git clean -ffdx` + keep마다 `-e`. 다시 쓰기가 실패하면(남은 index.lock 등) 지우고 처음처럼 만든다. git은 훅 없이 돈다. setup.inputs의 내용 해시가 마지막 setup 때와 다르거나, 그때 있던 keep 경로가 하나라도 없으면 setup.run. keep이 비었거나 setup이 keep 밖에 결과물을 남겼으면 상태를 남기지 않는다(clean이 지우므로 늘 다시 돈다). setup 결과물은 모두 keep 안에 있어야 다시 쓴다.
 - `lockWorktrees(home, repoKey, waitMs): Promise<() => Promise<void>>` — 레포 키의 check worktree를 한 check만 쓰게 잠근다(`<home>/worktrees/<키>/.lock`, O_EXCL, pid를 적음). 잡은 프로세스가 죽었으면 넘겨받는다. waitMs 동안 못 잡으면 던진다. 돌려주는 함수로 푼다.
-- `overlay(home, dir, repoRoot, fromSha, paths)` — `git checkout <sha> -- <paths>`(바뀜 줄의 base 실행용). 훅 없이 돈다. 지울 경로의 위쪽 조각이 심볼릭 링크면 링크만 지우고 그 너머로 가지 않는다.
+- `overlay(home, dir, repoRoot, fromSha, paths)` — `git checkout <sha> -- <paths>`(바뀜 줄의 base 실행용). 훅 없이 돈다. 지울 경로의 위쪽 조각이 심볼릭 링크면 링크만 지우고 그 너머로 가지 않는다(`removeInside(dir, p)`).
+- `writeInside(dir, rel, content): Promise<Buffer | null>` — dir 안의 rel에 쓰고 쓰기 전 내용(없었으면 null)을 돌려준다(V27: 예시 자료의 정규 파일을 check worktree와 Work의 worktree에 쓴다). 없는 폴더는 만든다. `./`와 겹친 `/`는 버린다. 레포 밖·절대 경로·`..`·`.git`, 위쪽 조각이 링크나 파일, 그 자리가 링크나 폴더면 쓰지 않고 던진다(링크 너머에 쓰거나 사람의 폴더를 지우지 않는다).
 
 ## engine
 
@@ -130,10 +132,10 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
   1. repo 루트, head(기본 HEAD), base(기본 `mergeBase(defaultBase, head)`).
   2. quality.json: base에 있으면 base 것, 없으면 head 것, 둘 다 없으면 from none(V9).
   3. diff, 신호(base 디렉터리, 매니페스트 base·head 내용).
-  4. worktree 잠금(`lockWorktrees`, 기본 30분 기다림. 못 잡으면 missing에 적고 명령은 not_run). head checkout + setup, fast 명령마다 run → 실패면 한 번 다시 → 두 번 실패면 base checkout에서 그 명령(캐시) → classify. JUnit 자리를 준비하지 못하면(폴더이거나 worktree 밖을 가리키는 링크) 명령은 돌리되 시험 결과는 없다.
-  5. 계약이 있고 acceptance가 있으면: head에서 acceptance(JUnit). change·keep 줄이 있으면 base checkout에 시험 파일(test_globs에 맞는 바뀐 파일)과 examples_dir를 head에서 얹어 acceptance. judgeLines. 바뀜 줄의 예시가 base에서 failed면 얹은 base를 한 번 더 돌려 `confirmFailures`로 합친 뒤 다시 판정한다. head의 `examplesFile(examples_dir, 계약 id)`을 `checkExamplesFile`로 견주고 `applyExampleMismatch`. 근거 확인(groundings).
+  4. worktree 잠금(`lockWorktrees`, 기본 30분 기다림. 못 잡으면 missing에 적고 명령은 not_run). head checkout + setup, fast 명령마다 run → 실패면 한 번 다시 → 두 번 실패면 base checkout에서 그 명령(캐시) → classify. JUnit 자리를 준비하지 못하면(폴더이거나 worktree 밖을 가리키는 링크) 명령은 돌리되 시험 결과는 없다. 계약에 예시가 있으면 acceptance의 head 실행(다시 돌 때도)에는 정규 예시 자료(`examplesFile(examples_dir, 계약 id)`에 `examplesFileText`)를 `writeInside`로 얹고 실행 뒤 되돌린다(V27. 못 되돌리면 head worktree를 다음에 다시 준비한다). fast 명령과 얹지 않은 base 실행(test_count 래칫, V7의 base)은 커밋된 그대로 돈다. 얹지 못하면 missing에 `예시 자료 얹기(<slot>) <경로>: <까닭>`을 적고 커밋된 그대로 돈다.
+  5. 계약이 있고 acceptance가 있으면: head의 acceptance 결과(JUnit). change·keep 줄이 있으면 base checkout에 시험 파일(test_globs에 맞는 바뀐 파일)과 examples_dir를 head에서 얹고 그 위에 정규 예시 자료를 써서 acceptance. judgeLines. 바뀜 줄의 예시가 base에서 failed면 얹은 base를 한 번 더 돌려 `confirmFailures`로 합친 뒤 다시 판정한다. 줄 판정은 이렇게 승인된 자료로 돈다. 계약과 품질 기준이 있고 계약에 예시가 있으면 head에 커밋된 예시 자료를 `checkExamplesFile`로 견줘 `examples_file`(`{ path, status, diffs, error? }`)에 둔다(acceptance가 없어도. git이 실패하면 missing). 자료가 달라도 줄 판정은 바꾸지 않는다(관문의 사람 머지 사실). 근거 확인(groundings).
   6. 래칫: file_lines(바뀐 파일의 base·head 줄 수. 남은 파일의 줄 수를 못 읽으면 NaN), test_count(acceptance JUnit base·head. base는 얹지 않은 base에서 돌린 것), command(base·head).
-  7. 잠금을 풀고 묶음을 만들어 `evidencePath`에 쓴다. `contract`는 `{ id, hash: contractHash }`(계약이 없으면 null), `diff.binary`는 바이너리 파일 경로. review는 null(M2), claims null.
+  7. 잠금을 풀고 묶음을 만들어 `evidencePath`에 쓴다. `contract`는 `{ id, hash: contractHash }`(계약이 없으면 null), `diff.binary`는 바이너리 파일 경로, `examples_file`은 5의 견줌(견주지 않았으면 null). review는 null(M2), claims null.
 - 어떤 단계든 실패하면 묶음에 `missing`으로 적고 다음으로 간다(명령·래칫·줄 판정이 던져도). 묶음은 늘 나온다.
 
 ### `src/engine/init.ts` — 품질 기준 초안 (V19, V20)

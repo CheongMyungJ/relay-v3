@@ -1,5 +1,5 @@
 // 확인 실행기 (docs/m1-modules.md engine/check.ts).
-// 품질 기준(V9), diff와 신호, 명령(V7), 래칫, 수용 시험과 줄 판정(V11)을 모아 증거 묶음을 쓴다.
+// 품질 기준(V9), diff와 신호, 명령(V7), 래칫, 수용 시험과 줄 판정(V11), 예시 자료(V27)를 모아 증거 묶음을 쓴다.
 // 어느 단계가 실패해도 묶음은 나온다. 못 모은 증거는 missing에 적는다.
 
 import { readFile } from 'node:fs/promises'
@@ -20,6 +20,7 @@ import type {
   Contract,
   DiffFacts,
   EvidenceBundle,
+  ExamplesFileCheck,
   GroundingCheck,
   LineVerdict,
   QualityConfig,
@@ -38,7 +39,13 @@ import {
 } from '../adapters/git.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
 import { lockWorktrees } from '../adapters/worktrees.ts'
-import { checkGroundings, judgeContract, testsOf } from './judge.ts'
+import {
+  canonicalExamples,
+  checkGroundings,
+  committedExamples,
+  judgeContract,
+  testsOf,
+} from './judge.ts'
 import { message, workspace, type Workspace } from './workspace.ts'
 
 /** 품질 기준 파일의 자리(레포 루트 기준) */
@@ -107,7 +114,10 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
   const commands: CommandEvidence[] = []
   let ratchets: RatchetResult[] = []
   let lines: LineVerdict[] | null = null
+  let examplesFile: ExamplesFileCheck | null = null
   let groundings: GroundingCheck[] | null = null
+  // 수용 시험은 계약의 예시 자료(정규 파일)를 얹어 돈다(V27)
+  const examples = q !== null && contract !== null ? canonicalExamples(q, contract) : null
   try {
     // 4. 명령. 수용 시험도 명령으로 돈다(래칫 test_count가 있으면 base에서도)
     let acceptance: CommandEvidence | null = null
@@ -117,7 +127,8 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
       const spec = q.commands.acceptance
       if (spec !== undefined) {
         const counted = q.ratchets.some((r) => r.kind === 'test_count')
-        acceptance = await guarded(ws.command(spec, counted), spec.id, missing)
+        const files = examples === null ? [] : [examples]
+        acceptance = await guarded(ws.command(spec, counted, files), spec.id, missing)
         commands.push(acceptance)
         if (acceptance.head.length > 0 && testsOf(acceptance.head) === null)
           missing.push(`acceptance: JUnit을 읽지 못함 (${spec.junit ?? '경로 없음'})`)
@@ -133,12 +144,15 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
       })
     }
 
-    // 5. 계약 줄과 근거
+    // 5. 계약 줄, 커밋된 예시 자료, 근거
     if (contract !== null) {
-      lines = await judgeContract(contract, q, ws, root, diff, acceptance, missing).catch((e) => {
-        missing.push(`줄 판정: ${message(e)}`)
-        return judgeLines(contract, null, null)
-      })
+      lines = await judgeContract(contract, q, ws, diff, acceptance, examples, missing).catch(
+        (e) => {
+          missing.push(`줄 판정: ${message(e)}`)
+          return judgeLines(contract, null, null)
+        },
+      )
+      if (q !== null) examplesFile = await committedExamples(root, head, q, contract, missing)
       groundings = await checkGroundings(root, head, contract, request)
     }
   } finally {
@@ -155,6 +169,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
     contract: contract === null ? null : { id: contract.id, hash: contractHash(contract) },
     commands,
     lines,
+    examples_file: examplesFile,
     groundings,
     ratchets,
     signals: report.signals,

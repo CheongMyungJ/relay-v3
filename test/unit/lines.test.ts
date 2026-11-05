@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-  allLinesTestedAndMet,
-  applyExampleMismatch,
-  confirmFailures,
-  judgeLines,
-} from '../../src/core/lines.ts'
+import { allLinesTestedAndMet, confirmFailures, judgeLines } from '../../src/core/lines.ts'
 import type {
   Contract,
   ContractLine,
@@ -431,30 +426,6 @@ describe('judgeLines: 다른 계약의 태그', () => {
     const keep = line('C2', 'keep', ['C2.1'])
     const cases = [raw('통과', 'passed', { suite: '묶음 [w-1:C2.1]' })]
     expect(one(keep, cases, cases).status).toBe('met')
-  })
-})
-
-describe('applyExampleMismatch', () => {
-  const v = (lineId: string, status: LineVerdict['status'], ids: string[]): LineVerdict => ({
-    line: lineId,
-    kind: 'new',
-    status,
-    detail: 'd',
-    examples: ids.map((id) => ({ id, head: 'passed' })),
-  })
-
-  test('다른 예시를 쓰는 줄은 met이어도 못 미침이다', () => {
-    const out = applyExampleMismatch([v('C1', 'met', ['C1.1']), v('C2', 'met', ['C2.1'])], ['C1.1'])
-    expect(out.map((x) => [x.line, x.status, x.detail])).toEqual([
-      ['C1', 'not_met', '예시 자료가 승인된 예시와 다름: C1.1'],
-      ['C2', 'met', 'd'],
-    ])
-  })
-
-  test('사람·관찰 줄과 다른 것이 없을 때는 그대로', () => {
-    const lines = [v('C1', 'human', ['C1.1'])]
-    expect(applyExampleMismatch(lines, ['C1.1'])).toEqual(lines)
-    expect(applyExampleMismatch([v('C2', 'met', ['C2.1'])], [])).toEqual([v('C2', 'met', ['C2.1'])])
   })
 })
 

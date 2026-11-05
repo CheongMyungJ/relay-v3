@@ -92,8 +92,8 @@ export async function baseRef(root: string, base: string): Promise<string> {
   throw new Error(`기준 브랜치를 찾지 못함: ${base}`)
 }
 
-/** 기준의 quality.json이 정한 예시 자료 폴더(없으면 기본값) */
-async function examplesDir(root: string, ref: string): Promise<string> {
+/** 기준의 quality.json이 정한 예시 자료 폴더(없으면 기본값). 지침과 앱이 쓰는 예시 자료(V27)가 함께 쓴다 */
+export async function examplesDir(root: string, ref: string): Promise<string> {
   const sha = (await git(['rev-parse', ref], root)).trim()
   const text = await showFile(root, sha, QUALITY_PATH).catch(() => null)
   const parsed = text === null ? null : parseQuality(text)

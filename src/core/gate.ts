@@ -3,7 +3,7 @@
 // 사람 머지로 보내는 사실이 하나라도 있으면 사람 머지. 자동 조건을 채워도
 // 스위치·서버 보호·실적 중 하나라도 없으면 그림자(기록만)로 사람 머지.
 
-import { contractHash } from './contract.ts'
+import { contractHash, exampleValueText } from './contract.ts'
 import { isStale } from './evidence.ts'
 import { matchAny } from './glob.ts'
 import { allLinesTestedAndMet } from './lines.ts'
@@ -13,6 +13,7 @@ import type {
   CommandOutcome,
   Contract,
   EvidenceBundle,
+  ExampleFileDiff,
   GateResult,
   LineStatus,
   LineVerdict,
@@ -83,6 +84,7 @@ function humanFacts(e: EvidenceBundle, contract: Contract | null, head: string |
     ...contractFacts(contract),
     ...bundleContractFacts(e, contract),
     ...lineFacts(e.lines, contract),
+    ...examplesFileFacts(e.examples_file),
     ...reviewFacts(e.review),
     ...e.missing.map((name) => `없는 증거: ${name}`),
     ...(e.quality.from === 'base' || e.quality.from === 'head' ? [] : ['품질 기준 없음']),
@@ -212,6 +214,29 @@ function coverageFacts(lines: LineVerdict[], contract: Contract): string[] {
   return out
 }
 
+/**
+ * 커밋된 예시 자료가 승인본과 다르거나 없으면 사람에게 보낸다(V27). 줄 판정은 앱이 얹은 승인본으로 돌았지만, 머지 뒤의 회귀
+ * 시험은 커밋된 파일을 읽는다
+ */
+function examplesFileFacts(f: EvidenceBundle['examples_file']): string[] {
+  if (f === null || f === undefined || f.status === 'same') return []
+  if (f.status === 'absent') return [`예시 자료 파일이 커밋되지 않음: ${f.path}`]
+  if (f.status === 'unreadable')
+    return [`예시 자료를 읽지 못함: ${f.path} (${clip(f.error ?? '까닭 모름')})`]
+  if (f.status === 'differs')
+    return [`예시 자료가 승인본과 다름: ${listText(f.diffs.map(exampleDiffText), 3)}`]
+  return [`예시 자료를 견준 결과를 모름: ${f.path}`]
+}
+
+function exampleDiffText(d: ExampleFileDiff): string {
+  const value = (v: unknown) => (v === undefined ? '없음' : exampleValueText(v))
+  if (d.field !== undefined)
+    return `${d.id} ${d.field} (기대 ${value(d.expected)}, 실제 ${value(d.found)})`
+  if (d.found === undefined) return `${d.id} 없음`
+  if (d.expected === undefined) return `${d.id} 승인본에 없는 예시`
+  return `${d.id} (기대 ${value(d.expected)}, 실제 ${value(d.found)})`
+}
+
 const RAISE_LABEL: Record<RaiseReason, string> = {
   example_test_mismatch: '예시와 시험 불일치',
   security: '보안',
@@ -311,7 +336,7 @@ function clip(text: string): string {
   return t.length > 100 ? `${t.slice(0, 99)}…` : t
 }
 
-function listText(items: string[]): string {
-  const shown = items.slice(0, 5).join(', ')
-  return items.length > 5 ? `${shown} 외 ${items.length - 5}개` : shown
+function listText(items: string[], max = 5): string {
+  const shown = items.slice(0, max).join(', ')
+  return items.length > max ? `${shown} 외 ${items.length - max}개` : shown
 }

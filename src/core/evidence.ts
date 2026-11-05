@@ -4,6 +4,7 @@
 import type {
   CommandOutcome,
   EvidenceBundle,
+  ExamplesFileCheck,
   LineStatus,
   RatchetResult,
   Signal,
@@ -51,6 +52,7 @@ export function summarize(e: EvidenceBundle): string[] {
   if (e.commands.length === 0) out.push('명령: 없음')
   for (const c of e.commands) out.push(`명령 ${c.id}: ${label(OUTCOME, c.outcome)}`)
   out.push(linesText(e))
+  if (e.examples_file) out.push(examplesFileText(e.examples_file))
   for (const r of e.ratchets) out.push(`래칫 ${r.id}: ${label(RATCHET, r.status)} (${r.detail})`)
   out.push(...signalsText(e.signals))
   if (e.review !== null) out.push(reviewText(e.review))
@@ -85,6 +87,20 @@ function linesText(e: EvidenceBundle): string {
     .filter(([, n]) => n > 0)
     .map(([name, n]) => `${name} ${n}`)
   return `줄 판정 ${lines.length}개: ${parts.join(', ')}`
+}
+
+const EXAMPLES_FILE: Record<ExamplesFileCheck['status'], string> = {
+  same: '승인본과 같음',
+  absent: '커밋되지 않음',
+  differs: '승인본과 다름',
+  unreadable: '읽지 못함',
+}
+
+/** 커밋된 예시 자료(V27). 다르면 다른 예시 id */
+function examplesFileText(f: ExamplesFileCheck): string {
+  const ids = [...new Set(f.diffs.map((d) => d.id))]
+  const which = f.status === 'differs' && ids.length > 0 ? ` (${ids.join(', ')})` : ''
+  return `예시 자료 ${f.path}: ${label(EXAMPLES_FILE, f.status)}${which}`
 }
 
 function signalsText(signals: Signal[]): string[] {

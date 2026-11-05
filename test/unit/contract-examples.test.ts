@@ -1,10 +1,12 @@
-// 계약의 예시: 시험 이름의 태그, 예시 자료 파일, 계약 내용 해시.
+// 계약의 예시: 시험 이름의 태그, 예시 자료 파일(V27: 정규 꼴과 승인본 견줌), 계약 내용 해시.
 import { describe, expect, test } from 'vitest'
 import {
   checkExamplesFile,
   contractHash,
   exampleTag,
+  exampleValueText,
   examplesFile,
+  examplesFileText,
   findExampleTags,
   parseContract,
 } from '../../src/core/contract.ts'
@@ -143,53 +145,149 @@ describe('contractHash', () => {
   })
 })
 
-describe('checkExamplesFile', () => {
+describe('examplesFileText (V27)', () => {
+  test('예시 id에서 {input, output?, error?, note?}로 가는 객체, 두 칸 들여쓰기와 끝 줄바꿈', () => {
+    expect(examplesFileText(full)).toBe(`{
+  "C1.1": {
+    "input": "1\\n\\n2",
+    "output": 3
+  },
+  "C1.2": {
+    "input": "",
+    "output": 0,
+    "note": "빈 입력"
+  },
+  "C2.1": {
+    "input": "a",
+    "error": {
+      "message": "숫자가 아님"
+    }
+  }
+}
+`)
+  })
+
+  test('열쇠는 정렬한다: 예시 id는 번호 차례, 예시 안은 input·output·error·note, 값 속 객체는 글자 차례', () => {
+    const examples = [
+      { id: 'C1.10', input: 10, note: 'n', output: { b: 1, a: [{ d: 1, c: 2 }] } },
+      { id: 'C2.1', input: 21 },
+      { id: 'C1.2', input: 2 },
+    ]
+    const text = examplesFileText({ ...full, examples })
+    expect(Object.keys(JSON.parse(text) as object)).toEqual(['C1.2', 'C1.10', 'C2.1'])
+    expect(text).toContain(
+      '"input": 10,\n    "output": {\n      "a": [\n        {\n          "c": 2,',
+    )
+    expect(text.indexOf('"output"')).toBeLessThan(text.indexOf('"note"'))
+  })
+
+  test('같은 계약은 예시와 열쇠의 순서와 상관없이 같은 글이다', () => {
+    const shuffled = [...full.examples].reverse().map((x) => {
+      const { note, error, output, input, id } = x
+      return { note, error, output, input, id }
+    })
+    expect(examplesFileText({ ...full, examples: shuffled })).toBe(examplesFileText(full))
+  })
+
+  test('`__proto__` 열쇠도 값으로 남는다', () => {
+    const input = JSON.parse('{"__proto__": {"x": 1}}') as unknown
+    const text = examplesFileText({ ...full, examples: [{ id: 'C1.1', input }] })
+    expect(text).toContain('"__proto__"')
+    expect(checkExamplesFile({ ...full, examples: [{ id: 'C1.1', input }] }, text).status).toBe(
+      'same',
+    )
+  })
+})
+
+describe('checkExamplesFile (V27: 승인본과 값으로)', () => {
   const c = full
-  const ex = c.examples[0]
-  if (ex === undefined) throw new Error('예시가 있는 계약이어야 함')
+  const canonical = JSON.parse(examplesFileText(c)) as Record<string, Record<string, unknown>>
+  const edited = (edit: (f: typeof canonical) => void): string => {
+    const f = structuredClone(canonical)
+    edit(f)
+    return JSON.stringify(f)
+  }
 
-  test('파일이 없으면 견줄 것이 없다', () => {
-    expect(checkExamplesFile(c, null)).toEqual({ differs: [] })
+  test('승인본 그대로면 same', () => {
+    expect(checkExamplesFile(c, examplesFileText(c))).toEqual({ status: 'same', diffs: [] })
   })
 
-  test('예시 id로 찾은 객체가 승인된 예시와 같으면 다른 것이 없다', () => {
-    const text = JSON.stringify({ [ex.id]: { input: ex.input, output: ex.output, note: '메모' } })
-    expect(checkExamplesFile(c, text)).toEqual({ differs: [] })
+  test('들여쓰기, 칸 순서, BOM은 보지 않는다', () => {
+    const text = `\uFEFF${JSON.stringify({
+      'C2.1': { error: { message: '숫자가 아님' }, input: 'a' },
+      'C1.2': { note: '빈 입력', output: 0, input: '' },
+      'C1.1': { output: 3, input: '1\n\n2' },
+    })}`
+    expect(checkExamplesFile(c, text).status).toBe('same')
   })
 
-  test('계약의 examples 같은 배열도 읽는다', () => {
-    expect(checkExamplesFile(c, JSON.stringify(c.examples))).toEqual({ differs: [] })
+  test('파일이 없으면 absent', () => {
+    expect(checkExamplesFile(c, null)).toEqual({ status: 'absent', diffs: [] })
   })
 
-  test('기대 출력을 바꾸면 그 예시가 다르다', () => {
-    const text = JSON.stringify({ [ex.id]: { input: ex.input, output: 'changed' } })
-    expect(checkExamplesFile(c, text)).toEqual({ differs: [ex.id] })
+  test('칸이 다르면 differs: 예시 id, 칸, 기대, 실제', () => {
+    const text = edited((f) => {
+      ;(f['C1.1'] as Record<string, unknown>).output = 4
+    })
+    expect(checkExamplesFile(c, text)).toEqual({
+      status: 'differs',
+      diffs: [{ id: 'C1.1', field: 'output', expected: 3, found: 4 }],
+    })
   })
 
-  test('입력이나 오류를 바꾸거나 빼도 다르다', () => {
-    expect(checkExamplesFile(c, JSON.stringify([{ ...ex, input: 'x' }])).differs).toEqual([ex.id])
-    expect(checkExamplesFile(c, JSON.stringify([{ ...ex, error: 'E' }])).differs).toEqual([ex.id])
+  test('빠진 칸, 더 붙은 칸, 바뀐 note도 다름이다', () => {
+    const text = edited((f) => {
+      delete (f['C1.2'] as Record<string, unknown>).note
+      ;(f['C2.1'] as Record<string, unknown>).output = null
+    })
+    expect(checkExamplesFile(c, text).diffs).toEqual([
+      { id: 'C1.2', field: 'note', expected: '빈 입력' },
+      { id: 'C2.1', field: 'output', found: null },
+    ])
   })
 
-  test('객체 키 순서는 보지 않는다', () => {
-    const input = { b: 1, a: 2 }
-    const cc = { ...c, examples: [{ ...ex, input }] }
-    const text = JSON.stringify({ [ex.id]: { output: ex.output, input: { a: 2, b: 1 } } })
-    expect(checkExamplesFile(cc, text)).toEqual({ differs: [] })
+  test('빠진 예시, 승인본에 없는 예시, 객체가 아닌 예시', () => {
+    const text = edited((f) => {
+      delete f['C1.1']
+      f['C1.2'] = 0 as never
+      f['C9.9'] = { input: 1 }
+    })
+    expect(checkExamplesFile(c, text).diffs).toEqual([
+      { id: 'C1.1', expected: { input: '1\n\n2', output: 3 } },
+      { id: 'C1.2', expected: { input: '', output: 0, note: '빈 입력' }, found: 0 },
+      { id: 'C9.9', found: { input: 1 } },
+    ])
   })
 
-  test('파일에 없는 예시와 계약에 없는 id는 견주지 않는다', () => {
-    expect(checkExamplesFile(c, JSON.stringify({ 'C9.9': { input: 1 } }))).toEqual({ differs: [] })
+  test('계약의 examples 같은 배열은 예시 id를 열쇠로 하는 객체가 아니라 읽지 못함', () => {
+    expect(checkExamplesFile(c, JSON.stringify(c.examples))).toEqual({
+      status: 'unreadable',
+      diffs: [],
+      error: '예시 id를 열쇠로 하는 객체가 아님',
+    })
   })
 
   test.each([
     ['{ 깨짐', /^JSON을 읽지 못함: /],
-    ['3', /^객체나 배열이어야 함$/],
-    ['"x"', /^객체나 배열이어야 함$/],
-  ])('읽지 못하면 오류를 돌려준다 (%s)', (text, error) => {
+    ['3', /^예시 id를 열쇠로 하는 객체가 아님$/],
+    ['"x"', /^예시 id를 열쇠로 하는 객체가 아님$/],
+  ])('읽지 못하면 unreadable과 까닭 (%s)', (text, error) => {
     const r = checkExamplesFile(c, text)
-    expect(r.differs).toEqual([])
+    expect(r.status).toBe('unreadable')
+    expect(r.diffs).toEqual([])
     expect(r.error).toMatch(error)
+  })
+
+  test('JSON에 없는 값(NaN)은 계약에 문자열로 쓰면 파일과 늘 같다', () => {
+    const nan = { ...c, examples: [{ id: 'C1.1', input: 'NaN', output: 0, note: 'input은 NaN' }] }
+    expect(checkExamplesFile(nan, examplesFileText(nan)).status).toBe('same')
+  })
+})
+
+describe('exampleValueText', () => {
+  test('한 줄 JSON, 길면 앞쪽만', () => {
+    expect(exampleValueText({ a: [1, 2] })).toBe('{"a":[1,2]}')
+    expect(exampleValueText('x'.repeat(50), 10)).toBe('"xxxxxxxx…')
   })
 })
 

@@ -317,7 +317,7 @@ export async function overlay(
  * dir 안의 경로 p를 지운다. 위쪽 조각이 심볼릭 링크면 링크만 지우고 그 너머로 가지 않는다
  * (base에 레포 밖을 가리키는 링크가 있어도 바깥 파일을 지우지 않게).
  */
-async function removeInside(dir: string, p: string): Promise<void> {
+export async function removeInside(dir: string, p: string): Promise<void> {
   const parts = p.split('/')
   let at = dir
   for (let i = 0; i < parts.length - 1; i++) {
@@ -330,4 +330,40 @@ async function removeInside(dir: string, p: string): Promise<void> {
     }
   }
   await rm(join(dir, p), { recursive: true, force: true })
+}
+
+/**
+ * dir 안의 rel에 내용을 쓰고, 쓰기 전 내용을 돌려준다(파일이 없었으면 null). 없는 폴더는 만든다. 위쪽 조각이 심볼릭 링크나
+ * 파일이거나 그 자리가 파일이 아니면(링크, 폴더) 쓰지 않고 던진다: 링크 너머(레포 밖)에 쓰거나 사람의 폴더를 지우지 않는다.
+ * 예시 자료의 정규 파일(V27)을 check worktree와 Work의 worktree에 쓸 때 쓴다
+ */
+export async function writeInside(
+  dir: string,
+  rel: string,
+  content: string | Buffer,
+): Promise<Buffer | null> {
+  // `./a//b`의 빈 조각과 `.`은 버린다(examples_dir는 `./`로 시작할 수 있다)
+  const parts = rel
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s !== '' && s !== '.')
+  const full = isAbsolute(rel) || /^[A-Za-z]:/.test(rel) ? null : inside(dir, parts.join('/'))
+  if (full === null || parts.some((s) => s === '..' || s === '.git'))
+    throw new Error(`쓸 수 없는 경로: '${rel}'`)
+  let at = dir
+  for (const part of parts.slice(0, -1)) {
+    at = join(at, part)
+    let st = await lstat(at).catch(() => null)
+    if (st === null) {
+      await mkdir(at).catch(() => {})
+      st = await lstat(at).catch(() => null)
+    }
+    if (st === null || st.isSymbolicLink() || !st.isDirectory())
+      throw new Error(`폴더가 아님(링크·파일): '${relative(dir, at)}'`)
+  }
+  const st = await lstat(full).catch(() => null)
+  if (st !== null && !st.isFile()) throw new Error(`파일이 아님(링크·폴더): '${parts.join('/')}'`)
+  const before = st === null ? null : await readFile(full)
+  await writeFile(full, content)
+  return before
 }

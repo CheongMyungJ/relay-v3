@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { evidencePath, repoKey } from '../../src/adapters/store.ts'
 import { gate } from '../../src/core/gate.ts'
-import { contractHash, parseContract } from '../../src/core/contract.ts'
+import { contractHash, examplesFileText, parseContract } from '../../src/core/contract.ts'
 import { parseQuality, qualityHash } from '../../src/core/quality.ts'
 import type {
   AutoCondition,
@@ -127,7 +127,8 @@ describe('계약이 있는 버그 고침', () => {
     await repo.commit('clamp 고침', {
       'src/calc.js': calc('hi'),
       'test/calc.test.js': TESTS_FIXED,
-      '.relay/examples/fix-clamp.json': '{ "C1.1": { "input": [15, 0, 10], "output": 10 } }\n',
+      // 앱이 계약에서 쓴 정규 파일을 세션이 커밋했다(V27)
+      '.relay/examples/fix-clamp.json': examplesFileText(contract),
     })
     home = await makeTempDir('relay-home-')
     const files = await makeTempDir('relay-work-')
@@ -158,6 +159,11 @@ describe('계약이 있는 버그 고침', () => {
     expect(bundle.review).toBeNull()
     expect(bundle.claims).toBeNull()
     expect(bundle.contract_change_requested).toBe(false)
+    expect(bundle.examples_file).toEqual({
+      path: '.relay/examples/fix-clamp.json',
+      status: 'same',
+      diffs: [],
+    })
   })
 
   test('fast 명령과 수용 시험이 통과한다', () => {
@@ -190,6 +196,36 @@ describe('계약이 있는 버그 고침', () => {
         examples: [{ id: 'C2.1', head: 'passed', base: 'passed' }],
       },
     ])
+  })
+
+  test('커밋한 예시 자료가 틀려도 base에 얹은 시험은 승인본을 읽는다: 바뀜 줄은 승인본으로 판정(V27)', async () => {
+    // 커밋된 자료의 기대 출력(0)은 base의 잘못된 동작과 같아서, 그대로 얹으면 '기준에서도 통과'가 된다
+    await repo.branch('fix-wrong-data', 'main')
+    await repo.commit('clamp 고침, 자료는 틀림', {
+      'src/calc.js': calc('hi'),
+      'test/calc.test.js': TESTS_FIXED,
+      '.relay/examples/fix-clamp.json': examplesFileText({
+        ...contract,
+        examples: contract.examples.map((x) => (x.id === 'C1.1' ? { ...x, output: 0 } : x)),
+      }),
+    })
+    const b = await check({
+      repo: repo.dir,
+      base: 'main',
+      head: 'fix-wrong-data',
+      contractPath,
+      home,
+      now: NOW,
+    })
+    expect(b.lines?.[0]).toMatchObject({
+      line: 'C1',
+      status: 'met',
+      examples: [{ id: 'C1.1', head: 'passed', base: 'failed' }],
+    })
+    expect(b.examples_file).toMatchObject({
+      status: 'differs',
+      diffs: [{ id: 'C1.1', field: 'output', expected: 10, found: 0 }],
+    })
   })
 
   test('근거: 코드 줄과 요청 인용은 확인되고 추측은 확인되지 않는다', () => {
