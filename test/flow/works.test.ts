@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, test } from 'vitest'
 import { contractHash, examplesFileText } from '../../src/core/contract.ts'
 import { trackRecord } from '../../src/core/ledger.ts'
+import { REVIEW_PROMPT_VERSION } from '../../src/core/review.ts'
 import { EVENTS, type WorkView } from '../../src/shared/api.ts'
 import { makeTempDir, runGit } from '../support/repo.ts'
 import { jsonl } from '../support/works-app.ts'
@@ -143,32 +144,45 @@ describe('한 Work의 생애', () => {
     )
     expect(works.view(id)).toMatchObject({ state: 'working', pendingContract: null })
 
-    // 커밋 뒤 Stop → debounce → 증거(내보내기 아님: 리뷰 없음)
+    // 커밋 뒤 Stop → debounce → 증거(내보내기 아님). 세션이 쉬고 명령·줄이 모두 통과했으니 미리 리뷰(V23)가 붙는다
     await until(
       async () => (await fake()).some((e) => e.type === 'hook' && e.event === 'Stop'),
       'Stop',
     )
     const head = await runGit(start.cwd as string, ['rev-parse', 'HEAD'])
-    await until(() => works.view(id).evidence?.head === head && settled(works.view(id)), '첫 증거')
+    await until(
+      () =>
+        works.view(id).evidence?.head === head &&
+        works.view(id).evidence?.review !== null &&
+        settled(works.view(id)),
+      '첫 증거와 미리 리뷰',
+    )
     let v = works.view(id)
-    expect(v.evidence?.review).toBeNull()
     expect(v.evidence?.lines?.map((l) => [l.line, l.status])).toEqual([
       ['C1', 'met'],
       ['C2', 'met'],
     ])
     // 세션이 앱이 쓴 예시 자료를 함께 커밋했다
     expect(v.evidence?.examples_file).toEqual({ path: examplesPath, status: 'same', diffs: [] })
-    expect(v.gate).toMatchObject({
-      conclusion: 'human_merge',
-      decisive: '리뷰 없음',
-      shadow: false,
+    expect(v.evidence?.review).toEqual({
+      status: 'done',
+      findings: [{ id: 'R1', severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 }],
+      prompt_version: REVIEW_PROMPT_VERSION,
     })
+    // 리뷰의 토큰은 events.jsonl에만 남긴다(리뷰는 대화 기록을 남기지 않는다). 증거 묶음에는 넣지 않는다
+    const reviewed = (await app.store.readEvents(id)).find((e) => e.type === 'review')
+    expect(reviewed).toMatchObject({ trigger: 'prepared', status: 'done', findings: 1 })
+    expect(reviewed?.usage).toMatchObject({ input_tokens: 1000, output_tokens: 50 })
+    // 미리 리뷰로 자동 조건을 채워도(그림자) 내보내기가 아니면 장부에 쓰지 않는다(V23)
+    expect(v.gate).toMatchObject({ conclusion: 'human_merge', condition: 'small', shadow: true })
+    expect(works.find(id)?.exported_head).toBeNull()
+    expect(await app.store.readLedger()).toEqual([])
     expect(v.head).toBe(head)
 
-    // 세션이 push하고 PR을 연다 → 내보내기 후보: 가짜 리뷰가 붙고 관문은 그림자(자동 머지 꺼짐)
+    // 세션이 push하고 PR을 연다 → 내보내기 후보: 같은 head·계약의 증거와 미리 리뷰를 다시 쓴다(claude -p 한 번)
     app.sessions.write(id, 'go\r')
     await until(
-      () => works.view(id).evidence?.review?.status === 'done' && settled(works.view(id)),
+      () => works.find(id)?.exported_head === head && settled(works.view(id)),
       '내보내기 증거',
     )
     v = works.view(id)
@@ -176,10 +190,18 @@ describe('한 Work의 생애', () => {
     expect(v.evidence?.review?.findings).toEqual([
       { id: 'R1', severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 },
     ])
-    // 리뷰의 토큰은 events.jsonl에만 남긴다(리뷰는 대화 기록을 남기지 않는다). 증거 묶음에는 넣지 않는다
     expect(v.evidence?.review).not.toHaveProperty('usage')
-    const reviewed = (await app.store.readEvents(id)).find((e) => e.type === 'review')
-    expect(reviewed?.usage).toMatchObject({ input_tokens: 1000, output_tokens: 50 })
+    expect((await fake()).filter((e) => e.type === 'review')).toHaveLength(1)
+    const reviews = (await app.store.readEvents(id)).filter((e) => e.type === 'review')
+    expect(reviews.map((e) => [e.trigger, e.reused ?? false])).toEqual([
+      ['prepared', false],
+      ['pr', true],
+    ])
+    const measured = (await app.store.readEvents(id)).filter((e) => e.type === 'evidence')
+    expect(measured.map((e) => [e.export, e.reused ?? false])).toEqual([
+      [false, false],
+      [true, true],
+    ])
     expect(v.gate).toEqual({
       conclusion: 'human_merge',
       decisive: '프로젝트에서 자동 머지가 꺼져 있음',
@@ -214,10 +236,10 @@ describe('한 Work의 생애', () => {
     expect(works.view(id).session).toBe('stopped')
 
     const ledger = await app.store.readLedger()
+    // 장부: 내보내기의 그림자 결론과 사람의 머지만(Stop의 재기는 쓰지 않는다, V23)
     expect(
       ledger.map((e) => [e.head === head, e.conclusion, e.condition, e.shadow, e.by ?? null]),
     ).toEqual([
-      [true, 'human_merge', null, false, null],
       [true, 'human_merge', 'small', true, null],
       [true, 'human_merge', null, false, 'human'],
     ])

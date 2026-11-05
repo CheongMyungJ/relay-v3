@@ -1,8 +1,9 @@
 // 독립 리뷰 (V4, docs/m2-modules.md 1절 review.ts). 새 맥락의 읽기 전용 claude -p가 이 프롬프트와 스키마로 돈다.
 // 리뷰는 막지 않고 올리기만 한다: 지적의 raise(예시와 시험 불일치, 보안, 계약 밖 변경, 구조)만 관문에 들어간다.
 // 프롬프트는 모델이 읽으므로 영어다. 리뷰·시험을 고치라는 지시를 세션에 넣지 않는다(V4, V8).
+// 앱은 리뷰 준비(reviewReady)인 head에 리뷰를 미리 돌리고, 리뷰는 (head, 계약 hash, 프롬프트 판)에 붙는다(V23).
 
-import { exampleValueText } from './contract.ts'
+import { contractHash, exampleValueText } from './contract.ts'
 import { err, ok, type Result } from './result.ts'
 import type {
   Contract,
@@ -23,6 +24,31 @@ const RAISES: readonly RaiseReason[] = [
 
 /** 프롬프트에 넣는 diff의 상한(글자 수). 넘으면 앞쪽만 넣고 알린다 */
 export const REVIEW_DIFF_MAX = 60_000
+
+/**
+ * 리뷰 프롬프트·스키마의 판. 바꾸면 올린다. 리뷰는 (head, 계약 hash, 이 판)에 붙는다: 앞 판의 리뷰는 내보내기에 다시 쓰지
+ * 않는다(V23)
+ */
+export const REVIEW_PROMPT_VERSION = 1
+
+/**
+ * 리뷰 준비(V23): 이 head의 결정론 증거가 통과해 리뷰만 남았다. 계약이 있고, 묶음이 이 계약과 이 head로 만든 것이고(낡지
+ * 않음), 못 미침·증거 없음 줄이 없고(줄 판정이 없으면 준비가 아니다), 명령이 모두 pass이고, 풀리지 않은 계약 변경 요청이
+ * 없다. 앱은 쉬는 세션의 이 head에 리뷰를 미리 돌린다. human·observe 줄과 신호, 래칫, 없는 증거는 보지 않는다(리뷰 뒤에도
+ * 사람에게 가는 사실이고, 리뷰가 그것을 바꾸지 않는다)
+ */
+export function reviewReady(
+  e: Omit<EvidenceBundle, 'review'>,
+  contract: Contract | null,
+  head: string | null,
+): boolean {
+  if (contract === null || head === null || e.head !== head) return false
+  if (e.contract?.hash !== contractHash(contract)) return false
+  if ((contract.change_requested?.trim() ?? '') !== '' || e.contract_change_requested) return false
+  if (e.lines === null || e.lines.length === 0) return false
+  if (e.lines.some((l) => l.status === 'not_met' || l.status === 'missing_evidence')) return false
+  return e.commands.every((c) => c.outcome === 'pass')
+}
 
 /** claude -p --json-schema로 주는 출력 모양 */
 export const REVIEW_SCHEMA = {

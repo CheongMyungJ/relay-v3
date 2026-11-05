@@ -291,7 +291,15 @@ export interface EvidenceBundle {
     /** 줄 수를 셀 수 없는 바이너리 파일의 경로 */
     binary: string[]
   }
-  review: { status: 'done' | 'failed' | 'skipped'; findings: ReviewFinding[] } | null
+  /**
+   * 독립 리뷰(V4). prompt_version은 리뷰어를 부른 리뷰 프롬프트의 판(review.ts REVIEW_PROMPT_VERSION)이다. 미리 리뷰(V23)를
+   * 내보내기에 다시 쓸 때 견준다. 건너뜀과 V23 앞의 묶음에는 없다
+   */
+  review: {
+    status: 'done' | 'failed' | 'skipped'
+    findings: ReviewFinding[]
+    prompt_version?: number
+  } | null
   /** 세션이 PR 본문 등에 쓴 주장. 관문에 들어가지 않는다 */
   claims: string | null
   contract_change_requested: boolean

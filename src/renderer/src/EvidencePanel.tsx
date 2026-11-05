@@ -67,7 +67,7 @@ export function EvidencePanel(p: { view: WorkView; project: ProjectView | null }
         <Empty title="관문의 결론이 아직 없습니다">증거를 다시 재면 관문을 다시 계산합니다.</Empty>
       )}
       {view.evidenceRunning ? <Spinner label="증거를 재는 중…" /> : null}
-      {view.reviewRunning ? <Spinner label="독립 리뷰 중…" /> : null}
+      {view.reviewRunning ? <Spinner label="리뷰 도는 중…" /> : null}
       <Actions view={view} />
       {e ? <Details view={view} e={e} /> : null}
     </div>
@@ -184,7 +184,13 @@ function Verdict(p: { gate: GateResult; view: WorkView; qualityNotice: boolean; 
             기준 <code>{shortSha(e.base)}</code>
           </span>
           <span>{timeText(e.created_at)}</span>
-          <span>{reviewMeta(e.review, view.reviewDisabled)}</span>
+          <span data-testid="review-meta">
+            {reviewMeta(e.review, {
+              disabled: view.reviewDisabled,
+              current: !isStale(view),
+              running: view.reviewRunning,
+            })}
+          </span>
         </p>
       ) : null}
       {isStale(view) ? (

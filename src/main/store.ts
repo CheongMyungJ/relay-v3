@@ -64,6 +64,8 @@ export interface WorkRecord {
   notice: string | null
   /** [끝내기]의 걸린 끝이나 상자(V25, works-end.ts). 옛 기록에는 없다(읽을 때 null) */
   end_pending: EndPending | null
+  /** 미리 리뷰(V23, works-review.ts)를 부른 수. 4번까지다. 옛 기록에는 없다(읽을 때 0) */
+  prepared_reviews: number
 }
 
 export type WorkFile =

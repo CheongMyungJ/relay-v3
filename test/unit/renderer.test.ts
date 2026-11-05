@@ -208,17 +208,21 @@ describe('증거 패널의 글', () => {
       '리뷰 실패: 지적을 받지 못함',
     )
     expect(reviewNote({ status: 'skipped', findings: [] }, false)).toMatch(/^리뷰를 건너뜀/)
-    expect(reviewNote(null, false)).toMatch(/^리뷰 없음: 리뷰는 PR을 열거나/)
-    expect(reviewNote(null, true)).toBe('독립 리뷰 중…')
+    expect(reviewNote(null, false)).toBe(
+      '리뷰 없음: 리뷰는 증거가 통과하고 세션이 쉴 때, PR을 열거나 갱신할 때, 끝낼 때 돕니다',
+    )
+    expect(reviewNote(null, true)).toBe('리뷰 도는 중…')
     expect(reviewNote({ status: 'done', findings: [] }, false)).toBe('지적 없음')
     expect(
       reviewNote({ status: 'done', findings: [{ id: 'R1', severity: 'low', text: 'x' }] }, false),
     ).toBeNull()
   })
 
-  test('decisiveText: 리뷰 중이면 그렇게, 내보내기가 아닌 리뷰 없음은 언제 도는지 풀어 쓴다', () => {
-    expect(decisiveText(base)).toBe('리뷰 없음 (리뷰는 PR을 열거나 갱신할 때, 끝낼 때 돕니다)')
-    expect(decisiveText({ ...base, reviewRunning: true })).toMatch(/^독립 리뷰 중/)
+  test('decisiveText: 리뷰가 돌면 그렇게, 아직 리뷰가 없으면 언제 도는지(미리 리뷰, V23) 풀어 쓴다', () => {
+    expect(decisiveText(base)).toBe(
+      '리뷰 없음 (리뷰는 증거가 통과하고 세션이 쉴 때, PR을 열거나 갱신할 때, 끝낼 때 돕니다)',
+    )
+    expect(decisiveText({ ...base, reviewRunning: true })).toMatch(/^리뷰 도는 중/)
     const reviewed = {
       ...base,
       evidence: evidence(),
@@ -241,7 +245,9 @@ describe('증거 패널의 글', () => {
     expect(
       nextStep({ ...base, evidence: evidence({ quality: { hash: '', from: 'none' } }) }),
     ).toMatch(/relay init/)
-    expect(nextStep(base)).toMatch(/^리뷰와 머지는 PR이 열리면 시작합니다/)
+    expect(nextStep(base)).toMatch(
+      /^머지는 PR이 열리면 할 수 있습니다\. 리뷰는 증거가 통과하고 세션이 쉬면 미리 돕니다/,
+    )
     expect(nextStep({ ...base, pr })).toBeNull()
     expect(nextStep({ ...base, state: 'done' })).toBeNull()
     // 품질 기준 알림(V20)이 위에 보이면 되풀이하지 않는다
@@ -249,12 +255,16 @@ describe('증거 패널의 글', () => {
       ...base,
       evidence: evidence({ quality: { hash: '', from: 'none' }, review: null }),
     }
-    expect(nextStep(none, { qualityNotice: true })).toMatch(/^리뷰와 머지는 PR이 열리면/)
-    // [끝내기]로 리뷰가 이미 돌았으면 머지만 PR을 기다린다. 걸린 끝이나 상자(V25)가 보이면 그것이 다음 할 일
-    expect(nextStep({ ...base, evidence: evidence() })).toMatch(
-      /^머지는 PR이 열리면 할 수 있습니다/,
+    expect(nextStep(none, { qualityNotice: true })).toMatch(/리뷰는 증거가 통과하고/)
+    // 미리 리뷰(V23)나 [끝내기]로 리뷰가 이미 돌았으면 머지만 PR을 기다린다. 걸린 끝이나 상자(V25)가 보이면 그것이 다음 할 일
+    expect(nextStep({ ...base, evidence: evidence() })).toBe(
+      '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요',
     )
     expect(nextStep(base, { ending: true })).toBeNull()
+    // 리뷰가 도는 동안은 언제 도는지 말하지 않는다
+    expect(nextStep({ ...base, reviewRunning: true })).toBe(
+      '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요',
+    )
   })
 
   test('리뷰를 평가용으로 끈 Work(reviewDisabled)는 리뷰 문구를 그 뜻으로만 쓴다(다른 건너뜀과 섞지 않음)', () => {
@@ -270,7 +280,9 @@ describe('증거 패널의 글', () => {
     expect(decisiveText(skipped)).toBe(REVIEW_DISABLED)
     expect(reviewNote({ status: 'skipped', findings: [] }, false, true)).toBe(REVIEW_DISABLED)
     expect(reviewNote(null, false, true)).toBe(REVIEW_DISABLED)
-    expect(reviewMeta({ status: 'skipped', findings: [] }, true)).toBe(REVIEW_DISABLED)
+    expect(reviewMeta({ status: 'skipped', findings: [] }, { disabled: true })).toBe(
+      REVIEW_DISABLED,
+    )
     expect(factText('리뷰를 건너뜀', off)).toBe(REVIEW_DISABLED)
     expect(factText('명령 실패: unit', off)).toBe('명령 실패: unit')
     // 켜져 있으면 그대로: 건너뜀의 다른 까닭, 언제 도는지
@@ -278,7 +290,13 @@ describe('증거 패널의 글', () => {
     expect(reviewNote({ status: 'skipped', findings: [] }, false)).toMatch(/자동 후보에만/)
     expect(reviewMeta({ status: 'skipped', findings: [] })).toBe('리뷰 건너뜀')
     expect(reviewMeta(null)).toBe('리뷰 없음')
-    expect(reviewMeta({ status: 'done', findings: [] }, true)).toBe('리뷰 지적 0개')
+    expect(reviewMeta({ status: 'done', findings: [] }, { disabled: true })).toBe('리뷰 지적 0개')
+    // 지금 HEAD의 묶음이면 리뷰가 끝났다고 보인다(V23: [끝내기]가 기다리지 않는다)
+    expect(reviewMeta({ status: 'done', findings: [] }, { current: true })).toBe(
+      '리뷰 끝(이 head): 지적 0개',
+    )
+    expect(reviewMeta({ status: 'failed', findings: [] }, { current: true })).toBe('리뷰 실패')
+    expect(reviewMeta(null, { running: true })).toBe('리뷰 도는 중')
     // 다음 할 일, [끝내기] 단추와 걸린 끝도 리뷰를 말하지 않는다
     expect(nextStep(off)).toBe(
       '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고, 열린 것이 없으면 바로 끝냅니다)',

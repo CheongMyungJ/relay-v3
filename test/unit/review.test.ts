@@ -1,14 +1,24 @@
-// [단위] 독립 리뷰(V4): 출력 스키마, 지적 파싱, 프롬프트와 diff 자르기
+// [단위] 독립 리뷰(V4): 출력 스키마, 지적 파싱, 프롬프트와 diff 자르기, 리뷰 준비(V23)
 import { describe, expect, test } from 'vitest'
+import { contractHash } from '../../src/core/contract.ts'
 import {
   evidenceFacts,
   parseReview,
   REVIEW_DIFF_MAX,
   REVIEW_SCHEMA,
   reviewPrompt,
+  reviewReady,
 } from '../../src/core/review.ts'
 import type { Contract, EvidenceBundle } from '../../src/core/types.ts'
-import { evidence, sig, verdict } from '../support/gate.ts'
+import {
+  command,
+  contract as gateContract,
+  evidence,
+  HEAD,
+  met,
+  sig,
+  verdict,
+} from '../support/gate.ts'
 
 const contract: Contract = {
   version: 1,
@@ -223,5 +233,54 @@ describe('리뷰 지적의 말', () => {
       evidenceSummary: [],
     })
     expect(p).toContain('write it in Korean')
+  })
+})
+
+describe('reviewReady (V23)', () => {
+  const c = gateContract()
+  /** 리뷰 없는 깨끗한 묶음(바탕 계약으로 만든 것) */
+  const ready = (over: Partial<EvidenceBundle> = {}) => evidence({ review: null, ...over })
+
+  test('계약이 있고, 이 head·계약으로 만든 묶음에 못 미침·증거 없음 줄이 없고 명령이 모두 pass면 준비', () => {
+    expect(reviewReady(ready(), c, HEAD)).toBe(true)
+    // human·observe 줄, 신호, 나빠진 래칫, 없는 증거는 리뷰 준비를 막지 않는다(리뷰 뒤에도 사람에게 가는 사실이다)
+    const human = { ...verdict('C2', 'human', '', 'new'), examples: [] }
+    expect(
+      reviewReady(
+        ready({
+          lines: [met('C1'), human],
+          signals: [sig('structure_change', 'src/a.ts', '새 모듈')],
+          ratchets: [{ id: 'tests', status: 'worse', detail: '시험 수 2 → 1' }],
+          missing: ['ci'],
+        }),
+        c,
+        HEAD,
+      ),
+    ).toBe(true)
+  })
+
+  test.each<[string, Partial<EvidenceBundle>]>([
+    ['못 미침 줄', { lines: [met('C1'), verdict('C2', 'not_met', '실패', 'new')] }],
+    ['증거 없음 줄', { lines: [met('C1'), verdict('C2', 'missing_evidence', '', 'new')] }],
+    ['줄 판정 없음', { lines: null }],
+    ['빈 줄 판정', { lines: [] }],
+    ['실패한 명령', { commands: [command('typecheck', 'pass'), command('test', 'fail')] }],
+    ['원래 실패하던 명령', { commands: [command('test', 'pre_existing')] }],
+    ['불안정한 명령', { commands: [command('test', 'unstable')] }],
+    ['돌리지 못한 명령', { commands: [command('test', 'not_run')] }],
+    ['풀리지 않은 계약 변경(묶음)', { contract_change_requested: true }],
+    ['다른 계약으로 만든 묶음', { contract: { id: 'w1', hash: 'other' } }],
+    ['계약 정보가 없는 묶음', { contract: null }],
+    ['낡은 묶음', { head: 'a'.repeat(40) }],
+  ])('%s면 준비가 아니다', (_, over) => {
+    expect(reviewReady(ready(over), c, HEAD)).toBe(false)
+  })
+
+  test('계약이 없거나, 지금 head를 모르거나, 계약에 바꾸기 요청이 걸려 있으면 준비가 아니다', () => {
+    expect(reviewReady(ready({ contract: null }), null, HEAD)).toBe(false)
+    expect(reviewReady(ready(), c, null)).toBe(false)
+    const asked = gateContract({ change_requested: '예시가 틀림' })
+    const made = { id: asked.id, hash: contractHash(asked) }
+    expect(reviewReady(ready({ contract: made }), asked, HEAD)).toBe(false)
   })
 })

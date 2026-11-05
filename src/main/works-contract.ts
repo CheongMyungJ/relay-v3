@@ -15,6 +15,7 @@ import { writeInside } from '../adapters/worktrees.ts'
 import { checkGroundings } from '../engine/judge.ts'
 import type { WorkRecord } from './store.ts'
 import { dropEnd } from './works-end.ts'
+import { followReview } from './works-review.ts'
 import { examplesDir } from './works-worktree.ts'
 import { message, type WorkCtx } from './works-types.ts'
 
@@ -129,8 +130,9 @@ export class ContractDesk {
     rec.pending_change = reason
     rec.pending_contract = proposed
     rec.groundings = groundings
-    // [끝내기]의 걸린 끝과 상자는 앞 계약의 증거로 정한 것이다(V25)
+    // [끝내기]의 걸린 끝과 상자는 앞 계약의 증거로 정한 것이다(V25). 도는 리뷰도 앞 계약의 것이라 멈춘다(V23)
     dropEnd(this.ctx, rec)
+    followReview(rt)
     const answer = this.wait(rec.id, 'change', signal)
     await this.ctx.deps.store.writeJson(rec.id, 'contract.json', rt.contract)
     await this.ctx.save(rec)

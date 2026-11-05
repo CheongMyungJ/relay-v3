@@ -1,5 +1,6 @@
 // Works의 의존과 안쪽 모양 (docs/m2-modules.md 3절 works.ts). works.ts가 600줄을 넘지 않게 계약 창구(works-contract.ts),
-// 증거·머지(works-evidence.ts), [끝내기](works-end.ts)를 나눴다. 셋은 이 파일의 WorkCtx로 Works를 본다. Electron을 모른다.
+// 증거·머지(works-evidence.ts), 리뷰(works-review.ts), [끝내기](works-end.ts)를 나눴다. 이 파일의 WorkCtx로 Works를 본다.
+// Electron을 모른다.
 
 import type { Contract, EvidenceBundle } from '../core/types.ts'
 import type { SessionState, WorkEvent } from '../core/work.ts'
@@ -81,10 +82,11 @@ export interface Runtime {
   debounce: ReturnType<typeof setTimeout> | null
   poll: ReturnType<typeof setInterval> | null
   /**
-   * 차례를 기다리는 증거 재기(아직 시작하지 않음). 겹친 요청은 하나로 합친다. again은 [증거 다시 재기]: 이미 잰 head도
-   * 다시 잰다(아니면 시작할 때 앞 재기가 이미 잰 head는 건너뛴다)
+   * 차례를 기다리는 증거 재기(아직 시작하지 않음). 겹친 요청은 하나로 합친다. export는 내보내기 계기(PR, [끝내기]),
+   * prepare는 미리 리뷰(V23)를 허락함, again은 [증거 다시 재기]: 이미 잰 head도 다시 잰다(아니면 시작할 때 앞 재기가 이미
+   * 잰 head는 건너뛴다)
    */
-  pending: { exportCandidate: boolean; again: boolean; done: Promise<void> } | null
+  pending: (MeasureJob & { done: Promise<void> }) | null
   /** 마지막 증거 재기가 끝나는 때 */
   chain: Promise<void>
   /** sessions.onData·onExit을 걸었나 */
@@ -95,10 +97,25 @@ export interface Runtime {
   noticeSent: boolean
   /** Work가 끝나거나 앱이 끝나면 끊는다(돌고 있는 리뷰를 그만둔다) */
   abort: AbortController
+  /**
+   * 도는 리뷰(V23): 그 head와 계약 hash, 리뷰마다 따로 두는 AbortController. 읽은 HEAD나 계약이 바뀌면 끊는다
+   * (works-review.ts followReview). 앱을 닫을 때는 abort가 끊는다
+   */
+  review: { head: string; hash: string; abort: AbortController } | null
   /** 마지막으로 기록한 자동 머지의 기다림·실패 까닭(같은 까닭을 PR 확인마다 다시 적지 않게) */
   autoMergeNote: string | null
   /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(V25, 화면의 한 줄). 다시 [끝내기]·[취소]하거나 Work가 끝나면 null */
   endMoved: string | null
+}
+
+/** 내보내기 계기(V23의 review 기록 trigger): PR 열기·갱신과 그 확인, [끝내기]·[그래도 끝내기] */
+export type ExportTrigger = 'pr' | 'end'
+
+/** 증거 재기 하나: export는 내보내기 계기(아니면 null), prepare는 미리 리뷰를 허락함(V23), again은 이미 잰 head도 다시 잼 */
+export interface MeasureJob {
+  export: ExportTrigger | null
+  prepare: boolean
+  again: boolean
 }
 
 /** works-contract.ts와 works-evidence.ts가 보는 Works */
@@ -127,8 +144,8 @@ export interface WorkCtx {
    * 않는다
    */
   seeHead(id: string, head: string | null): Promise<void>
-  /** 증거 재기가 하나 끝났다(works-evidence.ts의 줄 안에서): 걸린 끝을 다시 본다(V25, works-end.ts) */
-  settleEnd(id: string): Promise<void>
+  /** 증거 재기 job이 하나 끝났다(works-evidence.ts의 줄 안에서): 걸린 끝을 다시 본다(V25, works-end.ts) */
+  settleEnd(id: string, job: MeasureJob): Promise<void>
   /** 프로젝트의 품질 기준 상태(V20)를 뒤에서 다시 잰다(실패는 삼킨다) */
   refreshQuality(projectId: string): void
   log(message: string, error?: unknown): void

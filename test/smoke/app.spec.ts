@@ -1,5 +1,6 @@
 // [스모크] 빌드한 앱 (docs/m2-modules.md 5절). Playwright _electron으로 out/의 앱을 띄워 화면을 누른다.
-// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 PR을 연다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin.
+// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 쉬면 미리 리뷰(V23)가 돌고, PR을 열면 그 리뷰로 내보낸다. 가짜 gh, 임시
+// RELAY_HOME, 임시 git 레포와 bare origin.
 // 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
@@ -150,7 +151,7 @@ test.beforeAll(async () => {
       FAKE_CLAUDE_SCENARIO: scenario,
       FAKE_CLAUDE_LOG: join(tmp, 'claude.jsonl'),
       FAKE_CLAUDE_REVIEW: review,
-      // [끝내기]의 걸린 끝(V25)이 보일 틈
+      // 미리 리뷰(V23)와 [끝내기]의 걸린 끝(V25)이 보일 틈
       FAKE_CLAUDE_REVIEW_MS: '1500',
       FAKE_GH_STATE: ghState,
       FAKE_GH_LOG: join(tmp, 'gh.jsonl'),
@@ -216,25 +217,33 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await shot('contract')
   await approve.getByRole('button', { name: '승인', exact: true }).click()
 
-  // 승인 → 커밋·Stop → 증거(리뷰 없음): [증거] 탭으로 옮겨 결론을 크게
+  // 승인 → 커밋·Stop → 증거: [증거] 탭으로 옮겨 결론을 크게. 세션이 쉬고 명령·줄이 통과했으니 미리 리뷰(V23)가 돈다
   const evidence = page.getByTestId('evidence-panel')
   await expect(evidence).toBeVisible({ timeout: 30_000 })
   await expect(evidence.getByTestId('conclusion')).toHaveText('사람 머지', { timeout: 60_000 })
-  await expect(evidence.getByTestId('decisive')).toHaveText(/^리뷰 없음 \(리뷰는 PR을 열거나/)
+  await expect(evidence.getByRole('status').filter({ hasText: '리뷰 도는 중…' })).toBeVisible({
+    timeout: 60_000,
+  })
+  await expect(evidence.getByTestId('decisive')).toHaveText(/^리뷰 도는 중: 리뷰가 끝나면/)
+  await shot('prepared-review')
+  // 미리 리뷰가 끝나면 이 head의 리뷰로 결론을 다시 정한다: 자동 머지가 꺼져 있어 그림자. 장부에는 쓰지 않는다(내보내기 아님)
+  await expect(evidence.getByTestId('review-meta')).toHaveText('리뷰 끝(이 head): 지적 1개', {
+    timeout: 60_000,
+  })
+  await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible()
+  await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
   // PR이 없으면 다음 할 일을 말한다
   await expect(evidence.getByTestId('next-step')).toContainText('PR이 열리면')
   await expect(evidence.getByText('줄 판정')).toBeVisible()
   await shot('evidence')
 
-  // 터미널에서 Enter → 세션이 push하고 PR을 연다 → 내보내기 증거(가짜 리뷰), 자동 머지가 꺼져 있어 그림자
+  // 터미널에서 Enter → 세션이 push하고 PR을 연다 → 내보내기 증거(미리 리뷰를 다시 쓴다), 그림자
   await page.getByTestId('terminal').click()
   await page.keyboard.type('go')
   await page.keyboard.press('Enter')
-  await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible({
-    timeout: 60_000,
-  })
+  await expect(evidence.getByRole('link', { name: '#1' })).toBeVisible({ timeout: 60_000 })
+  await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible()
   await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
-  await expect(evidence.getByRole('link', { name: '#1' })).toBeVisible()
   await expect(evidence.getByTestId('next-step')).toBeHidden()
   await evidence.locator('summary', { hasText: '리뷰 지적' }).click()
   await expect(evidence.getByText('변수 이름이 짧음')).toBeVisible()

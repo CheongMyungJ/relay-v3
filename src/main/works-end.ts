@@ -1,6 +1,7 @@
 // [끝내기] (V25, docs/m2-modules.md 3절 works.ts, docs/m2.1-design.md 6절). works.ts가 600줄을 넘지 않게 나눴다.
 // [끝내기]는 지금 head의 내보내기 증거(리뷰 포함)를 본다. 열린 것(core openItems: 관문이 사람에게 보내는 사실 그대로)이
-// 없고 그사이 head가 그대로면 바로 끝낸다. 그 증거가 아직 없거나 리뷰가 실패했으면 '걸린 끝'으로 두고 재며, 증거 재기가
+// 없고 그사이 head가 그대로면 바로 끝낸다. 미리 리뷰(V23)가 끝난 head는 그 자리에서 내보내기로 잰다(다시 재지 않고
+// claude -p도 부르지 않는다). 그 증거가 아직 없거나 리뷰가 돌고 있거나 실패했으면 '걸린 끝'으로 두고 재며, 증거 재기가
 // 하나 끝날 때마다(EvidenceRunner의 줄 안에서) 다시 본다. 열린 것이 있으면 상자로 두고 사람이 [그래도 끝내기](V18의
 // [끝 확정])나 [더 고치기]를 고른다. 걸린 끝과 상자는 WorkRecord.end_pending이라 다른 Work로 갔다 오거나 앱을 다시 켜도
 // 남는다. head가 바뀌거나 계약이 바뀌거나 Work가 끝나면 지운다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
@@ -10,7 +11,7 @@ import { nextState } from '../core/work.ts'
 import type { EndInput, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
 import { headOf, type EvidenceRunner } from './works-evidence.ts'
-import { isActive, measures, type WorkCtx } from './works-types.ts'
+import { isActive, measures, type MeasureJob, type WorkCtx } from './works-types.ts'
 
 /** 끝낸 방식(events.jsonl의 ended.how): 한 번에, 걸렸다가, 상자에서 [그래도 끝내기] */
 type How = 'once' | 'armed' | 'box'
@@ -45,11 +46,20 @@ export class EndDesk {
     if (o.force === true) return this.force(rec, o.head)
     const head = o.head === undefined ? await headOf(rec.worktree) : await this.sameHead(id, o.head)
     this.ctx.runtime(id).endMoved = null
+    // 미리 리뷰가 끝난 head: 결정론 증거와 리뷰를 다시 써서 바로 내보내기로 잰다(장부 한 줄). 그 사이 정책이 머지했으면
+    // 끝났다. 그 사이 HEAD가 바뀌었으면 끝내지 않는다
+    if (this.evidence.promotable(id, head)) {
+      await this.evidence.run(id, { export: 'end' })
+      if (!isActive(rec.state)) return { head: null, ended: true, armed: false, open: [] }
+      await this.sameHead(id, head)
+    }
     if (this.ready(id, head)) return this.decide(rec, head, 'once')
     rec.end_pending = { head, armed: true, open: [] }
     await this.ctx.save(rec)
     this.ctx.note(id, { type: 'end_armed', head })
-    this.measure(id, head)
+    // 도는 재기(미리 리뷰 등)가 있으면 그것이 끝난 뒤 settle이 내보내기를 줄 세운다: 그사이 HEAD가 바뀌면 재지 않는다
+    const rt = this.ctx.runtime(id)
+    if (rt.measuring === null && rt.pending === null) this.measure(id)
     return { head, ended: false, armed: true, open: [] }
   }
 
@@ -65,11 +75,12 @@ export class EndDesk {
   }
 
   /**
-   * 증거 재기가 하나 끝났다(EvidenceRunner의 줄 안, 다음 재기 전): 걸린 끝을 다시 본다. 줄 선 재기가 남았거나 앱을 닫는
-   * 중이면 그대로 둔다(다시 켜면 resume). HEAD가 바뀌었으면 지운다. 그 head를 내보내기로 재지 못했으면(재기 실패, 까닭은
-   * rec.error) 풀어서 사람이 다시 누르게 한다. 아니면 끝내거나 상자로 바꾼다
+   * 증거 재기 job이 하나 끝났다(EvidenceRunner의 줄 안, 다음 재기 전): 걸린 끝을 다시 본다. 줄 선 재기가 남았거나 앱을 닫는
+   * 중이면 그대로 둔다(다시 켜면 resume). HEAD가 바뀌었으면 지운다. 그 head를 내보내기로 쟀으면 끝내거나 상자로 바꾼다.
+   * 끝난 재기가 내보내기가 아니었으면(미리 리뷰, V23) 이제 내보내기로 잰다(같은 head·계약의 증거와 리뷰는 다시 쓴다).
+   * 내보내기였는데 재지 못했으면(재기 실패, 까닭은 rec.error) 풀어서 사람이 다시 누르게 한다
    */
-  async settle(id: string): Promise<void> {
+  async settle(id: string, job: MeasureJob): Promise<void> {
     const rec = this.ctx.find(id)
     const p = rec?.end_pending
     if (!rec || !p?.armed || !isActive(rec.state)) return
@@ -77,20 +88,21 @@ export class EndDesk {
     if (rt.abort.signal.aborted || rt.pending !== null) return
     const head = await headOf(rec.worktree).catch(() => null)
     if (head !== null && head !== p.head) return this.ctx.seeHead(id, head)
-    if (head === null || !this.evidence.exported(id, head)) {
-      rec.end_pending = null
-      await this.ctx.save(rec)
-      this.ctx.note(id, { type: 'end_failed', head: p.head })
+    if (head !== null && this.evidence.exported(id, head)) {
+      await this.decide(rec, head, 'armed')
       return
     }
-    await this.decide(rec, head, 'armed')
+    if (head !== null && job.export === null) return this.measure(id)
+    rec.end_pending = null
+    await this.ctx.save(rec)
+    this.ctx.note(id, { type: 'end_failed', head: p.head })
   }
 
   /** 앱을 다시 켰을 때 걸린 끝이 남아 있으면 이어 잰다(HEAD가 바뀌었으면 init의 seeHead가 이미 지웠다) */
   resume(id: string): void {
     const rec = this.ctx.record(id)
     const p = rec.end_pending
-    if (p?.armed === true && measures(rec.state)) this.measure(id, p.head)
+    if (p?.armed === true && measures(rec.state)) this.measure(id)
   }
 
   /** 읽은 HEAD가 걸린 끝이나 상자의 head가 아니면 지운다(화면은 endMoved로 까닭을 보인다). 지웠으면 참: 부른 쪽이 저장한다 */
@@ -125,13 +137,12 @@ export class EndDesk {
     return { head, ended: false, armed: false, open }
   }
 
-  /** 이 head를 내보내기로 잰다. 리뷰가 실패한 head는 다시 잰다(PR이 없으면 그 head의 리뷰를 받을 길이 이것뿐이다) */
-  private measure(id: string, head: string): void {
-    const failed = this.ctx.runtime(id).evidence?.review?.status === 'failed'
-    const again = this.evidence.exported(id, head) && failed
-    void this.evidence
-      .run(id, { exportCandidate: true, again })
-      .catch((e) => this.ctx.log('증거 실패', e))
+  /**
+   * 이 head를 내보내기로 잰다. 같은 head·계약의 결정론 증거와 끝난 리뷰는 다시 쓰고, 리뷰가 실패한 head는 리뷰를 다시
+   * 부른다(PR이 없으면 그 head의 리뷰를 받을 길이 이것뿐이다)
+   */
+  private measure(id: string): void {
+    void this.evidence.run(id, { export: 'end' }).catch((e) => this.ctx.log('증거 실패', e))
   }
 
   /**
@@ -168,6 +179,6 @@ export class EndDesk {
     const rec = this.ctx.record(id)
     const head = await headOf(rec.worktree).catch(() => null)
     if (!measures(rec.state) || head === null) return
-    if (!this.evidence.exported(id, head)) await this.evidence.run(id, { exportCandidate: true })
+    if (!this.evidence.exported(id, head)) await this.evidence.run(id, { export: 'end' })
   }
 }

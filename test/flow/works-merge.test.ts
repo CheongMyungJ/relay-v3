@@ -220,25 +220,32 @@ test('[머지]: Work의 기준과 다른 PR, CI 실패·진행 중인 PR은 머�
   const { id } = await works.createWork({ project: project.id, request: REQUEST })
   await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
   await works.approveContract(id)
-  // 기준이 다른 PR은 내보내기로 재지 않고(Stop의 증거만) 알린다
-  await until(() => works.view(id).evidence !== null && settled(works.view(id)), '첫 증거')
+  // 기준이 다른 PR은 내보내기로 재지 않고(Stop의 증거와 미리 리뷰만, V23) 알린다. 장부에도 쓰지 않는다
+  await until(
+    () => works.view(id).evidence?.review?.status === 'done' && settled(works.view(id)),
+    'Stop의 증거와 미리 리뷰',
+  )
   await until(() => works.view(id).error?.includes('기준 브랜치(dev)') ?? false, '기준 알림')
-  expect(works.view(id).evidence?.review).toBeNull()
+  const head = works.view(id).head
+  expect(works.find(id)?.exported_head).toBeNull()
+  expect((await app.store.readLedger()).filter((e) => e.work === id)).toEqual([])
   expect(await works.merge(id)).toEqual({
     ok: false,
     error: 'PR의 기준 브랜치(dev)가 Work의 기준(main)과 다름',
   })
 
-  // 사람이 PR의 기준을 main으로 고친다 → PR 확인이 내보내기 후보로 잰다(리뷰)
+  // 사람이 PR의 기준을 main으로 고친다 → PR 확인이 내보내기 후보로 잰다(미리 리뷰를 다시 쓴다)
   const pr = works.view(id).pr?.number
   const setPr = (fields: Entry) =>
     kit.gh((state) => Object.assign(state.prs?.find((p) => p.number === pr) ?? {}, fields))
   await setPr({ baseRefName: 'main' })
   await until(
-    () => works.view(id).evidence?.review?.status === 'done' && settled(works.view(id)),
+    () => works.find(id)?.exported_head === head && settled(works.view(id)),
     '내보내기 증거',
   )
   expect(works.view(id).error).toBeNull()
+  expect((await fake()).filter((e) => e.type === 'review')).toHaveLength(1)
+  expect((await app.store.readLedger()).filter((e) => e.work === id)).toHaveLength(1)
 
   const ci = (state: string) => [{ __typename: 'StatusContext', context: 'ci', state }]
   await setPr({ statusCheckRollup: ci('FAILURE') })

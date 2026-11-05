@@ -155,19 +155,29 @@ export function factText(fact: string, v: Pick<WorkView, 'reviewDisabled'>): str
     : fact
 }
 
-/** 결론을 정한 사실 한 줄. 리뷰가 도는 중이거나 내보내기가 아니어서 리뷰가 없으면 그 뜻을 풀어 쓴다 */
+/** 리뷰가 언제 도는지(V23): 미리 리뷰, PR, [끝내기] */
+const REVIEW_WHEN = '리뷰는 증거가 통과하고 세션이 쉴 때, PR을 열거나 갱신할 때, 끝낼 때 돕니다'
+
+/** 결론을 정한 사실 한 줄. 리뷰가 도는 중이거나 아직 리뷰가 없으면 그 뜻을 풀어 쓴다 */
 export function decisiveText(v: WorkView): string {
   const d = factText(v.gate?.decisive ?? '', v)
   if (v.evidence?.review !== null) return d
-  if (v.reviewRunning) return '독립 리뷰 중: 리뷰가 끝나면 결론을 다시 정합니다'
-  return d === '리뷰 없음' ? '리뷰 없음 (리뷰는 PR을 열거나 갱신할 때, 끝낼 때 돕니다)' : d
+  if (v.reviewRunning) return '리뷰 도는 중: 리뷰가 끝나면 결론을 다시 정합니다'
+  return d === '리뷰 없음' ? `리뷰 없음 (${REVIEW_WHEN})` : d
 }
 
-/** 결론 아래 메타 줄의 리뷰 한 마디 */
-export function reviewMeta(r: EvidenceBundle['review'], disabled = false): string {
-  if (disabled && (r === null || r.status === 'skipped')) return REVIEW_DISABLED
-  if (r === null) return '리뷰 없음'
-  if (r.status === 'done') return `리뷰 지적 ${r.findings.length}개`
+/**
+ * 결론 아래 메타 줄의 리뷰 한 마디. current는 묶음이 지금 HEAD의 것이다: 끝난 리뷰를 '리뷰 끝(이 head)'으로 보인다(V23,
+ * 미리 리뷰가 끝났으면 [끝내기]가 기다리지 않는다). running이면 아직 리뷰가 없는 묶음을 '리뷰 도는 중'으로
+ */
+export function reviewMeta(
+  r: EvidenceBundle['review'],
+  o: { disabled?: boolean; current?: boolean; running?: boolean } = {},
+): string {
+  if (o.disabled && (r === null || r.status === 'skipped')) return REVIEW_DISABLED
+  if (r === null) return o.running ? '리뷰 도는 중' : '리뷰 없음'
+  if (r.status === 'done')
+    return `${o.current ? '리뷰 끝(이 head): 지적' : '리뷰 지적'} ${r.findings.length}개`
   return r.status === 'failed' ? '리뷰 실패' : '리뷰 건너뜀'
 }
 
@@ -178,8 +188,7 @@ export function reviewNote(
   disabled = false,
 ): string | null {
   if (disabled && (r === null || r.status === 'skipped')) return REVIEW_DISABLED
-  if (r === null)
-    return running ? '독립 리뷰 중…' : '리뷰 없음: 리뷰는 PR을 열거나 갱신할 때, 끝낼 때 돕니다'
+  if (r === null) return running ? '리뷰 도는 중…' : `리뷰 없음: ${REVIEW_WHEN}`
   if (r.status === 'failed') return '리뷰 실패: 지적을 받지 못함'
   if (r.status === 'skipped')
     return '리뷰를 건너뜀: 계약이 없거나, 리뷰 범위가 자동 후보에만인데 자동 조건을 채우지 못함'
@@ -217,10 +226,11 @@ export function nextStep(
     return `PR이 지금 HEAD(${shortSha(v.head)})를 가리키지 않음: 세션에게 push를 요청하세요`
   if (v.evidence?.quality.from === 'none' && !o.qualityNotice)
     return '품질 기준(.relay/quality.json)이 없어 명령을 돌리지 않았습니다. 레포에서 relay init으로 초안을 만드세요'
-  // [끝내기]로 이 head를 내보내기로 쟀으면 리뷰는 이미 돌았다. 리뷰를 끈 앱(평가 설정)은 리뷰를 말하지 않는다
-  if (!pr && v.evidence?.review === null && !v.reviewDisabled)
-    return '리뷰와 머지는 PR이 열리면 시작합니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(리뷰를 돌리고, 열린 것이 없으면 바로 끝냅니다)'
-  if (!pr && v.evidence?.review === null)
+  // 미리 리뷰(V23)나 [끝내기]로 리뷰가 이미 돌았거나 도는 중이면 머지만 PR을 기다린다. 리뷰를 끈 앱(평가 설정)은 리뷰를
+  // 말하지 않는다
+  if (!pr && v.evidence?.review === null && !v.reviewDisabled && !v.reviewRunning)
+    return '머지는 PR이 열리면 할 수 있습니다. 리뷰는 증거가 통과하고 세션이 쉬면 미리 돕니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(리뷰를 돌리고, 열린 것이 없으면 바로 끝냅니다)'
+  if (!pr && v.evidence?.review === null && v.reviewDisabled)
     return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고, 열린 것이 없으면 바로 끝냅니다)'
   if (!pr && v.evidence)
     return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요'
