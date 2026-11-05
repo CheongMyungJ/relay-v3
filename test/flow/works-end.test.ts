@@ -1,16 +1,13 @@
 // [흐름] [끝내기](V25): 열린 것이 없으면 한 번에 끝남(걸었다가 리뷰 뒤, 이미 잰 head면 바로), 올림이 있으면 상자(work.json)와
 // [더 고치기]·[그래도 끝내기](안전망), 상자 뒤 커밋과 낡은 화면의 head, 걸린 끝의 [취소]와 리뷰 중 커밋, 실패한 리뷰는 상자의
 // 열린 것(앱을 다시 켜도 남음)이고 다시 [끝내기]가 리뷰를 다시 부름, 앱을 닫아 끊긴 리뷰와 걸린 끝 이어 재기, 평가용으로 끈
-// 리뷰(reviewDisabled)는 늘 상자, 프로젝트의 품질 기준 상태와 [초안 만들기](V20). 세션이 쉬면 미리 리뷰(V23)가 돈다: 미리
-// 리뷰와 [끝내기]가 만나는 경우는 works-review.test.ts. 바탕은 test/support/works-flow.ts.
-import { readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+// 리뷰(reviewDisabled)는 늘 상자. 다시 내보내기로 재는 동안과 그 리뷰가 끊긴 뒤의 [끝내기], [끝내기]의 재기가 도는 사이 새
+// head에서 다시 [끝내기], 계약 바꾸기를 받은 뒤의 새 head(내보내기 아님). 세션이 쉬면 미리 리뷰(V23)가 돈다: 미리 리뷰와
+// [끝내기]가 만나는 경우는 works-review.test.ts. 바탕은 test/support/works-flow.ts.
 import { expect, test, vi } from 'vitest'
-import { parseQuality } from '../../src/core/quality.ts'
+import { check } from '../../src/engine/check.ts'
 import { workHead } from '../../src/main/works-types.ts'
-import { EVENTS, type ProjectView } from '../../src/shared/api.ts'
-import { QUALITY_TEXT } from '../support/calc.ts'
-import { makeRepo, makeTempDir } from '../support/repo.ts'
+import { makeTempDir } from '../support/repo.ts'
 import type { TestApp } from '../support/works-app.ts'
 import {
   CONTRACT,
@@ -385,6 +382,175 @@ test('앱을 닫아 끊긴 리뷰는 내보내기(exported_head, 장부, export 
   expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
 })
 
+test('[끝내기]의 재기가 도는 사이 세션이 커밋하고 사람이 새 head에서 다시 [끝내기]하면, 앞 재기(다른 head)가 끝난 뒤 새 head를 내보내기로 재서 끝낸다', async () => {
+  const shellCommit = `git -c user.name=f -c user.email=f@relay.invalid commit -q --allow-empty -m 둘째`
+  await scenario([
+    SUBMIT,
+    FIX_COMMIT,
+    { do: 'waitInput' },
+    { do: 'bash', command: shellCommit },
+    { do: 'waitInput' },
+  ])
+  // 첫 head의 check를 붙잡아 둔다: 그사이 세션이 커밋하고 사람이 다시 누른다
+  let hold: Promise<void> | null = null
+  let release = () => {}
+  const app = await kit.openApp(await makeTempDir('relay-home-'), {
+    check: async (o) => {
+      if (hold) await hold
+      return check(o)
+    },
+  })
+  const { works } = app
+  const project = await works.addProject(kit.repo.dir)
+  const { id } = await works.createWork({ project: project.id, request: REQUEST })
+  await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
+  const rec = works.record(id)
+  const start = await workHead(rec)
+  await works.approveContract(id)
+  await until(async () => (await workHead(rec)) !== start, '고침 커밋')
+  const first = await workHead(rec)
+  hold = new Promise((r) => {
+    release = r
+  })
+  expect(await works.end(id, { head: first })).toMatchObject({ armed: true })
+  await until(() => works.view(id).evidenceRunning, '첫 head의 내보내기 재기')
+
+  app.sessions.write(id, '하나 더\r')
+  await until(() => works.view(id).head !== first, '셸 커밋의 HEAD')
+  const second = works.view(id).head ?? ''
+  expect(works.view(id)).toMatchObject({ endPending: null, endMoved: first })
+  // 다시 [끝내기]: 첫 head의 재기가 아직 돌아서 줄 세우지 않고 걸어 둔다
+  const armed = { head: second, armed: true, open: [] }
+  expect(await works.end(id, { head: second })).toEqual({ ...armed, ended: false })
+  hold = null
+  release()
+  // 끝난 재기는 첫 head를 쟀다(리뷰는 HEAD가 바뀌어 버림): 새 head를 재지 않은 채 풀지 않는다
+  await until(
+    () => works.view(id).state === 'done' || works.view(id).endPending === null,
+    '새 head의 걸린 끝을 정함',
+  )
+  await works.idle()
+  expect(works.view(id).state).toBe('done')
+  expect(await exportsOf(app, id)).toEqual([true])
+  expect(await ends(app, id)).toEqual([
+    { type: 'end_armed', head: first },
+    { type: 'end_moved', from: first, to: second, armed: true },
+    { type: 'end_armed', head: second },
+    { type: 'ended', how: 'armed', head: second },
+  ])
+})
+
+test('PR head를 다시 내보내기로 재는 동안(리뷰 중)의 [끝내기]는 리뷰 없는 묶음으로 상자를 띄우지 않고 걸었다가 그 리뷰로 끝낸다', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, ...PUSH_AND_PR, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app)
+  await until(
+    () => works.find(id)?.exported_head === works.view(id).head && settled(works.view(id)),
+    'PR의 내보내기 증거',
+  )
+  await works.idle()
+  const head = works.view(id).head ?? ''
+  vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '1500')
+  try {
+    // [증거 다시 재기](PR이 이 head를 가리킴): 내보내기로 다시 재고 리뷰를 다시 부른다
+    const again = works.runEvidence(id, { exportCandidate: true })
+    await until(() => works.view(id).reviewRunning, '다시 재는 리뷰')
+    expect(works.view(id).evidence?.review).toBeNull()
+    expect(works.find(id)?.exported_head).toBeNull()
+    expect(await works.end(id, { head })).toEqual({ head, ended: false, armed: true, open: [] })
+    await again
+    await until(() => works.view(id).state === 'done', '리뷰 뒤 끝남')
+    await works.idle()
+  } finally {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
+  }
+  expect(await reviews()).toBe(2)
+  expect(await ends(app, id)).toEqual([
+    { type: 'end_armed', head },
+    { type: 'ended', how: 'armed', head },
+  ])
+})
+
+test('PR head를 다시 재는 리뷰 중 앱을 닫으면 그 head는 내보내기로 잰 것이 아니다: 다시 켠 뒤 [끝내기]는 리뷰 없음 상자에 갇히지 않고 리뷰를 다시 부른다', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, ...PUSH_AND_PR, { do: 'stop' }])
+  const home = await makeTempDir('relay-home-')
+  const first = await kit.openApp(home)
+  const id = await startWork(first)
+  await until(
+    () =>
+      first.works.find(id)?.exported_head === first.works.view(id).head &&
+      settled(first.works.view(id)),
+    'PR의 내보내기 증거',
+  )
+  await first.works.idle()
+  const head = first.works.view(id).head ?? ''
+  try {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', 'hang')
+    const again = first.works.runEvidence(id, { exportCandidate: true }).catch(() => {})
+    await until(async () => (await reviews()) === 2, '다시 재는 리뷰(claude -p)')
+    await first.close()
+    kit.forget(first)
+    await again
+  } finally {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', '')
+  }
+  const second = await kit.openApp(home)
+  const { works } = second
+  // 엔진이 이 head의 증거 파일을 리뷰 없는 묶음으로 덮었다
+  expect(works.view(id).evidence).toMatchObject({ head, review: null })
+  expect(await works.end(id, { head })).toEqual({ head, ended: false, armed: true, open: [] })
+  await until(() => works.view(id).state === 'done', '리뷰 뒤 끝남')
+  await works.idle()
+  expect(works.view(id).evidence?.review).toMatchObject({ status: 'done' })
+  expect(await reviews()).toBe(3)
+  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
+})
+
+test('계약 바꾸기를 받아들일 때 앞 묶음이 내보내기였어도 새 head는 내보내기로 재지 않는다(장부, exported_head, end 리뷰 없음)', async () => {
+  await kit.review(RAISED_FINDINGS)
+  const changed = {
+    ...CONTRACT,
+    goal: 'clamp가 hi보다 큰 값을 hi로 자르고 범위 안의 값은 그대로 둔다',
+  }
+  await scenario([
+    SUBMIT,
+    FIX_COMMIT,
+    { do: 'stop' },
+    { do: 'waitInput' },
+    // 차례 안의 커밋(훅 없음)과 계약 바꾸기 요청(답을 기다려 Stop이 없다)
+    { do: 'commit', message: '중간', files: { 'NOTES.md': '중간\n' } },
+    { do: 'mcp', tool: 'request_contract_change', args: { reason: '범위', contract: changed } },
+    { do: 'waitInput' },
+  ])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app)
+  const first = works.view(id).head ?? ''
+  // [끝내기]가 미리 리뷰를 내보내기로 잰다(장부 한 줄): 올림이 있어 상자
+  expect(await works.end(id, { head: first })).toMatchObject({ armed: false, open: RAISED })
+  await works.cancelEnd(id)
+  const ledger = (await app.store.readLedger()).filter((e) => e.work === id)
+  expect(ledger.map((e) => e.head)).toEqual([first])
+
+  app.sessions.write(id, '고쳐 주세요\r')
+  await until(() => works.view(id).state === 'recontract', '계약 바꾸기 요청')
+  const second = await workHead(works.record(id))
+  expect(second).not.toBe(first)
+  await works.answerChange(id, { approved: true, message: '좋아요' })
+  await until(
+    () => works.view(id).evidence?.head === second && settled(works.view(id)),
+    '새 head를 새 계약으로 잼',
+  )
+  await works.idle()
+  // 새 head는 아무도 내보내지 않았다: 내보내기 계기를 기다린다
+  expect(works.find(id)?.exported_head).toBeNull()
+  expect((await app.store.readLedger()).filter((e) => e.work === id)).toEqual(ledger)
+  expect(await exportsOf(app, id)).toEqual([false, true, false])
+  expect(await reviews()).toBe(1)
+  expect(works.view(id).state).toBe('working')
+})
+
 test('리뷰를 평가용으로 끄면(reviewDisabled) 리뷰를 부르지 않고 건너뜀으로 둔다. 건너뜀은 늘 열린 것이라 [끝내기]는 상자를 띄운다', async () => {
   await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
   const app = await kit.openApp(await makeTempDir('relay-home-'), { reviewDisabled: true })
@@ -405,55 +571,4 @@ test('리뷰를 평가용으로 끄면(reviewDisabled) 리뷰를 부르지 않�
   // 평가가 [끝내기]마다 센 건너뜀 기록은 남긴다
   const skipped = (await app.store.readEvents(id)).filter((e) => e.type === 'review')
   expect(skipped).toMatchObject([{ status: 'skipped', disabled: true }])
-})
-
-test('품질 기준 상태(V20): 기본 브랜치에 없으면 missing, [초안 만들기]는 작업 트리에 쓰고 덮지 않는다, 커밋하면 present, 깨지면 invalid', async () => {
-  const repo = await makeRepo({
-    files: {
-      'package.json': JSON.stringify({ name: 'x', scripts: { test: 'node --test' } }),
-      'package-lock.json': '{}\n',
-      'src/a.js': 'export const a = 1\n',
-    },
-  })
-  const app = await kit.openApp(await makeTempDir('relay-home-'))
-  const { works } = app
-  // origin/main의 기준을 읽는다(kit의 레포는 origin에 품질 기준이 있다)
-  expect(await works.addProject(kit.repo.dir)).toMatchObject({
-    quality: 'present',
-    qualityRef: 'origin/main',
-  })
-  // origin이 없으면 로컬 기본 브랜치를 읽는다(화면은 push를 말하지 않는다)
-  const project = await works.addProject(repo.dir)
-  expect(project).toMatchObject({ quality: 'missing', qualityDraft: false, qualityRef: 'main' })
-  expect(works.list().projects.find((p) => p.id === project.id)?.quality).toBe('missing')
-
-  const target = join(repo.dir, '.relay', 'quality.json')
-  expect(await works.draftQuality(project.id)).toEqual({ written: true, path: target })
-  const parsed = parseQuality(await readFile(target, 'utf8'))
-  if (!parsed.ok) throw new Error(parsed.errors.join('; '))
-  expect(parsed.value.commands.acceptance?.run).toMatch(/^node --test --test-reporter=junit/)
-  expect(parsed.value.auto.map((c) => c.id)).toEqual(['small'])
-  // 이미 있으면 덮지 않는다
-  await writeFile(target, '{ "사람이": "고침" }\n')
-  expect(await works.draftQuality(project.id)).toEqual({ written: false, path: target })
-  expect(await readFile(target, 'utf8')).toBe('{ "사람이": "고침" }\n')
-  // 작업 트리에만 있는 기준은 쓰이지 않는다(V9: 기준은 base에서 읽음). 화면은 초안이 있다고 알린다
-  await works.refreshProjects()
-  expect(works.list().projects.find((p) => p.id === project.id)).toMatchObject({
-    quality: 'missing',
-    qualityDraft: true,
-  })
-
-  // 기본 브랜치에 깨진 기준을 커밋하면 invalid, 고쳐 커밋하면 present. 바뀌면 화면에 알린다
-  await repo.commit('깨진 기준')
-  await works.refreshProjects()
-  const shown = () =>
-    (app.emitted.filter((e) => e.event === EVENTS.projects).at(-1)?.payload as ProjectView[]).find(
-      (p) => p.id === project.id,
-    )
-  expect(shown()).toMatchObject({ quality: 'invalid', qualityDraft: false })
-  await repo.commit('기준 고침', { '.relay/quality.json': QUALITY_TEXT })
-  await works.refreshProjects()
-  expect(shown()).toMatchObject({ quality: 'present', qualityDraft: false })
-  await expect(works.draftQuality('없는 프로젝트')).rejects.toThrow(/프로젝트가 없음/)
 })

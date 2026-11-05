@@ -112,11 +112,16 @@ export interface Runtime {
 /** 내보내기 계기(V23의 review 기록 trigger): PR 열기·갱신과 그 확인, [끝내기]·[그래도 끝내기] */
 export type ExportTrigger = 'pr' | 'end'
 
-/** 증거 재기 하나: export는 내보내기 계기(아니면 null), prepare는 미리 리뷰를 허락함(V23), again은 이미 잰 head도 다시 잼 */
+/**
+ * 증거 재기 하나: export는 내보내기 계기(아니면 null), prepare는 미리 리뷰를 허락함(V23), again은 이미 잰 head도 다시 잼.
+ * head는 재기가 시작할 때 읽은 head다(줄 설 때는 모른다. 읽지 못했으면 null): 걸린 끝(V25)은 끝난 재기가 어느 head를
+ * 쟀는지로 다음 일을 정한다
+ */
 export interface MeasureJob {
   export: ExportTrigger | null
   prepare: boolean
   again: boolean
+  head: string | null
 }
 
 /** works-contract.ts와 works-evidence.ts가 보는 Works */

@@ -57,7 +57,10 @@ export interface WorkRecord {
   /** 마지막 증거 묶음 파일($RELAY_HOME/evidence/…) */
   evidence_path: string | null
   gate: GateResult | null
-  /** 마지막으로 내보내기 후보(리뷰 포함)로 잰 head */
+  /**
+   * 지금 묶음을 내보내기(리뷰 포함)로 쟀으면 그 head(V23). 내보내기가 아닌 재기가 묶음을 바꾸거나 내보내기 리뷰가 도는
+   * 동안은 null: 같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게
+   */
   exported_head: string | null
   error: string | null
   /** 세션이 멈춘 사이 사람이 답한 것. 다음 재개의 프롬프트로 전한다 */

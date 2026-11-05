@@ -77,7 +77,8 @@ export class EndDesk {
   /**
    * 증거 재기 job이 하나 끝났다(EvidenceRunner의 줄 안, 다음 재기 전): 걸린 끝을 다시 본다. 줄 선 재기가 남았거나 앱을 닫는
    * 중이면 그대로 둔다(다시 켜면 resume). HEAD가 바뀌었으면 지운다. 그 head를 내보내기로 쟀으면 끝내거나 상자로 바꾼다.
-   * 끝난 재기가 내보내기가 아니었으면(미리 리뷰, V23) 이제 내보내기로 잰다(같은 head·계약의 증거와 리뷰는 다시 쓴다).
+   * 끝난 재기가 이 head의 내보내기가 아니었으면 이제 내보내기로 잰다(같은 head·계약의 증거와 리뷰는 다시 쓴다): 미리
+   * 리뷰(V23)였거나, 걸기 전에 돌던 다른 head의 재기였다(그사이 세션이 커밋하고 사람이 새 head에서 다시 눌렀다). 이 head의
    * 내보내기였는데 재지 못했으면(재기 실패, 까닭은 rec.error) 풀어서 사람이 다시 누르게 한다
    */
   async settle(id: string, job: MeasureJob): Promise<void> {
@@ -92,7 +93,8 @@ export class EndDesk {
       await this.decide(rec, head, 'armed')
       return
     }
-    if (head !== null && job.export === null) return this.measure(id)
+    const other = job.head !== null && job.head !== p.head
+    if (head !== null && (job.export === null || other)) return this.measure(id)
     rec.end_pending = null
     await this.ctx.save(rec)
     this.ctx.note(id, { type: 'end_failed', head: p.head })
@@ -115,7 +117,10 @@ export class EndDesk {
     return true
   }
 
-  /** 이 head를 지금 계약으로 내보내기(리뷰까지)로 쟀고 그 리뷰가 실패하지 않았다: 열린 것을 바로 볼 수 있다 */
+  /**
+   * 지금 묶음이 이 head를 지금 계약으로 내보내기(리뷰까지)로 잰 것이고 그 리뷰가 실패하지 않았다: 열린 것을 바로 볼 수 있다.
+   * 같은 head를 다시 내보내기로 재는 동안(리뷰 없는 묶음을 먼저 보임)은 아니다: 걸어 두고 그 리뷰 뒤에 정한다
+   */
   private ready(id: string, head: string): boolean {
     return (
       this.evidence.exported(id, head) && this.ctx.runtime(id).evidence?.review?.status !== 'failed'

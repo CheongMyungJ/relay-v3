@@ -12,7 +12,13 @@ import type { WorkView } from '../../src/shared/api.ts'
 import { calc, QUALITY_TEXT, TESTS_BASE } from './calc.ts'
 import { fakeGhOnPath } from './fakes.ts'
 import { cleanupAll, makeRepo, makeTempDir, runGit, type TestRepo } from './repo.ts'
-import { jsonl, openApp as open, until as wait, type TestApp } from './works-app.ts'
+import {
+  jsonl,
+  openApp as open,
+  until as wait,
+  type OpenAppOptions,
+  type TestApp,
+} from './works-app.ts'
 
 export const RELAY_VERSION = '0.0.0-test'
 export const CLAUDE_VERSION = '0.0.0 (가짜 Claude Code)'
@@ -111,7 +117,7 @@ export interface FlowKit {
   mcpResults(tool: string): Promise<Entry[]>
   openApp(
     home: string,
-    o?: { prPollMs?: number; claudeBin?: string; reviewDisabled?: boolean },
+    o?: Pick<OpenAppOptions, 'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check'>,
   ): Promise<TestApp>
   /** 시험이 열고 스스로 닫은 앱을 목록에서 뺀다 */
   forget(app: TestApp): void
@@ -203,6 +209,7 @@ export function flowKit(): FlowKit {
         ...(o.prPollMs ? { prPollMs: o.prPollMs } : {}),
         ...(o.claudeBin ? { claudeBin: o.claudeBin } : {}),
         ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
+        ...(o.check ? { check: o.check } : {}),
       })
       apps.push(app)
       return app

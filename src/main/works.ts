@@ -414,7 +414,8 @@ export class Works implements WorkCtx {
 
   /**
    * 계약 바꾸기에 답한다. 도는 리뷰는 앞 계약의 것이라 멈춘다(V23). 지금 head를 바뀐 계약으로 재지 않았으면 다시 잰다(앞
-   * 묶음이 내보내기였으면 내보내기로): 관문과 [머지]가 옛 계약의 결론으로 남지 않게
+   * 묶음이 이 head의 내보내기였으면 내보내기로): 관문과 [머지]가 옛 계약의 결론으로 남지 않게. 그사이 세션이 커밋한 새
+   * head는 아무도 내보내지 않았으니 내보내기 계기를 기다린다(V23)
    */
   async answerChange(id: string, o: ChangeAnswer): Promise<void> {
     await this.desk.answerChange(id, o)
@@ -428,7 +429,7 @@ export class Works implements WorkCtx {
     const head = await workHead(rec).catch(() => null)
     if (!measures(rec.state) || head === null || rt.evidence === null) return
     if (this.evidence.measured(id, head)) return
-    const exported = rec.exported_head === rt.evidence.head
+    const exported = rec.exported_head === head
     const pr = exportable(rec.pr, rec.base, head)
     void this.evidence
       .run(id, exported ? { export: pr ? 'pr' : 'end' } : {})

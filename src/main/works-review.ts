@@ -6,8 +6,10 @@
 
 import { claudeJson } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
+import { showFile } from '../adapters/git.ts'
 import { contractHash } from '../core/contract.ts'
 import { gate } from '../core/gate.ts'
+import { parseQuality } from '../core/quality.ts'
 import {
   evidenceFacts,
   parseReview,
@@ -17,6 +19,7 @@ import {
   reviewReady,
 } from '../core/review.ts'
 import type { Contract, EvidenceBundle, Policy } from '../core/types.ts'
+import { QUALITY_PATH } from '../engine/check.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
 import {
   workHead,
@@ -77,6 +80,18 @@ export function reusable(r: EvidenceBundle['review']): boolean {
   return r !== null && r.status === 'done' && r.prompt_version === REVIEW_PROMPT_VERSION
 }
 
+/** 묶음이 쓴 quality.json(묶음의 quality.from 쪽)의 자동 조건. 읽지 못하면 없음 */
+export async function autoConditions(
+  worktree: string,
+  bundle: EvidenceBundle,
+): Promise<Policy['conditions']> {
+  if (bundle.quality.from === 'none') return []
+  const sha = bundle.quality.from === 'base' ? bundle.base : bundle.head
+  const text = await showFile(worktree, sha, QUALITY_PATH).catch(() => null)
+  const parsed = text === null ? null : parseQuality(text)
+  return parsed?.ok ? parsed.value.auto : []
+}
+
 /** 도는 리뷰가 읽은 HEAD나 지금 계약의 것이 아니면 끊는다(V23). seeHead와 계약이 바뀐 곳이 부른다 */
 export function followReview(rt: Runtime): void {
   const r = rt.review
@@ -110,6 +125,21 @@ export class ReviewDesk {
   }
 
   /**
+   * 이미 잰 묶음에 미리 리뷰를 붙일 때인가: preparable이고 리뷰어를 부를 것이다('auto_only'면 자동 조건을 채움). 아니면
+   * 재기가 아무것도 하지 않는다(다시 보이기, 기록, gh). 조건은 묶음의 quality.json에서 읽는다
+   */
+  async prepares(
+    rec: WorkRecord,
+    project: ProjectRecord,
+    bundle: EvidenceBundle,
+    head: string,
+  ): Promise<boolean> {
+    if (!this.preparable(rec, bundle, head)) return false
+    const conditions = await autoConditions(rec.worktree, bundle)
+    return this.needed(project, this.ctx.runtime(rec.id).contract, bundle, conditions)
+  }
+
+  /**
    * 내보내기의 리뷰를 붙인 묶음. 같은 head·계약에 이 판으로 끝난 리뷰가 있으면 그것을 쓴다(claude -p를 부르지 않는다).
    * 계약이 없으면 건너뜀. 프로젝트 설정 review가 'auto_only'면 리뷰가 됐다고 치고 관문을 먼저 돌려 자동 조건을 채웠을 때만
    * 리뷰한다(사람 머지 경로만 줄일 수 있다). 평가에서 리뷰를 뺀 쪽(reviewDisabled)은 리뷰할 자리에서 부르지 않고 건너뜀으로
@@ -130,7 +160,7 @@ export class ReviewDesk {
       return bundle
     }
     const skipped: EvidenceBundle = { ...bundle, review: { status: 'skipped', findings: [] } }
-    if (!contract || !this.needed(project, contract, bundle, policy)) return skipped
+    if (!contract || !this.needed(project, contract, bundle, policy.conditions)) return skipped
     if (this.ctx.deps.reviewDisabled) {
       this.ctx.note(rec.id, {
         type: 'review',
@@ -157,19 +187,29 @@ export class ReviewDesk {
     policy: Policy,
     show: Show,
   ): Promise<EvidenceBundle | null> {
-    if (!contract || !this.needed(project, contract, bundle, policy)) return bundle
+    if (!contract || !this.needed(project, contract, bundle, policy.conditions)) return bundle
     return this.run(rec, contract, bundle, 'prepared', show)
   }
 
-  /** 리뷰를 불러야 하나: 리뷰 범위가 'auto_only'면 리뷰가 됐다고 친 관문이 자동 조건을 채울 때만 */
+  /**
+   * 리뷰를 불러야 하나: 계약이 있고, 리뷰 범위가 'auto_only'면 리뷰가 됐다고 친 관문이 자동 조건을 채울 때만. 관문이 채운
+   * 조건(condition)은 정책의 조건과 묶음만으로 정해진다(스위치, 서버 보호, 실적과 상관없다): 그래서 조건만 받는다
+   */
   private needed(
     project: ProjectRecord,
-    contract: Contract,
+    contract: Contract | null,
     bundle: EvidenceBundle,
-    policy: Policy,
+    conditions: Policy['conditions'],
   ): boolean {
+    if (contract === null) return false
     if (project.settings.review !== 'auto_only') return true
     const done: EvidenceBundle = { ...bundle, review: { status: 'done', findings: [] } }
+    const policy: Policy = {
+      auto_merge_enabled: false,
+      conditions,
+      server: null,
+      track_record_ok: {},
+    }
     // head는 묶음의 head: 낡음은 리뷰 뒤의 관문이 지금 HEAD로 다시 본다
     return gate(done, contract, policy, bundle.head).condition !== null
   }

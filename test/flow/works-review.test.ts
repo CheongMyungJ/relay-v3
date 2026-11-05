@@ -1,8 +1,9 @@
 // [흐름] 미리 리뷰 (V23, src/main/works-review.ts): 세션이 쉬고 증거가 리뷰 준비인 head에 리뷰를 미리 돌린다. 경우: 미리 리뷰가
 // 끝난 head의 [끝내기]는 걸리지 않고 한 번에(그 리뷰를 다시 씀), 미리 리뷰가 도는 동안의 [끝내기]는 걸렸다가 그 리뷰로 끝남,
 // 미리 리뷰로 자동 조건을 채워도 열린 PR을 머지하지 않고 장부에 쓰지 않음(push 뒤 내보내기가 머지), 셸 커밋과 계약 바꾸기
-// 요청은 도는 리뷰를 멈춤(리뷰마다 AbortController), 리뷰 준비가 아니면 돌리지 않음과 Work마다 4번까지. 바탕은
-// test/support/works-flow.ts.
+// 요청은 도는 리뷰를 멈춤(리뷰마다 AbortController), 리뷰 준비가 아니면 돌리지 않음과 Work마다 4번까지, 내보내기로 잰
+// head로 되돌아와 새로 받은 미리 리뷰는 내보내기가 아님, 'auto_only'에서 리뷰를 부르지 않을 head는 쉴 때마다 다시 재지 않음.
+// 바탕은 test/support/works-flow.ts.
 import { appendFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, test, vi } from 'vitest'
@@ -201,7 +202,8 @@ describe('자동 머지가 켜진 프로젝트 (보호된 main, 조건 small의 
       error: null,
       pr: { state: 'OPEN', headRefOid: first },
     })
-    expect(works.find(id)?.exported_head).toBe(first)
+    // 지금 묶음은 내보내기로 잰 것이 아니다(첫 head의 내보내기 묶음을 바꿨다)
+    expect(works.find(id)?.exported_head).toBeNull()
     const mine = async () => (await app.store.readLedger()).filter((e) => e.work === id)
     expect((await mine()).map((e) => [e.head, e.conclusion])).toEqual([[first, 'human_merge']])
     const merges = async () =>
@@ -226,6 +228,96 @@ describe('자동 머지가 켜진 프로젝트 (보호된 main, 조건 small의 
     ])
     expect((await merges()).map((e) => (e.args as string[]).at(-1))).toEqual([second])
   })
+})
+
+test('내보내기로 잰 head로 세션이 되돌아와 미리 리뷰를 새로 받으면 그 묶음은 내보내기가 아니다: [끝내기]가 내보내기로 다시 재서 장부에 한 줄을 남긴다', async () => {
+  await kit.review(RAISED_FINDINGS)
+  await scenario([
+    SUBMIT,
+    FIX_COMMIT,
+    ...STOP_AND_WAIT,
+    { do: 'commit', message: '시도', files: { 'NOTES.md': '시도\n' } },
+    ...STOP_AND_WAIT,
+    { do: 'bash', command: 'git reset -q --hard HEAD~1' },
+    ...STOP_AND_WAIT,
+  ])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await start(app)
+  await until(
+    () => works.view(id).evidence?.review?.status === 'done' && settled(works.view(id)),
+    '미리 리뷰',
+  )
+  const first = works.view(id).head ?? ''
+  // [끝내기]가 미리 리뷰를 내보내기로 잰다(장부 한 줄): 올림이 있어 상자. [더 고치기]
+  expect(await works.end(id, { head: first })).toMatchObject({ armed: false })
+  expect(works.find(id)?.exported_head).toBe(first)
+  await works.cancelEnd(id)
+
+  await kit.review(NOTE_FINDINGS)
+  const second = await nextHead(app, id, first, '다른 길을 해 보세요')
+  // 내보내기가 아닌 재기가 묶음을 바꿨다: 지금 묶음은 내보내기로 잰 것이 아니다
+  expect(works.find(id)?.exported_head).toBeNull()
+  app.sessions.write(id, '되돌려 주세요\r')
+  await until(() => {
+    const v = works.view(id)
+    return v.head === first && v.evidence?.head === first && settled(v)
+  }, '되돌린 head의 미리 리뷰')
+  expect(second).not.toBe(first)
+  expect(works.view(id).evidence?.review).toMatchObject({ status: 'done' })
+  expect(works.find(id)?.exported_head).toBeNull()
+
+  // 같은 head지만 묶음(올림 없는 미리 리뷰)은 내보내기가 아니다: [끝내기]가 내보내기로 재서(다시 씀) 장부에 남긴다
+  expect(await works.end(id, { head: first })).toEqual({
+    head: first,
+    ended: true,
+    armed: false,
+    open: [],
+  })
+  expect(await reviewCalls()).toBe(3)
+  expect(await reviewsOf(app, id)).toEqual([
+    ['prepared', false, false],
+    ['end', true, false],
+    ['prepared', false, false],
+    ['prepared', false, false],
+    ['end', true, false],
+  ])
+  expect((await app.store.readLedger()).map((e) => [e.head, e.shadow])).toEqual([
+    [first, false],
+    [first, true],
+  ])
+})
+
+test("리뷰 범위 'auto_only'에서 자동 조건을 못 채운 head는 쉴 때마다 다시 보이거나 적지 않는다(미리 리뷰를 부르지 않고 gh도 묻지 않는다)", async () => {
+  // 바뀐 줄이 조건 small(50줄)을 넘는다
+  const big = { ...FIX_COMMIT, files: { ...FIX_COMMIT.files, 'NOTES.md': 'x\n'.repeat(60) } }
+  await scenario([SUBMIT, big, ...STOP_AND_WAIT, ...STOP_AND_WAIT])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const project = await works.addProject(kit.repo.dir)
+  await works.updateSettings(project.id, { review: 'auto_only' })
+  const id = await start(app, project.id)
+  await until(() => works.view(id).evidence !== null && settled(works.view(id)), '첫 증거')
+  await works.idle()
+  const v = works.view(id)
+  expect(v.evidence?.review).toBeNull()
+  expect(v.evidence?.diff.added).toBeGreaterThan(50)
+  expect(await events(app, id, 'evidence')).toHaveLength(1)
+  const asked = (await jsonl(kit.ghLog)).length
+
+  // 같은 head에서 다시 쉰다: Stop 뒤 몰아 두기가 끝날 때까지 본다
+  const rt = works.runtime(id)
+  let waited = false
+  app.sessions.write(id, '그대로 두세요\r')
+  await until(() => {
+    if (rt.debounce !== null) waited = true
+    return waited && rt.debounce === null
+  }, '둘째 Stop 뒤 몰아 두기')
+  await works.idle()
+  expect(await events(app, id, 'evidence')).toHaveLength(1)
+  expect((await jsonl(kit.ghLog)).length).toBe(asked)
+  expect(await reviewCalls()).toBe(0)
+  expect((await workJson(app, id)).prepared_reviews).toBe(0)
 })
 
 test('세션이 셸 명령으로 커밋하면 도는 미리 리뷰를 바로 멈추고 버린다(리뷰마다 AbortController). 새 head는 다시 쉴 때 미리 리뷰한다', async () => {

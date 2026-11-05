@@ -4,22 +4,20 @@
 // 잰 것'은 (head, 계약 hash)이고 다시 재지 않는다. 내보내기는 같은 head·계약의 끝난 리뷰를 다시 쓴다(V23, works-review.ts).
 // 한 Work의 증거 재기는 한 번에 하나이고, 기다리는 요청은 하나로 합친다. 재기가 끝나면 다음 재기 전에 [끝내기]의 걸린 끝을
 // 다시 본다. 리뷰는 결정론적 증거와 관문을 먼저 보인 뒤 돌고 끝나면 다시 정한다(리뷰는 사람을 막지 않는다, V4). 장부 줄,
-// exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). 엔진 check는 in-process로 부른다. 리뷰 결과는 세션에 넣지
-// 않는다(V4, V8).
+// exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). exported_head는 지금 묶음이 내보내기로 잰 묶음일 때만 그
+// head다: 다른 재기가 묶음을 바꾸면 비운다(같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게). 엔진 check는
+// in-process로 부른다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
 
 import type { PrCheck } from '../adapters/gh.ts'
-import { showFile } from '../adapters/git.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
 import { contractHash } from '../core/contract.ts'
 import { gate } from '../core/gate.ts'
 import { trackRecord, type LedgerEntry } from '../core/ledger.ts'
-import { parseQuality } from '../core/quality.ts'
 import type { Contract, EvidenceBundle, GateResult, Policy } from '../core/types.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
-import { QUALITY_PATH } from '../engine/check.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
-import { ReviewDesk, reusable } from './works-review.ts'
+import { autoConditions, ReviewDesk, reusable } from './works-review.ts'
 import {
   isActive,
   measures,
@@ -89,9 +87,17 @@ export class EvidenceRunner {
     )
   }
 
-  /** 지금 계약으로 이 head를 내보내기(리뷰까지)로 쟀나. 리뷰가 도는 동안은 아직 아니다 */
+  /**
+   * 지금 묶음이 이 head를 지금 계약으로 내보내기(리뷰까지)로 잰 것인가. 리뷰가 도는 동안은 아직 아니다. 내보내기 묶음에는
+   * 늘 리뷰(끝남, 실패, 건너뜀)가 있다: 앱을 닫아 엔진이 같은 head의 증거 파일을 리뷰 없는 묶음으로 덮었으면 아니다
+   */
   exported(id: string, head: string): boolean {
-    return this.ctx.record(id).exported_head === head && this.measured(id, head)
+    const rt = this.ctx.runtime(id)
+    return (
+      this.ctx.record(id).exported_head === head &&
+      this.measured(id, head) &&
+      rt.evidence?.review !== null
+    )
   }
 
   /**
@@ -183,6 +189,7 @@ export class EvidenceRunner {
       export: o.export ?? null,
       prepare: o.prepare === true,
       again: o.again === true,
+      head: null,
       done: Promise.resolve(),
     }
     // 재기가 끝나면 다음 재기 전에 [끝내기]의 걸린 끝을 다시 본다(V25)
@@ -198,8 +205,9 @@ export class EvidenceRunner {
 
   /**
    * 같은 head·계약의 결정론 묶음이 있으면(again이 아니면) check를 다시 돌리지 않는다. 내보내기는 리뷰를 붙이고(다시 쓸 수
-   * 있으면 그대로), 아니면 미리 리뷰를 허락한 재기만 미리 리뷰를 붙인다(V23). 리뷰가 끊겼으면(HEAD·계약이 바뀜, 앱을 닫음)
-   * 그 결과를 버린다
+   * 있으면 그대로), 아니면 미리 리뷰를 허락한 재기만 미리 리뷰를 붙인다(V23). 이미 잰 묶음에 붙일 미리 리뷰가 없으면('auto_only'
+   * 에서 자동 조건을 못 채움) 아무것도 하지 않는다(보이기, 기록, gh 모두). 리뷰가 끊겼으면(HEAD·계약이 바뀜, 앱을 닫음) 그
+   * 결과를 버린다
    */
   private async measure(id: string, job: MeasureJob): Promise<void> {
     const rec = this.ctx.record(id)
@@ -210,13 +218,14 @@ export class EvidenceRunner {
     const trigger = job.export
     try {
       const head = await workHead(rec)
+      job.head = head
       await this.ctx.seeHead(id, head)
       const known = !job.again && this.measured(id, head) ? rt.evidence : null
       if (known !== null) {
         const done =
           trigger !== null
             ? this.exported(id, head) && reusable(known.review)
-            : !job.prepare || !this.reviews.preparable(rec, known, head)
+            : !job.prepare || !(await this.reviews.prepares(rec, project, known, head))
         if (done) return
       }
       rt.measuring = head
@@ -227,7 +236,8 @@ export class EvidenceRunner {
       // 재는 사이 [버림]·[머지]로 끝났거나 앱을 닫았으면(명령이 끊김) 관문도 장부도 남기지 않는다
       if (!isActive(rec.state) || rt.abort.signal.aborted) return
       const policy = await this.policy(rec, project, bundle)
-      const show = (b: EvidenceBundle) => this.publishGate(rec, b, contract, policy)
+      // 리뷰가 도는 동안 보이는 리뷰 없는 묶음은 내보내기로 잰 것이 아니다
+      const show = (b: EvidenceBundle) => this.publishGate(rec, b, contract, policy, false)
       if (trigger !== null) {
         const reviewed = await this.reviews.forExport(
           rec,
@@ -241,7 +251,6 @@ export class EvidenceRunner {
         // 끊긴 리뷰(HEAD·계약이 바뀜, 앱을 닫음)는 내보내기로 남기지 않는다: 다시 켜고 [끝내기]하면 다시 잰다
         if (reviewed === null || !isActive(rec.state) || rt.abort.signal.aborted) return
         bundle = reviewed
-        rec.exported_head = bundle.head
       } else if (job.prepare && this.reviews.preparable(rec, bundle, head)) {
         const reviewed = await this.reviews.prepare(rec, project, contract, bundle, policy, show)
         if (reviewed === null || !isActive(rec.state) || rt.abort.signal.aborted) return
@@ -249,7 +258,7 @@ export class EvidenceRunner {
       }
       if (bundle.review !== null)
         await writeJson(evidencePath(deps.store.home, repoKey(bundle.repo), bundle.head), bundle)
-      const result = await this.publishGate(rec, bundle, contract, policy)
+      const result = await this.publishGate(rec, bundle, contract, policy, trigger !== null)
       // 장부 줄과 정책 머지는 내보내기 계기에서만(V23): 중간 head가 그림자 실적이나 자동 머지에 닿지 않게
       if (trigger !== null)
         await deps.store.appendLedger(this.ledgerEntry(rec, project, bundle.head, result))
@@ -305,18 +314,23 @@ export class EvidenceRunner {
     return bundle
   }
 
-  /** 묶음과 그 관문을 Work에 두고 화면에 보인다. 관문의 head는 지금 Work 브랜치의 끝이다(V6, V21) */
+  /**
+   * 묶음과 그 관문을 Work에 두고 화면에 보인다. 관문의 head는 지금 Work 브랜치의 끝이다(V6, V21). exported는 내보내기로 잰
+   * 묶음(리뷰까지)인가: exported_head는 지금 묶음이 그런 묶음일 때만 그 head이고 아니면 비운다
+   */
   private async publishGate(
     rec: WorkRecord,
     bundle: EvidenceBundle,
     contract: Contract | null,
     policy: Policy,
+    exported: boolean,
   ): Promise<GateResult> {
     const { deps } = this.ctx
     const rt = this.ctx.runtime(rec.id)
     const now = await workHead(rec).catch(() => null)
     const result = gate(bundle, contract, policy, now)
     rt.evidence = bundle
+    rec.exported_head = exported ? bundle.head : null
     await this.ctx.seeHead(rec.id, now ?? bundle.head)
     rec.gate = result
     rec.evidence_path = evidencePath(deps.store.home, repoKey(bundle.repo), bundle.head)
@@ -332,13 +346,7 @@ export class EvidenceRunner {
     bundle: EvidenceBundle,
   ): Promise<Policy> {
     const { deps } = this.ctx
-    let conditions: Policy['conditions'] = []
-    if (bundle.quality.from !== 'none') {
-      const sha = bundle.quality.from === 'base' ? bundle.base : bundle.head
-      const text = await showFile(rec.worktree, sha, QUALITY_PATH).catch(() => null)
-      const parsed = text === null ? null : parseQuality(text)
-      if (parsed?.ok) conditions = parsed.value.auto
-    }
+    const conditions = await autoConditions(rec.worktree, bundle)
     const server = await deps.gh.serverProtection(project.path, rec.base).catch(() => null)
     const ledger = await deps.store.readLedger()
     return {
@@ -540,8 +548,9 @@ export class EvidenceRunner {
   }
 
   /**
-   * 열린 PR: PR이 지금 HEAD를 가리키게 됐는데 그 head를 내보내기로 재지 않았으면 잰다(push 뒤 GitHub가 PR을 늦게 갱신한
-   * 경우). 이미 쟀고 결론이 자동 머지 후보면 다시 머지해 본다(CI가 리뷰보다 늦게 끝난 경우)
+   * 열린 PR: PR이 지금 HEAD를 가리키게 됐는데 지금 묶음이 그 head를 내보내기로 잰 것이 아니면 잰다(push 뒤 GitHub가 PR을
+   * 늦게 갱신한 경우. 미리 리뷰만 있는 묶음은 내보내기가 다시 써서 장부에 남긴다). 내보내기 묶음이고 결론이 자동 머지
+   * 후보면 다시 머지해 본다(CI가 리뷰보다 늦게 끝난 경우)
    */
   private async followPr(rec: WorkRecord, pr: PrInfo): Promise<void> {
     const rt = this.ctx.runtime(rec.id)

@@ -39,6 +39,8 @@ export interface OpenAppOptions {
   claudeBin?: string
   /** 평가에서 리뷰를 뺀 쪽(RELAY_ABLATE=review)처럼 리뷰를 끈다 */
   reviewDisabled?: boolean
+  /** 엔진 check. 기본 그대로. 시험이 감싸서 재기를 붙잡아 둔다(재기가 도는 사이의 일) */
+  check?: typeof check
   log?: (message: string, error?: unknown) => void
 }
 
@@ -67,7 +69,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     controlUrl: `http://127.0.0.1:${port}/control`,
     bridgeCommand: { command: process.execPath, args: [BRIDGE], env: {} },
     claudeBin: o.claudeBin ?? FAKE_CLAUDE,
-    check,
+    check: o.check ?? check,
     review: claudeReview({ bin: FAKE_CLAUDE, log }),
     gh,
     now,

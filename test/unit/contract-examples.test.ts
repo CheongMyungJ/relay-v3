@@ -167,7 +167,7 @@ describe('examplesFileText (V27)', () => {
 `)
   })
 
-  test('열쇠는 정렬한다: 예시 id는 번호 차례, 예시 안은 input·output·error·note, 값 속 객체는 글자 차례', () => {
+  test('예시 id는 번호 차례, 예시 안은 input·output·error·note. 값 속 객체의 열쇠는 계약의 차례 그대로다(승인된 자료)', () => {
     const examples = [
       { id: 'C1.10', input: 10, note: 'n', output: { b: 1, a: [{ d: 1, c: 2 }] } },
       { id: 'C2.1', input: 21 },
@@ -176,12 +176,23 @@ describe('examplesFileText (V27)', () => {
     const text = examplesFileText({ ...full, examples })
     expect(Object.keys(JSON.parse(text) as object)).toEqual(['C1.2', 'C1.10', 'C2.1'])
     expect(text).toContain(
-      '"input": 10,\n    "output": {\n      "a": [\n        {\n          "c": 2,',
+      '"input": 10,\n    "output": {\n      "b": 1,\n      "a": [\n        {\n          "d": 1,',
     )
     expect(text.indexOf('"output"')).toBeLessThan(text.indexOf('"note"'))
   })
 
-  test('같은 계약은 예시와 열쇠의 순서와 상관없이 같은 글이다', () => {
+  test('열쇠 차례가 뜻인 입력은 계약 그대로 얹는다: 글자 차례로 바꾸면 정렬하지 않는 구현이 통과한다', () => {
+    // C1: 머리줄은 열 이름의 글자 차례. 정렬한 입력이면 Object.keys(rows[0])만 쓰는 구현도 'age,name'을 낸다
+    const input = { rows: [{ name: 'a', age: 1 }] }
+    const text = examplesFileText({
+      ...full,
+      examples: [{ id: 'C1.1', input, output: 'age,name\n1,a' }],
+    })
+    const row = (JSON.parse(text) as Record<string, { input: typeof input }>)['C1.1']?.input.rows[0]
+    expect(Object.keys(row ?? {})).toEqual(['name', 'age'])
+  })
+
+  test('같은 계약은 예시와 예시 안 칸의 순서와 상관없이 같은 글이다', () => {
     const shuffled = [...full.examples].reverse().map((x) => {
       const { note, error, output, input, id } = x
       return { note, error, output, input, id }
@@ -212,13 +223,48 @@ describe('checkExamplesFile (V27: 승인본과 값으로)', () => {
     expect(checkExamplesFile(c, examplesFileText(c))).toEqual({ status: 'same', diffs: [] })
   })
 
-  test('들여쓰기, 칸 순서, BOM은 보지 않는다', () => {
-    const text = `\uFEFF${JSON.stringify({
+  test('들여쓰기와 예시·칸의 차례는 보지 않는다(시험은 예시 id와 칸 이름으로 찾는다)', () => {
+    const text = JSON.stringify({
       'C2.1': { error: { message: '숫자가 아님' }, input: 'a' },
       'C1.2': { note: '빈 입력', output: 0, input: '' },
       'C1.1': { output: 3, input: '1\n\n2' },
-    })}`
+    })
     expect(checkExamplesFile(c, text).status).toBe('same')
+  })
+
+  test('BOM으로 시작하면 읽지 못함: JSON.parse가 읽지 못해 머지 뒤의 회귀 시험이 얹은 파일과 다르게 돈다', () => {
+    expect(checkExamplesFile(c, `\uFEFF${examplesFileText(c)}`)).toEqual({
+      status: 'unreadable',
+      diffs: [],
+      error: 'BOM(U+FEFF)으로 시작함: 앱이 쓴 파일에는 없고 JSON.parse가 읽지 못함',
+    })
+  })
+
+  test('값 속 열쇠의 차례가 다르면 다름: 얹은 파일과 커밋된 파일이 열쇠 차례에 기대는 코드에 다른 입력이 된다', () => {
+    const input = { rows: [{ name: 'a', age: 1 }] }
+    const csv = { ...c, examples: [{ id: 'C1.1', input, output: 'age,name\n1,a' }] }
+    const swapped = {
+      'C1.1': { input: { rows: [{ age: 1, name: 'a' }] }, output: 'age,name\n1,a' },
+    }
+    expect(checkExamplesFile(csv, JSON.stringify(swapped))).toEqual({
+      status: 'differs',
+      diffs: [{ id: 'C1.1', field: 'input', expected: input, found: swapped['C1.1'].input }],
+    })
+  })
+
+  test('-0과 0, 1e999(Infinity)와 null은 다르다: 얹은 파일(JSON.stringify)과 커밋된 파일을 JSON.parse한 값으로 견준다', () => {
+    const zero = { ...c, examples: [{ id: 'C1.1', input: 1, output: 0 }] }
+    const r = checkExamplesFile(zero, '{"C1.1": {"input": 1, "output": -0}}')
+    expect(r.status).toBe('differs')
+    expect(r.diffs).toHaveLength(1)
+    expect(Object.is(r.diffs[0]?.found, -0)).toBe(true)
+    // 계약의 Infinity(1e999)는 JSON.stringify가 null로 쓴다: 얹은 파일은 null이다
+    const inf = { ...c, examples: [{ id: 'C1.1', input: Number.POSITIVE_INFINITY }] }
+    expect(examplesFileText(inf)).toContain('"input": null')
+    expect(checkExamplesFile(inf, '{"C1.1": {"input": 1e999}}').diffs).toEqual([
+      { id: 'C1.1', field: 'input', expected: null, found: Number.POSITIVE_INFINITY },
+    ])
+    expect(checkExamplesFile(inf, examplesFileText(inf)).status).toBe('same')
   })
 
   test('파일이 없으면 absent', () => {
@@ -288,6 +334,13 @@ describe('exampleValueText', () => {
   test('한 줄 JSON, 길면 앞쪽만', () => {
     expect(exampleValueText({ a: [1, 2] })).toBe('{"a":[1,2]}')
     expect(exampleValueText('x'.repeat(50), 10)).toBe('"xxxxxxxx…')
+  })
+
+  test('JSON이 0과 null로 쓰는 -0과 Infinity는 그대로 보인다(다름을 설명하게)', () => {
+    expect(exampleValueText(-0)).toBe('-0')
+    expect(exampleValueText([1, -0, Number.POSITIVE_INFINITY])).toBe('[1,-0,Infinity]')
+    expect(exampleValueText({ a: Number.NEGATIVE_INFINITY })).toBe('{"a":-Infinity}')
+    expect(exampleValueText(0)).toBe('0')
   })
 })
 
