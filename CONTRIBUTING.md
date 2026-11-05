@@ -37,6 +37,15 @@ npm run test:replay        # 관문 재생(V31)만 돌리고 G1·G2 표를 찍�
 node scripts/gate-replay-fixture.ts test/fixtures/gate-replay/m2.jsonl ../relay-v2/app/eval/results/m2-*
 ```
 
+리뷰 재생(M2.1 0단계 O2, `docs/m2.1-design.md` 14절)은 저장된 M2 내보내기 묶음에 지금의 리뷰어(`claude -p`)를 다시 돌리고 통과 기준을 찍습니다. 결과 폴더는 옆의 `../relay-v2/app/eval/results`를 읽습니다. 실제 호출은 54번이라 `--dry`(가짜 리뷰어)로 먼저 봅니다.
+
+```bash
+npm run replay:review -- --dry --prompts /tmp/prompts   # claude를 부르지 않음. 프롬프트를 남긴다
+npm run replay:review                                   # docs/experiments/m2.1/review-replay.jsonl에 쓴다
+npm run replay:review -- --resume                       # 끊긴 뒤 끝난 호출을 건너뛰고 잇는다
+npm run replay:review -- --summary                      # 부르지 않고 요약만
+```
+
 ## 문서
 
 - 설계를 바꾸는 결정은 `docs/design.md` 1절에 V 번호로 적습니다. 근거가 측정인지 가정인지 적습니다.
