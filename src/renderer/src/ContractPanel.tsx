@@ -1,7 +1,7 @@
-// [계약] 패널 (docs/m2-modules.md 4절): 목표, 줄 표(종류, 글, 근거와 확인됨/추정, 예시 입력→출력, 확인 방법), 비목표,
-// 사람만 아는 규칙, hint. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 제출 때 기준 확인(V28)이 있으면 머리에 한
-// 줄과 예시마다 기준 결과의 꼬리표. 승인을 기다리면 [승인]과 늘 보이는 고칠 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과
-// 제안의 차이, [받아들이기]·[거절하기].
+// [계약] 패널 (docs/m2-modules.md 4절): 목표, 그 바로 밑에 비목표(V29), hint, 줄 표(종류, 글, 근거와 확인됨/추정, 예시
+// 입력→출력, 확인 방법), 사람만 아는 규칙. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 제출 때 기준
+// 확인(V28)이 있으면 머리에 한 줄과 예시마다 기준 결과의 꼬리표. 승인을 기다리면 [승인]과 늘 보이는 고칠 점 칸·[보내기],
+// 계약 다시면 세션의 요청, 승인본과 제안의 차이, [받아들이기]·[거절하기].
 import { useState } from 'react'
 import type { Contract, ContractLine, ContractProbe, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
@@ -245,6 +245,8 @@ function ContractView(p: {
         {p.pending ? '제안된 계약' : '승인된 계약'} · <code>{c.id}</code>
       </p>
       <h2 className="goal">{c.goal}</h2>
+      {/* 비목표는 목표 바로 밑(V29): 사람이 승인 전에 계약이 뺀 범위를 줄보다 먼저 본다 */}
+      <TextList title="비목표" items={c.non_goals} empty="없음" />
       {hint ? <p className="muted">일의 성격 제안: {hint}</p> : null}
 
       <h3 className="section-title">
@@ -278,7 +280,6 @@ function ContractView(p: {
             </section>
           ))}
 
-      <TextList title="비목표" items={c.non_goals} empty="없음" />
       <TextList title="사람만 아는 규칙" items={c.human_rules} empty="없음" />
       {c.tidy.length > 0 ? <TextList title="곁들일 정리(빚)" items={c.tidy} empty="" /> : null}
       {c.approved_at ? (

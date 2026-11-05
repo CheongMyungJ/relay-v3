@@ -4,7 +4,7 @@
 // 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
-// 계약의 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내므로 계약 판이 예시마다 기준 결과를 보인다(V28). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
+// 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내므로 계약 판이 예시마다 기준 결과를 보인다(V28). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
 // 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의
 // 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다.
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
@@ -244,6 +244,10 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(page.getByTestId('terminal')).toContainText('FAKE-CLAUDE READY')
   const panel = page.getByTestId('contract-panel')
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText(CONTRACT.goal)
+  // 비목표는 목표 바로 밑, 줄보다 먼저(V29)
+  const firstSection = panel.getByRole('heading', { level: 3 }).first()
+  await expect(firstSection).toHaveText('비목표')
+  await expect(panel.locator('h2.goal + h3 + ul')).toHaveText(CONTRACT.non_goals[0] ?? '')
   await expect(panel.getByTestId('contract-line')).toHaveCount(2)
   await expect(panel.getByTestId('contract-line').first()).toContainText('확인됨')
   await expect(panel.getByTestId('contract-line').nth(1)).toContainText('추정')

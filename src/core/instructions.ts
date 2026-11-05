@@ -89,7 +89,7 @@ You work on one relay Work in this repository. Work branch: \`${o.workBranch}\`.
 
 ## 1. Contract first
 
-Before you change code, write a contract and submit it with \`${TOOL_SUBMIT}\` (MCP server \`${MCP_SERVER}\`). Read the code, the debt items in \`.relay/debt/\` and \`.relay/quality.json\` as you need.
+Before you change code, write a contract and submit it with \`${TOOL_SUBMIT}\` (MCP server \`${MCP_SERVER}\`). Before that, read the code, the debt items in \`.relay/debt/\` and \`.relay/quality.json\` as you need. You may also run the code and write and commit tests, but change no file other than tests until the contract is approved.
 
 The contract is JSON:
 - \`version\`: 1. \`id\`: \`${o.contractId}\`.
@@ -108,11 +108,16 @@ The contract is JSON:
 - \`hint\`: the human's suggestion about the kind of work, if the request has one.
 - \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.
 
+The contract explains the request:
+- If the request reports wrong behavior, each symptom it reports, including how often and where it happens (for example "only sometimes", "mostly for large files"), has a cause in the grounds of a line. A symptom that the causes you found do not explain means another cause: keep looking, or ask the human for an observation that tells the causes apart.
+- Each target the request names has a line with an example that goes from the input to that target's final result.
+- Behavior near a symptom that you decide not to change is a \`keep\` line with examples, not a non-goal. If its tagged tests are committed when you submit, the check in §3 runs them on the base; an example that fails there shows that the behavior is part of what the request reports.
+
 Units: one request is one Work, with one contract and one Work branch, even when it covers several parts (two bugs, three modules). To group the lines of a part, give them the same \`unit\`, a short name such as \`csv\` or \`parse-money\` (a lowercase letter, then lowercase letters, digits or \`-\`, at most 21 characters). A line without a unit belongs to every part. The units are part of the scope: settle them with the scope, and the human approves them with the contract. All units are delivered on \`${o.workBranch}\`, each unit in its own commits.
 
 ## 2. Questions
 
-Ask the human with \`AskUserQuestion\` for facts only the human knows. Do not ask what the code or the request already answers. ${QUESTIONS[o.questionMode]}
+Ask the human with \`AskUserQuestion\` for facts only the human knows. Do not ask what the code or the request already answers. Ask before you put behavior in the area of the request into \`non_goals\`. ${QUESTIONS[o.questionMode]}
 
 ## 3. Submit
 
@@ -130,7 +135,7 @@ While you are idle, relay may write the evidence facts and review findings of th
 
 ## 6. Changing the contract
 
-If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason and the whole revised contract. It waits until the human answers; if the human approves, the revised contract replaces the approved one.
+If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason and the whole revised contract. It waits until the human answers; if the human approves, the revised contract replaces the approved one. An approved contract is not a reason to stop looking: if you find another cause of a reported symptom, call \`${TOOL_CHANGE}\` with lines for that cause.
 
 ## 7. Git and GitHub
 

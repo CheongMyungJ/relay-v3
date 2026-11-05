@@ -236,6 +236,48 @@ describe('instructionsText', () => {
     expect(submit).not.toMatch(/\b(commit|write) (the |your )?tests (first|before)/i)
   })
 
+  test('계약이 요청을 설명한다(V29): 계약 전 조사와 시험, 증상마다 원인, 대상마다 줄, 증상 곁의 지킴 줄, 비목표 전에 묻기, 승인 뒤에도 찾기', () => {
+    for (const questionMode of ['confirm_each', 'draft_first'] as const) {
+      const t = instructionsText({ ...base, questionMode })
+      const contract = t.slice(t.indexOf('## 1.'), t.indexOf('## 2.'))
+      // 허락이지 지시가 아니다: 시험 밖의 파일은 승인 전에 바꾸지 않는다
+      expect(contract).toContain(
+        'You may also run the code and write and commit tests, but change no file other than tests until the contract is approved.',
+      )
+      // 요청의 갈래는 세션이 판단한다(앱은 분류하지 않는다, V1)
+      expect(contract).toContain(
+        'If the request reports wrong behavior, each symptom it reports, including how often and where it happens',
+      )
+      expect(contract).toContain('has a cause in the grounds of a line')
+      expect(contract).toContain(
+        'keep looking, or ask the human for an observation that tells the causes apart',
+      )
+      expect(contract).toContain(
+        "Each target the request names has a line with an example that goes from the input to that target's final result.",
+      )
+      expect(contract).toContain(
+        'Behavior near a symptom that you decide not to change is a `keep` line with examples, not a non-goal.',
+      )
+      // 'Units' 문단 앞, 계약 칸 설명 뒤
+      expect(contract.indexOf('The contract explains the request:')).toBeGreaterThan(
+        contract.indexOf('- `tidy`'),
+      )
+      expect(contract.indexOf('The contract explains the request:')).toBeLessThan(
+        contract.indexOf('Units:'),
+      )
+      const questions = t.slice(t.indexOf('## 2.'), t.indexOf('## 3.'))
+      expect(questions).toContain(
+        'Ask before you put behavior in the area of the request into `non_goals`.',
+      )
+      const change = t.slice(t.indexOf('## 6.'), t.indexOf('## 7.'))
+      expect(change).toContain(
+        `An approved contract is not a reason to stop looking: if you find another cause of a reported symptom, call \`${TOOL_CHANGE}\` with lines for that cause.`,
+      )
+      // 지침의 예시 말에 평가 시나리오(14-double-notify)의 말을 쓰지 않는다: 쓰면 장치가 아니라 귀띔을 잰다
+      expect(t).not.toMatch(/\b(e-?mail|mail|notif\w*|twice|three times|dedupe|retr(y|ies))\b/i)
+    }
+  })
+
   test('예시 폴더 끝의 / 는 하나로', () => {
     expect(
       instructionsText({ ...base, examplesDir: 'ex/', questionMode: 'draft_first' }),
