@@ -257,14 +257,16 @@ const RAISE_LABEL: Record<RaiseReason, string> = {
   security: '보안',
   out_of_contract: '계약 밖 변경',
   structure: '구조',
+  request_gap: '요청과 어긋남',
 }
 
-/** 리뷰 상태와 올림(V26 raises). 메모(구조/low, raise가 없는 지적)는 관문 사실이 아니다 */
+/** 리뷰 상태(V15: 끝났어도 요청을 보지 않은 리뷰(V30)는 사실)와 올림(V26 raises). 메모(구조/low, 갈래 없음)는 사실이 아니다 */
 function reviewFacts(review: EvidenceBundle['review']): string[] {
   if (review === null) return ['리뷰 없음']
   const out: string[] = []
   if (review.status === 'failed') out.push('리뷰 실패')
   else if (review.status !== 'done') out.push('리뷰를 건너뜀')
+  else if (review.request !== true) out.push('리뷰가 요청을 보지 않음')
   for (const f of review.findings) {
     if (f.raise === undefined || !raises(f)) continue
     const label = Object.hasOwn(RAISE_LABEL, f.raise) ? RAISE_LABEL[f.raise] : f.raise

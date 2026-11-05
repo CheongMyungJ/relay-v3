@@ -15,6 +15,8 @@ export interface ReviewInput {
   /** Work의 worktree. 리뷰어가 파일을 읽는 곳 */
   cwd: string
   contract: Contract
+  /** 요청(works/<id>/request.md, V30). 프롬프트에 인용한 자료로 넣는다. 읽지 못하면 null(리뷰는 요청을 보지 않은 것) */
+  request: string | null
   diffStat: string
   diff: string
   /** 앱이 잰 증거의 사실(영어, 리뷰 없이: core/review.ts evidenceFacts) */

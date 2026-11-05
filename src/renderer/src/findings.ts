@@ -11,11 +11,12 @@ export const RAISE_LABEL: Record<RaiseReason, string> = {
   security: '보안',
   out_of_contract: '계약 밖 변경',
   structure: '구조',
+  request_gap: '요청과 어긋남',
 }
 
 /**
- * 올림인가(V26): 보안, 예시와 시험 불일치, 계약 밖 변경은 심각도와 상관없이, 구조는 medium과 high만. 구조/low와 raise가 없는
- * 지적은 메모다. 모르는 갈래나 심각도는 올림이다(core와 같이 엄격한 쪽)
+ * 올림인가(V26): 보안, 예시와 시험 불일치, 계약 밖 변경, 요청과 어긋남(V30)은 심각도와 상관없이, 구조는 medium과 high만.
+ * 구조/low와 raise가 없는 지적은 메모다. 모르는 갈래나 심각도는 올림이다(core와 같이 엄격한 쪽)
  */
 export function raisesFinding(f: Pick<ReviewFinding, 'raise' | 'severity'>): boolean {
   if (f.raise === undefined) return false

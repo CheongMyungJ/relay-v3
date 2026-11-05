@@ -167,11 +167,18 @@ describe('한 Work의 생애', () => {
     ])
     // 세션이 앱이 쓴 예시 자료를 함께 커밋했다
     expect(v.evidence?.examples_file).toEqual({ path: examplesPath, status: 'same', diffs: [] })
+    // 리뷰어는 요청을 인용한 자료로 받았고(V30), 앱이 리뷰 결과에 그것을 적는다: 그래야 자동 후보·그림자가 된다(V15)
     expect(v.evidence?.review).toEqual({
       status: 'done',
       findings: [{ id: 'R1', severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 }],
       prompt_version: REVIEW_PROMPT_VERSION,
+      request: true,
     })
+    const asked = (await fake()).find((e) => e.type === 'review')
+    expect(asked?.prompt).toContain(`## Request\n\n`)
+    expect(asked?.prompt).toContain(
+      `\n> ${REQUEST}\n> \n> ## 일의 성격 제안\n> \n> 버그 고침\n\n## Contract`,
+    )
     // 리뷰의 토큰은 events.jsonl에만 남긴다(리뷰는 대화 기록을 남기지 않는다). 증거 묶음에는 넣지 않는다
     const reviewed = (await app.store.readEvents(id)).find((e) => e.type === 'review')
     expect(reviewed).toMatchObject({ trigger: 'prepared', status: 'done', findings: 1 })

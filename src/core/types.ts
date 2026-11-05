@@ -278,7 +278,9 @@ export interface ExamplesFileCheck {
 
 // ── 리뷰 (M2) ───────────────────────────────────────────────────────────────
 
-export type RaiseReason = 'example_test_mismatch' | 'security' | 'out_of_contract' | 'structure'
+/** 리뷰 올림의 갈래. request_gap(V30): 요청이 알리거나 바라는 것을 diff가 설명하지 않음, 또는 알린 증상의 다른 원인 */
+export type RaiseReason =
+  'example_test_mismatch' | 'security' | 'out_of_contract' | 'structure' | 'request_gap'
 
 export interface ReviewFinding {
   id: string
@@ -331,12 +333,14 @@ export interface EvidenceBundle {
   }
   /**
    * 독립 리뷰(V4). prompt_version은 리뷰어를 부른 리뷰 프롬프트의 판(review.ts REVIEW_PROMPT_VERSION)이다. 미리 리뷰(V23)를
-   * 내보내기에 다시 쓸 때 견준다. 건너뜀과 V23 앞의 묶음에는 없다
+   * 내보내기에 다시 쓸 때 견준다. 건너뜀과 V23 앞의 묶음에는 없다. request는 리뷰어가 요청(request.md)을 받았는가(V30): 참이
+   * 아닌 끝난 리뷰는 '리뷰가 요청을 보지 않음'으로 사람 머지다(V15)
    */
   review: {
     status: 'done' | 'failed' | 'skipped'
     findings: ReviewFinding[]
     prompt_version?: number
+    request?: boolean
   } | null
   /** 세션이 PR 본문 등에 쓴 주장. 관문에 들어가지 않는다 */
   claims: string | null

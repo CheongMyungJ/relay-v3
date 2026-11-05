@@ -262,7 +262,10 @@ describe('계약이 있는 버그 고침', () => {
   })
 
   test('관문: 지금 head가 묶음의 head와 다르면 낡은 증거라 사람 머지', () => {
-    const reviewed: EvidenceBundle = { ...bundle, review: { status: 'done', findings: [] } }
+    const reviewed: EvidenceBundle = {
+      ...bundle,
+      review: { status: 'done', findings: [], request: true },
+    }
     const r = gate(reviewed, contract, policy(), bundle.base)
     expect(r.decisive).toMatch(/^낡은 증거: /)
   })
@@ -279,7 +282,10 @@ describe('계약이 있는 버그 고침', () => {
   })
 
   test('관문: 리뷰가 붙으면 자동 조건을 채우고 스위치가 꺼져 그림자 사람 머지', () => {
-    const reviewed: EvidenceBundle = { ...bundle, review: { status: 'done', findings: [] } }
+    const reviewed: EvidenceBundle = {
+      ...bundle,
+      review: { status: 'done', findings: [], request: true },
+    }
     const shadow = gate(reviewed, contract, policy(), bundle.head)
     expect(shadow.conclusion).toBe('human_merge')
     expect(shadow.shadow).toBe(true)

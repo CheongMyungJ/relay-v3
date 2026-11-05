@@ -398,6 +398,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('next-step')).not.toContainText('relay init')
 
   // 이 Work의 리뷰는 계약 밖 변경 하나를 low로 올린다(V26: 계약 밖 변경은 low도 올림). 세션 몫의 구조/중간도 하나 올린다.
+  // 요청과 어긋남(V30)도 low로 하나 올린다: 심각도와 상관없이 올림이고, 계약의 몫이라 사람 몫이다.
   // 가짜 리뷰어는 부를 때마다 읽는다
   const outside = {
     severity: 'low',
@@ -405,9 +406,10 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
     text: '계약 밖에서 .gitignore를 바꿈',
   }
   const structure = { severity: 'medium', raise: 'structure', text: '경계값 시험이 없음' }
+  const gap = { severity: 'low', raise: 'request_gap', text: '요청의 빈 입력 경로를 다루지 않음' }
   await writeFile(
     join(tmp, 'review.json'),
-    JSON.stringify({ findings: [outside, structure, ...NOTES] }),
+    JSON.stringify({ findings: [outside, structure, gap, ...NOTES] }),
   )
 
   // [끝내기](V25): 내보내기 증거(리뷰 포함)를 재는 동안은 걸린 끝. Work는 구현 중 그대로
@@ -428,25 +430,29 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
     '리뷰 올림(계약 밖 변경): 계약 밖에서 .gitignore를 바꿈',
   )
   await expect(endBox.getByTestId('end-open')).toContainText('리뷰 올림(구조): 경계값 시험이 없음')
+  await expect(endBox.getByTestId('end-open')).toContainText(
+    '리뷰 올림(요청과 어긋남): 요청의 빈 입력 경로를 다루지 않음',
+  )
   await expect(endBox.getByText('변수 이름이 짧음')).toHaveCount(0)
   await expect(endBox.getByText('빈 입력 시험이 없음')).toHaveCount(0)
-  // 계약 밖 변경은 사람 몫이라 저절로 가지 않았다. 상자가 떠 있는 동안은 세션 몫도 가지 않는다. 상자에서 둘을 세션에 넘길
-  // 수 있다(V24). 상태 줄은 상자에 맡긴다
+  // 계약 밖 변경과 요청과 어긋남은 사람 몫이라 저절로 가지 않았다. 상자가 떠 있는 동안은 세션 몫도 가지 않는다. 상자에서
+  // 셋을 세션에 넘길 수 있다(V24). 상태 줄은 상자에 맡긴다
   await expect(endBox.getByRole('button', { name: '세션에 넘기기' })).toBeVisible()
   await expect(evidence.getByTestId('feedback-status')).toHaveCount(0)
   await expect(head).toContainText('구현 중')
   await shot('end-box')
-  // [리뷰 지적]은 올림 하나와 메모 둘로 나뉜다(V26)
+  // [리뷰 지적]은 올림 셋과 메모 둘로 나뉜다(V26)
   const fold = evidence.locator('details.fold', {
     has: page.locator('summary', { hasText: '리뷰 지적' }),
   })
   if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
   const raisedGroup = evidence.getByTestId('review-raised')
-  await expect(raisedGroup).toContainText('올림 2 · 관문이 사람에게 보냅니다')
+  await expect(raisedGroup).toContainText('올림 3 · 관문이 사람에게 보냅니다')
   // 세션 몫도 상자가 떠 있는 동안은 저절로 가지 않으니 사람이 넘길 수 있다
   await expect(raisedGroup.locator('li')).toHaveText([
     /낮음\s*계약 밖 변경\s*계약 밖에서.*세션에 넘기기$/,
     /중간\s*구조\s*경계값 시험이 없음\s*세션 몫\s*세션에 넘기기$/,
+    /낮음\s*요청과 어긋남\s*요청의 빈 입력.*세션에 넘기기$/,
   ])
   await expect(evidence.getByTestId('review-notes')).toContainText('메모 2')
   await fold.scrollIntoViewIfNeeded()
@@ -465,7 +471,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
     /^사람 몫의 리뷰 올림이 있어 세션 몫 사실 1개를 보내지 않았습니다: /,
   )
   if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
-  await expect(raisedGroup.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(2)
+  await expect(raisedGroup.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(3)
   await evidence.getByTestId('feedback-status').scrollIntoViewIfNeeded()
   await shot('feedback-human-findings')
   // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [그래도 끝내기]

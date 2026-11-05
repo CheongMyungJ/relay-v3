@@ -94,7 +94,7 @@ export function evidence(over: Partial<EvidenceBundle> = {}): EvidenceBundle {
     ],
     signals: [],
     diff: DIFF,
-    review: { status: 'done', findings: [] },
+    review: reviewed(),
     claims: null,
     contract_change_requested: false,
     missing: [],
@@ -143,6 +143,11 @@ export function run(
 
 export function sig(kind: Signal['kind'], path: string, detail: string): Signal {
   return { kind, path, detail }
+}
+
+/** 요청을 본 끝난 리뷰(V30). 자동 후보·그림자가 될 수 있는 리뷰다(V15) */
+export function reviewed(findings: ReviewFinding[] = []): NonNullable<EvidenceBundle['review']> {
+  return { status: 'done', findings, request: true }
 }
 
 export function finding(over: Partial<ReviewFinding> = {}): ReviewFinding {

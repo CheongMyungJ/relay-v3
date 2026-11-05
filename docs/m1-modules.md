@@ -85,11 +85,11 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ### `src/core/gate.ts`
 - `gate(evidence: EvidenceBundle, contract: Contract | null, policy: Policy, head: string | null): GateResult` — V5. head는 지금 브랜치 끝의 SHA(모르면 null). 순서:
   1. `contract_change_requested` → recontract.
-  2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe, 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 커밋된 예시 자료(`examples_file`, V27)가 없음('예시 자료 파일이 커밋되지 않음: <경로>')·다름('예시 자료가 승인본과 다름: C1.2 output (기대 10, 실제 8)', 차이는 셋까지)·읽지 못함(same이거나 null·없는 칸이면 사실이 아니다), 리뷰 status가 done이 아님, 리뷰 지적 중 올림인 것(review.ts `raises`, V26: structure/low와 raise가 없는 지적은 메모라 사실이 아니다), `missing`이 빈 배열이 아님, quality.from이 none.
+  2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe, 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 커밋된 예시 자료(`examples_file`, V27)가 없음('예시 자료 파일이 커밋되지 않음: <경로>')·다름('예시 자료가 승인본과 다름: C1.2 output (기대 10, 실제 8)', 차이는 셋까지)·읽지 못함(same이거나 null·없는 칸이면 사실이 아니다), 리뷰 status가 done이 아님, done인데 리뷰가 요청을 보지 않음(`review.request`가 참이 아님, V30이 V15를 넓힘: '리뷰가 요청을 보지 않음'), 리뷰 지적 중 올림인 것(review.ts `raises`, V26: structure/low와 raise가 없는 지적은 메모라 사실이 아니다), `missing`이 빈 배열이 아님, quality.from이 none.
   3. 하나라도 있으면 human_merge, decisive는 첫 사실, reasons는 전부, condition null, shadow false.
   4. 없으면 policy.conditions에서 처음 채운 조건(diff에 대한 술어: max_changed_lines, paths, no_new_dependencies, no_new_modules, require_all_lines_tested)을 찾는다. `hasRealLimit`이 거짓인 조건은 채우지 못한다. max_changed_lines는 `diff.binary`가 비어 있어야 채운다(바이너리는 줄 수로 크기를 잴 수 없다). 없으면 human_merge('채운 자동 조건 없음').
   5. 채웠으면: auto_merge_enabled, server(branch_protected && required_checks && (merge_queue || up_to_date_required)), track_record_ok[id] 셋이 모두 참이면 auto_merge_candidate(shadow false). 하나라도 거짓이면 human_merge이고 shadow true, decisive는 막은 것('프로젝트에서 자동 머지가 꺼져 있음' 등), condition은 그 id.
-  - 결론은 엄격한 쪽으로만: 리뷰가 없거나 실패면 자동으로 가지 않는다.
+  - 결론은 엄격한 쪽으로만: 리뷰가 없거나 실패이거나 요청을 보지 않았으면 자동으로 가지 않는다. 올림의 갈래 이름(`RAISE_LABEL`): 예시와 시험 불일치, 보안, 계약 밖 변경, 구조, 요청과 어긋남(request_gap, V30).
 - `openItems(evidence: EvidenceBundle, contract: Contract | null, head: string | null): string[]` — 열린 것(V25, 앱의 [끝내기]): 위 1의 계약 변경 요청(있으면 맨 앞)과 2의 사실 그대로다. gate와 같은 함수로 계산하고 새 판단은 없다. 4·5(자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적)와 리뷰 메모(올림이 아닌 지적, V26)는 넣지 않는다. 비면 [끝내기]가 상자 없이 끝낸다.
 
 ### `src/core/debt.ts`

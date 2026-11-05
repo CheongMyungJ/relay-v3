@@ -11,6 +11,7 @@ import {
   finding,
   HEAD,
   met,
+  reviewed,
   run,
   SERVER,
   sig,
@@ -45,18 +46,13 @@ describe('모든 조건을 채웠을 때만 자동 후보', () => {
       },
       {},
     ],
-    [
-      '올림 사유가 없는 리뷰 지적',
-      { review: { status: 'done', findings: [finding({ severity: 'high' })] } },
-      {},
-    ],
+    ['올림 사유가 없는 리뷰 지적', { review: reviewed([finding({ severity: 'high' })]) }, {}],
     [
       '구조/low 지적(메모, V26)',
       {
-        review: {
-          status: 'done',
-          findings: [finding({ raise: 'structure', severity: 'low', text: '경계값 시험 없음' })],
-        },
+        review: reviewed([
+          finding({ raise: 'structure', severity: 'low', text: '경계값 시험 없음' }),
+        ]),
       },
       {},
     ],
@@ -189,13 +185,21 @@ const FACTS: Fact[] = [
   ['리뷰 없음', { review: null }, '리뷰 없음'],
   ['리뷰 실패', { review: { status: 'failed', findings: [] } }, '리뷰 실패'],
   ['리뷰 건너뜀', { review: { status: 'skipped', findings: [] } }, '리뷰를 건너뜀'],
+  // V30이 V15를 넓힌다: 요청을 받지 않은 리뷰(앞 판의 묶음, request.md를 읽지 못함)로는 자동 후보도 그림자도 되지 않는다
+  [
+    '요청을 보지 않은 리뷰',
+    { review: { status: 'done', findings: [] } },
+    '리뷰가 요청을 보지 않음',
+  ],
+  [
+    '요청을 보지 않았다고 적은 리뷰',
+    { review: { ...reviewed(), request: false } },
+    '리뷰가 요청을 보지 않음',
+  ],
   [
     '리뷰 올림',
     {
-      review: {
-        status: 'done',
-        findings: [finding({ raise: 'security', text: '토큰 노출', file: 'a.ts', line: 3 })],
-      },
+      review: reviewed([finding({ raise: 'security', text: '토큰 노출', file: 'a.ts', line: 3 })]),
     },
     '리뷰 올림(보안): 토큰 노출 — a.ts:3',
   ],
@@ -319,7 +323,7 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
     expect(r.reasons).toEqual(['리뷰 실패', '리뷰 올림(구조): 중복 구현'])
   })
 
-  test('올림 기준(V26): 구조는 medium 이상만, 보안·예시와 시험 불일치·계약 밖 변경은 low도 올린다', () => {
+  test('올림 기준(V26): 구조는 medium 이상만, 보안·예시와 시험 불일치·계약 밖 변경·요청과 어긋남(V30)은 low도 올린다', () => {
     const findings = [
       finding({ id: 'R1', raise: 'structure', severity: 'low', text: '구조 낮음' }),
       finding({ id: 'R2', raise: 'structure', severity: 'medium', text: '구조 중간' }),
@@ -327,11 +331,13 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
       finding({ id: 'R4', raise: 'example_test_mismatch', severity: 'low', text: '불일치 낮음' }),
       finding({ id: 'R5', raise: 'security', severity: 'low', text: '보안 낮음' }),
     ]
-    expect(run({ review: { status: 'done', findings } }).reasons).toEqual([
+    findings.push(finding({ id: 'R6', raise: 'request_gap', severity: 'low', text: '요청 낮음' }))
+    expect(run({ review: reviewed(findings) }).reasons).toEqual([
       '리뷰 올림(구조): 구조 중간',
       '리뷰 올림(계약 밖 변경): 계약 밖 낮음',
       '리뷰 올림(예시와 시험 불일치): 불일치 낮음',
       '리뷰 올림(보안): 보안 낮음',
+      '리뷰 올림(요청과 어긋남): 요청 낮음',
     ])
   })
 
@@ -407,11 +413,9 @@ describe('열린 것(V25)은 관문이 사람에게 보내는 사실 그대로�
     expect(run({ diff: big }).decisive).toBe('채운 자동 조건 없음')
     expect(open({ diff: big })).toEqual([])
     // 리뷰 메모(올림 사유가 없는 지적, 구조/low. V26)도 아니다
-    expect(open({ review: { status: 'done', findings: [finding({ severity: 'high' })] } })).toEqual(
-      [],
-    )
+    expect(open({ review: reviewed([finding({ severity: 'high' })]) })).toEqual([])
     const low = finding({ raise: 'structure', severity: 'low' })
-    expect(open({ review: { status: 'done', findings: [low] } })).toEqual([])
+    expect(open({ review: reviewed([low]) })).toEqual([])
   })
 
   test('사실을 관문과 같은 차례로 모두 모으고, 풀리지 않은 계약 변경을 맨 앞에 둔다', () => {

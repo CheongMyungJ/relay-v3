@@ -165,6 +165,11 @@ export interface FeedbackInput {
 /** 읽는 쪽이 줄을 나누는 글자: CommonMark의 LF·CR·CRLF와 유니코드의 줄 끝(VT, FF, NEL, LS, PS) */
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
+/** 모든 줄 앞에 `> `(인용): 바깥 글(리뷰 지적, 요청)의 어느 줄도 인용 밖으로 나가지 않는다 */
+export function quoteLines(text: string): string {
+  return `> ${text.split(LINE_BREAK).join('\n> ')}`
+}
+
 /**
  * 되먹임 파일(영어, 자료): 결정론 사실, 인용으로 감싼 리뷰 지적과 FINDINGS_NOTE. 지적의 칸은 리뷰어가 채운 자료라 어느 줄도
  * 인용 밖으로 나가지 않게 한다: 머리 줄(파일 이름)의 줄바꿈은 빈칸으로, 글은 모든 줄 끝에서 나눠 줄마다 `> `를 붙인다
@@ -181,8 +186,7 @@ export function feedbackText(o: FeedbackInput): string {
     const quote = (f: ReviewFinding) => {
       const where = f.file === undefined ? '' : ` · ${f.file}${f.line ? `:${f.line}` : ''}`
       const title = `${f.id} · ${f.raise ?? 'note'} · ${f.severity}${where}`
-      const lines = [title.split(LINE_BREAK).join(' '), ...f.text.split(LINE_BREAK)]
-      return lines.map((l) => `> ${l}`).join('\n')
+      return quoteLines(`${title.split(LINE_BREAK).join(' ')}\n${f.text}`)
     }
     out.push('', '## Review findings', '', FINDINGS_NOTE, '', o.findings.map(quote).join('\n\n'))
   }

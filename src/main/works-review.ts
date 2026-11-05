@@ -2,8 +2,9 @@
 // 파일은 리뷰를 부르고 묶음에 붙인다: 기본 구현(claudeReview: 새 맥락의 읽기 전용 claude -p), 내보내기의 리뷰(같은 head·
 // 계약의 끝난 리뷰를 다시 씀, 건너뜀), 미리 리뷰(세션이 쉬고 증거가 리뷰 준비인 head. Work마다 4번까지: 처음 1번과 되먹임
 // 라운드 상한 3, works-feedback.ts PREPARED_MAX). 리뷰는 (head, 계약 hash, 프롬프트 판)에 붙는다. 리뷰마다
-// AbortController를 따로 두고, 읽은 HEAD나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰 결과 가운데
-// 세션 몫은 works-feedback.ts가 쉬는 세션에 보낸다(V24).
+// AbortController를 따로 두고, 읽은 HEAD나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰어는
+// request.md를 받고, 받았으면 리뷰 결과에 request: true를 붙인다(V30. 없으면 관문이 '리뷰가 요청을 보지 않음'으로 사람
+// 머지). 리뷰 결과 가운데 세션 몫은 works-feedback.ts가 쉬는 세션에 보낸다(V24).
 
 import { claudeJson } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
@@ -202,7 +203,11 @@ export class ReviewDesk {
   ): boolean {
     if (contract === null) return false
     if (project.settings.review !== 'auto_only') return true
-    const done: EvidenceBundle = { ...bundle, review: { status: 'done', findings: [] } }
+    // 리뷰가 됐다고 친다: 요청도 본 끝난 리뷰(V30)
+    const done: EvidenceBundle = {
+      ...bundle,
+      review: { status: 'done', findings: [], request: true },
+    }
     const policy: Policy = {
       auto_merge_enabled: false,
       conditions,
@@ -243,15 +248,17 @@ export class ReviewDesk {
         await this.ctx.save(rec)
       }
       const range = [bundle.base, bundle.head]
-      const [diffStat, diff] = await Promise.all([
+      const [diffStat, diff, request] = await Promise.all([
         git(['diff', '--stat', '--no-color', ...range], rec.worktree),
         git(['diff', '--no-color', '--no-ext-diff', ...range], rec.worktree),
+        this.ctx.deps.store.readText(id, 'request.md'),
       ])
       const result = signal.aborted
         ? null
         : await this.ctx.deps.review({
             cwd: rec.worktree,
             contract,
+            request,
             diffStat,
             diff,
             evidenceSummary: evidenceFacts(bundle),
@@ -266,9 +273,11 @@ export class ReviewDesk {
         findings: result?.findings.length ?? 0,
         ...(result?.usage ? { usage: result.usage } : {}),
       })
+      // 리뷰어가 요청을 받았다(V30): 그런 리뷰만 자동 후보·그림자가 될 수 있다(V15)
+      const saw = request === null ? {} : { request: true }
       return {
         ...bundle,
-        review: result && { status: result.status, findings: result.findings, ...version },
+        review: result && { status: result.status, findings: result.findings, ...version, ...saw },
       }
     } catch (e) {
       if (signal.aborted) return this.aborted(id, trigger)
