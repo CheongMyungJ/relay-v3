@@ -4,6 +4,7 @@
 import type { SessionState, WorkState } from '../core/work.ts'
 import type {
   Contract,
+  ContractProbe,
   DebtItem,
   EvidenceBundle,
   GateResult,
@@ -130,6 +131,8 @@ export interface WorkView {
   endMoved: string | null
   /** 쉬는 세션에 준 되먹임(V24) */
   feedback: FeedbackView
+  /** 보이는 계약(pendingContract, 없으면 contract)의 제출 때 기준 확인(V28). 다른 계약의 것이거나 없으면 null */
+  probe: ContractProbe | null
 }
 
 /** 세션에 보낸 되먹임 파일 하나(V24, works/<id>/feedback/<n>.md) */

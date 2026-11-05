@@ -223,6 +223,8 @@ export interface ExampleEvidence {
   id: string
   head: TestStatus | 'missing'
   base?: TestStatus | 'missing' | 'not_run'
+  /** 제출 때 기준 확인(V28)만: 기준의 JUnit 메시지(시험 파일을 불러오지 못했으면 그 파일의 메시지) */
+  message?: string
 }
 
 export interface LineVerdict {
@@ -234,6 +236,20 @@ export interface LineVerdict {
 }
 
 export type GroundingCheck = { line: string; ground: Grounding; ok: boolean; detail: string }
+
+/**
+ * 제출 때 기준 확인(V28, engine/probe.ts). contract는 확인한 계약(승인 표시를 뗀 것)의 contractHash. ran: 수용 명령을 기준에서
+ * 돌려 결과를 읽었다(아니면 note가 까닭). lines는 core probeVerdicts(예시의 head: passed는 태그 시험이 있음, missing은 없음)
+ */
+export interface ContractProbe {
+  head: string
+  base: string
+  contract: string
+  ran: boolean
+  note: string | null
+  lines: LineVerdict[]
+  ms: number
+}
 
 // ── 예시 자료 (V27) ─────────────────────────────────────────────────────────
 

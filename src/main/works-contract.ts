@@ -6,15 +6,18 @@
 // 예시 자료(V27): 앱이 계약에서 정규 파일을 Work의 worktree에 쓴다(제출 때 초안, 승인과 받아들인 계약 바꾸기 때 승인본).
 // 커밋은 세션이 한다: 앱은 사용자 레포에 커밋하지 않는다(V20).
 // 단위(V21): 한 요청은 한 Work와 한 계약이다. 전달 방식은 one_branch만 받는다(branch_per_unit은 V22, 사용자 결정을 기다림).
+// 제출 때 기준 확인(V28, works-probe.ts): 형식과 근거 검사를 지난 계약은 태그 시험이 커밋돼 있으면 기준에서 예시를 확인하고,
+// 어긋난 줄이 있으면 invalid로 돌려보낸다. 받아들인 제출의 확인은 WorkRecord.probe에 두어 계약 판이 예시마다 보인다.
 
 import { contractHash, examplesFile, examplesFileText, parseContract } from '../core/contract.ts'
 import { TOOL_CHANGE, TOOL_SUBMIT } from '../core/instructions.ts'
-import type { Contract } from '../core/types.ts'
+import type { Contract, ContractProbe } from '../core/types.ts'
 import { nextState } from '../core/work.ts'
 import { writeInside } from '../adapters/worktrees.ts'
 import { checkGroundings } from '../engine/judge.ts'
 import type { WorkRecord } from './store.ts'
 import { dropEnd } from './works-end.ts'
+import { probeErrors, probeProblems, runProbe } from './works-probe.ts'
 import { followReview } from './works-review.ts'
 import { examplesDir } from './works-worktree.ts'
 import { message, type WorkCtx, workHead } from './works-types.ts'
@@ -65,6 +68,13 @@ export class ContractDesk {
     this.ctx = ctx
   }
 
+  /** 보이는 계약(승인을 기다리는 것, 없으면 승인된 것)의 기준 확인(V28). 다른 계약의 것이면 null */
+  shownProbe(rec: WorkRecord): ContractProbe | null {
+    const shown = rec.pending_contract ?? this.ctx.runtime(rec.id).contract
+    const p = rec.probe
+    return p && shown && p.contract === contractHash(bare(shown)) ? p : null
+  }
+
   /** 사람의 답을 기다리는 도구 호출이 있나 */
   waiting(id: string): 'submit' | 'change' | null {
     return this.waiters.get(id)?.kind ?? null
@@ -96,13 +106,18 @@ export class ContractDesk {
       }
     }
     const groundings = await this.groundings(rec, contract)
+    // 초안: 세션이 승인 전에 그 파일을 읽는 시험을 쓸 수 있게(기준 확인이 돌려보내도 쓴다: 그 파일로 시험을 고친다)
+    await this.writeExamples(rec, contract, 'draft')
+    const probe = await runProbe(this.ctx, rec, contract, TOOL_SUBMIT)
+    if (probe !== null && probeProblems(probe).length > 0)
+      return this.invalid(rec, probeErrors(probe))
+    // 상태는 확인 뒤에 본다: 확인하는 사이 사람이 앞 계약에 답했을 수 있다
     const next = nextState(rec.state, { type: 'contract_submitted', contract })
     if (!next.ok) return { status: 'error', error: next.errors.join('; ') }
-    // 초안: 세션이 승인 전에 그 파일을 읽는 시험을 쓸 수 있게
-    await this.writeExamples(rec, contract, 'draft')
     rec.state = next.value
     rec.pending_contract = contract
     rec.groundings = groundings
+    rec.probe = probe
     // 화면이 승인을 보이기 전에 기다림을 건다: 저장하는 사이에 온 사람의 답도 이 호출이 받는다
     const answer = this.wait(rec.id, 'submit', signal)
     await this.ctx.save(rec)
@@ -137,6 +152,9 @@ export class ContractDesk {
     if (contractHash(bare(rt.contract)) === contractHash(proposed))
       return this.invalid(rec, ['contract: 승인된 계약과 같음(바꿀 곳을 고친 계약 전체를 낸다)'])
     const groundings = await this.groundings(rec, proposed)
+    const probe = await runProbe(this.ctx, rec, proposed, TOOL_CHANGE)
+    if (probe !== null && probeProblems(probe).length > 0)
+      return this.invalid(rec, probeErrors(probe))
     const next = nextState(rec.state, { type: 'change_requested', reason })
     if (!next.ok || !rt.contract)
       return { status: 'error', error: next.ok ? '' : next.errors.join('; ') }
@@ -146,6 +164,7 @@ export class ContractDesk {
     rec.pending_change = reason
     rec.pending_contract = proposed
     rec.groundings = groundings
+    rec.probe = probe
     // [끝내기]의 걸린 끝과 상자는 앞 계약의 증거로 정한 것이다(V25). 도는 리뷰도 앞 계약의 것이라 멈춘다(V23)
     dropEnd(this.ctx, rec)
     followReview(rt)

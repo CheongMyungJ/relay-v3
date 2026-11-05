@@ -216,6 +216,26 @@ describe('instructionsText', () => {
     )
   })
 
+  test('제출 때 기준 확인(V28): 바뀜·지킴 시험은 기준에서도 돌고, 커밋된 태그 시험이 있으면 제출 때 기준에서 확인한다', () => {
+    const t = instructionsText({ ...base, questionMode: 'confirm_each' })
+    const contract = t.slice(t.indexOf('## 1.'), t.indexOf('## 2.'))
+    expect(contract).toContain(
+      'relay also runs the tests of change and keep lines on the base, so a keep test can use only what the base already has.',
+    )
+    const submit = t.slice(t.indexOf('## 3. Submit'), t.indexOf('## 4.'))
+    expect(submit).toContain(
+      "If tests tagged with this contract's examples are committed on `relay/median-a1b2`, it also runs the acceptance command once on the base",
+    )
+    expect(submit).toContain(
+      'no example of a change line fails on the base, an example of a keep line fails on the base, or a keep test does not load on the base',
+    )
+    expect(submit).toContain(
+      'Lines without tagged tests are not checked, and the check does not make a line met.',
+    )
+    // 시험을 먼저 쓰라고 하지 않는다(시험은 필수 산출물이 아니다)
+    expect(submit).not.toMatch(/\b(commit|write) (the |your )?tests (first|before)/i)
+  })
+
   test('예시 폴더 끝의 / 는 하나로', () => {
     expect(
       instructionsText({ ...base, examplesDir: 'ex/', questionMode: 'draft_first' }),

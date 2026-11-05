@@ -17,7 +17,7 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'nod
 import { dirname, join } from 'node:path'
 import { readJson, relayHome } from '../adapters/store.ts'
 import { parseLedger, type LedgerEntry } from '../core/ledger.ts'
-import type { Contract, GateResult, GroundingCheck } from '../core/types.ts'
+import type { Contract, ContractProbe, GateResult, GroundingCheck } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
 import type { EndPending, FeedbackRound, PrInfo, ProjectSettings } from '../shared/api.ts'
 
@@ -78,6 +78,11 @@ export interface WorkRecord {
    * 보낸 파일마다 한 줄(사람의 [세션에 넘기기]도). 옛 기록에는 없다(읽을 때 빈 것)
    */
   feedback: { rounds: number; sent: FeedbackRound[] }
+  /**
+   * 마지막 제출 때 기준 확인(V28, works-probe.ts): 받아들인 제출(submit_contract, request_contract_change)의 것. 돌려보낸 제출은
+   * events.jsonl에만 남는다. 옛 기록에는 없다(읽을 때 null)
+   */
+  probe: ContractProbe | null
 }
 
 export type WorkFile =

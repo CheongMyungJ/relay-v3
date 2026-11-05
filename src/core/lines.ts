@@ -55,30 +55,36 @@ function samePath(a: string, b: string): boolean {
   return x === y || x.endsWith(`/${y}`) || y.endsWith(`/${x}`)
 }
 
-/** base에서 파일째 실패한 testcase의 파일 경로들 */
-function fileFailures(base: TestCase[], contractId: string): string[] {
-  const out: string[] = []
+type Failure = { path: string; message?: string }
+
+/** base에서 파일째 실패한 testcase의 파일 경로와 메시지 */
+function fileFailures(base: TestCase[], contractId: string): Failure[] {
+  const out: Failure[] = []
   for (const tc of base) {
     if (tc.status !== 'failed' && tc.status !== 'error') continue
     if (tagsOf(tc, contractId).length > 0) continue
     if (tc.name === tc.classname || tc.name === tc.file || isPath(tc.name)) {
       const path = tc.file ?? (isPath(tc.name) ? tc.name : tc.classname)
-      if (path !== undefined) out.push(path)
+      if (path !== undefined)
+        out.push({ path, ...(tc.message === undefined ? {} : { message: tc.message }) })
     }
   }
   return out
 }
 
 /**
- * base에 태그가 없는 예시를 '기준에서 불러오지 못함'으로 볼 수 있나.
+ * base에 태그가 없는 예시를 '기준에서 불러오지 못함'으로 볼 수 있나(그 실패와 same: 같은 파일인가).
  * head 시험의 파일을 알면 같은 파일의 파일 단위 실패가 있어야 한다.
  * 파일을 모르면(node:test) 파일 단위 실패가 하나라도 있어야 하고 detail에 적는다.
  */
-function loadFailure(headCases: TestCase[], failures: string[]): 'same_file' | 'some_file' | null {
-  if (failures.length === 0) return null
+function loadFailure(
+  headCases: TestCase[],
+  failures: Failure[],
+): { failure: Failure; same: boolean } | null {
   const files = headCases.map((c) => c.file ?? c.classname).filter(isPath)
-  if (files.length === 0) return 'some_file'
-  return files.some((f) => failures.some((g) => samePath(f, g))) ? 'same_file' : null
+  const failure =
+    files.length === 0 ? failures[0] : failures.find((g) => files.some((f) => samePath(f, g.path)))
+  return failure === undefined ? null : { failure, same: files.length > 0 }
 }
 
 function verdict(
@@ -117,7 +123,7 @@ type Judged = { status: LineStatus; detail: string }
 
 interface BaseContext {
   head: Index | null
-  failures: string[]
+  failures: Failure[]
 }
 
 /**
@@ -145,7 +151,7 @@ function judgeChange(evs: ExampleEvidence[], ctx: BaseContext): Judged {
       if (why === null) unconfirmed.push(`${e.id}(기준에 그 시험이 없음)`)
       else
         notes.push(
-          why === 'same_file'
+          why.same
             ? `${e.id}: 기준에서 시험 파일을 불러오지 못함`
             : `${e.id}: 기준에서 불러오지 못한 시험 파일이 있음(파일은 확인하지 못함)`,
         )
@@ -231,6 +237,44 @@ export function judgeLines(
     if (other === 'observe') return verdict(line, 'observe', '시험 대신 보고 확인하는 줄', examples)
     const r = judgeTestLine(line, examples, head !== null, ctx)
     return verdict(line, r.status, r.detail, examples)
+  })
+}
+
+/**
+ * 제출 때 기준 확인(V28): 태그 시험과 제출된 예시 자료를 기준에 얹어 돈 결과(base)로 바뀜·지킴 줄을 증거의 기준 쪽 규칙
+ * (judgeChange, judgeKeep)으로 본다. head는 돌리지 않는다: tagged는 head의 시험 파일에서 찾은 태그(file만 본다)이고, 태그가
+ * 없는 예시는 기준에서 돌리지 않은 것으로 본다. not_met이면 제출을 돌려보낸다. 지킴 줄은 시험 파일을 기준에서 불러오지
+ * 못해도 not_met이다. 줄에 태그 시험이 하나도 없으면 missing_evidence(확인 안 함)
+ */
+export function probeVerdicts(
+  contract: Contract,
+  base: TestCase[],
+  tagged: TestCase[],
+): LineVerdict[] {
+  const head = indexByExample(tagged, contract.id)
+  const index = indexByExample(base, contract.id)
+  const ctx: BaseContext = { head, failures: fileFailures(base, contract.id) }
+  const probed = contract.lines.filter((l) => !untested(l) && ['change', 'keep'].includes(l.kind))
+  return probed.map((line) => {
+    const unloaded: string[] = []
+    const evs = evidenceOf(line, head, index).map((e): ExampleEvidence => {
+      if (e.head === 'missing') return { ...e, base: 'not_run' }
+      const load = e.base === 'missing' ? loadFailure(head.get(e.id) ?? [], ctx.failures) : null
+      if (load) unloaded.push(e.id)
+      const failed = index.get(e.id)?.find((c) => c.status === 'failed' || c.status === 'error')
+      const f = load?.failure
+      const message = failed?.message ?? (f && (f.message ? `${f.path}: ${f.message}` : f.path))
+      return message === undefined ? e : { ...e, message }
+    })
+    let r = line.kind === 'change' ? judgeChange(evs, ctx) : judgeKeep(evs)
+    if (evs.every((e) => e.head === 'missing'))
+      r = { status: 'missing_evidence', detail: '태그를 단 시험이 없어 확인 안 함' }
+    else if (line.kind === 'keep' && r.status !== 'not_met' && unloaded.length > 0)
+      r = {
+        status: 'not_met',
+        detail: `기준에서 시험 파일을 불러오지 못함 (${unloaded.join(', ')})`,
+      }
+    return verdict(line, r.status, r.detail, evs)
   })
 }
 

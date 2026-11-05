@@ -89,6 +89,7 @@ export class Works implements WorkCtx {
         end_pending: rec.end_pending ?? null,
         prepared_reviews: rec.prepared_reviews ?? 0,
         feedback: rec.feedback ?? { rounds: 0, sent: [] },
+        probe: rec.probe ?? null,
       })
       const rt = this.runtime(id)
       const text = await store.readText(id, 'contract.json')
@@ -537,6 +538,7 @@ export class Works implements WorkCtx {
       error: rec.error,
       ...this.endView(rec),
       feedback: this.feedback.view(rec),
+      probe: this.desk.shownProbe(rec),
     }
   }
 

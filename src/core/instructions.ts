@@ -100,7 +100,7 @@ The contract is JSON:
   - \`text\`.
   - \`grounds\`: why the line holds, one or more of \`{type: "code", path, line, name?}\` (a path:line at the head), \`{type: "request", quote}\` (words copied exactly from the request), \`{type: "knowledge", id}\`, \`{type: "guess"}\`. relay checks code and request grounds and shows a ground it cannot confirm as a guess.
   - \`examples\`: example ids (\`C1.1\`, \`C1.2\`, …).
-  - \`check\`: \`test\`, \`observe\` or \`human\`. A \`human\` line has \`check: "human"\`. A \`test\` line of kind change, new or keep needs at least one example.
+  - \`check\`: \`test\`, \`observe\` or \`human\`. A \`human\` line has \`check: "human"\`. A \`test\` line of kind change, new or keep needs at least one example. relay also runs the tests of change and keep lines on the base, so a keep test can use only what the base already has.
   - \`unit\` (optional): the part of the request the line belongs to; see Units below.
 - \`examples\`: each \`{id, input, output?, error?, note?}\`, id \`C1.1\` for the first example of line C1: a concrete input and the output or the error it gives. JSON has no NaN, Infinity or undefined: write such a value as a string and say in \`note\` how the test turns it back.
 - \`non_goals\`: what this Work does not do.
@@ -116,7 +116,7 @@ Ask the human with \`AskUserQuestion\` for facts only the human knows. Do not as
 
 ## 3. Submit
 
-\`${TOOL_SUBMIT}\` checks the contract. If it returns errors, fix the contract and call it again. A valid contract waits for the human: the result is \`approved\` with the approved contract, or \`changes\` with the human's message, after which you revise and submit again. If this session was resumed while a call was waiting, call it again.
+\`${TOOL_SUBMIT}\` checks the contract. If tests tagged with this contract's examples are committed on \`${o.workBranch}\`, it also runs the acceptance command once on the base with the changed test files and the submitted examples in place, and judges change and keep lines as the evidence does: it returns errors with the base results when no example of a change line fails on the base, an example of a keep line fails on the base, or a keep test does not load on the base. Lines without tagged tests are not checked, and the check does not make a line met. If it returns errors, fix the contract or the tests and call it again. A valid contract waits for the human: the result is \`approved\` with the approved contract, or \`changes\` with the human's message, after which you revise and submit again. If this session was resumed while a call was waiting, call it again.
 
 ## 4. After approval
 

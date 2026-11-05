@@ -1,8 +1,9 @@
 // [계약] 패널 (docs/m2-modules.md 4절): 목표, 줄 표(종류, 글, 근거와 확인됨/추정, 예시 입력→출력, 확인 방법), 비목표,
-// 사람만 아는 규칙, hint. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 승인을 기다리면 [승인]과 늘 보이는 고칠
-// 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과 제안의 차이, [받아들이기]·[거절하기].
+// 사람만 아는 규칙, hint. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 제출 때 기준 확인(V28)이 있으면 머리에 한
+// 줄과 예시마다 기준 결과의 꼬리표. 승인을 기다리면 [승인]과 늘 보이는 고칠 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과
+// 제안의 차이, [받아들이기]·[거절하기].
 import { useState } from 'react'
-import type { Contract, ContractLine, GroundingCheck } from '../../core/types.ts'
+import type { Contract, ContractLine, ContractProbe, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
 import {
   CHECK_LABEL,
@@ -17,6 +18,7 @@ import {
   type DeltaItem,
   type Tone,
 } from './format.ts'
+import { probeBadge, probeSummary } from './probe.ts'
 import { Empty, ErrorLine, Tag, useAction } from './ui.tsx'
 
 export function ContractPanel({ view }: { view: WorkView }) {
@@ -39,6 +41,7 @@ export function ContractPanel({ view }: { view: WorkView }) {
           contract={shown}
           branch={view.branch}
           groundings={view.groundings}
+          probe={view.probe}
           hint={view.hint}
           pending={view.pendingContract !== null}
         />
@@ -213,6 +216,7 @@ function ContractView(p: {
   contract: Contract
   branch: string
   groundings: GroundingCheck[] | null
+  probe: ContractProbe | null
   hint: string | null
   pending: boolean
 }) {
@@ -221,6 +225,7 @@ function ContractView(p: {
   const groups = unitGroups(c)
   const units = groups.filter((g) => g.unit !== null).length
   const delivery = deliveryText(c, p.branch)
+  const probed = probeSummary(p.probe)
   const rows = (lines: ContractLine[]) => (
     <ol className="lines">
       {lines.map((l) => (
@@ -229,6 +234,7 @@ function ContractView(p: {
           line={l}
           contract={c}
           checks={p.groundings?.filter((g) => g.line === l.id) ?? null}
+          probe={p.probe}
         />
       ))}
     </ol>
@@ -247,6 +253,11 @@ function ContractView(p: {
       {delivery ? (
         <p className="muted small" data-testid="delivery">
           전달 방식 · {delivery}
+        </p>
+      ) : null}
+      {probed ? (
+        <p className="muted small" data-testid="probe-summary">
+          {probed}
         </p>
       ) : null}
       {units === 0
@@ -279,7 +290,12 @@ function ContractView(p: {
   )
 }
 
-function LineRow(p: { line: ContractLine; contract: Contract; checks: GroundingCheck[] | null }) {
+function LineRow(p: {
+  line: ContractLine
+  contract: Contract
+  checks: GroundingCheck[] | null
+  probe: ContractProbe | null
+}) {
   const l = p.line
   const examples = l.examples.map((id) => ({
     id,
@@ -314,13 +330,28 @@ function LineRow(p: { line: ContractLine; contract: Contract; checks: GroundingC
           <>
             <dt>예시</dt>
             <dd>
-              {examples.map(({ id, ex }) => (
-                <span key={id} className="example">
-                  <span className="example-id">{id}</span>
-                  <code>{ex ? exampleText(ex) : '(예시 없음)'}</code>
-                  {ex?.note ? <span className="muted"> {ex.note}</span> : null}
-                </span>
-              ))}
+              {examples.map(({ id, ex }) => {
+                const badge = p.probe ? probeBadge(p.probe, l, id) : null
+                return (
+                  <span key={id} className="example">
+                    <span className="example-id">{id}</span>
+                    <code>{ex ? exampleText(ex) : '(예시 없음)'}</code>
+                    {ex?.note ? <span className="muted"> {ex.note}</span> : null}
+                    {badge ? (
+                      <span
+                        className="probe"
+                        data-testid="probe-badge"
+                        title={badge.title || undefined}
+                      >
+                        <Tag tone={badge.tone}>{badge.label}</Tag>
+                        {badge.now ? (
+                          <span className="probe-now muted small">지금: {badge.now}</span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </span>
+                )
+              })}
             </dd>
           </>
         ) : null}
