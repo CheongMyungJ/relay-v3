@@ -3,7 +3,8 @@
 // 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(올림과
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
 // 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다). 결론 아래 되먹임 상태 한
-// 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시나 [세션에 넘기기](사람 몫), 상자에도 [세션에 넘기기].
+// 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시와 [세션에 넘기기](사람 몫, 그리고 저절로 가지 않는
+// 세션 몫), 상자에도 [세션에 넘기기].
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ProjectView, WorkView } from '../../shared/api.ts'
@@ -37,6 +38,7 @@ import {
   feedbackStatus,
   findingGroups,
   findingRoute,
+  passable,
   passableFindings,
   raiseLabel,
 } from './findings.ts'
@@ -116,7 +118,7 @@ function EndArmed({ view }: { view: WorkView }) {
 function EndBox(p: { view: WorkView; head: string; open: string[] }) {
   const act = useAction()
   const { view } = p
-  // 사람에게만 보인 올림(계약 밖 변경 등)을 세션에 보내고 상자를 닫는다(V24)
+  // 열린 것에 보이는 올림을 세션에 보내고 상자를 닫는다(V24): 상자가 떠 있는 동안은 세션 몫도 저절로 가지 않는다
   const pass = view.state === 'working' ? passableFindings(view) : []
   return (
     <div className="callout tone-warn" role="region" aria-label="끝내기 확인" data-testid="end-box">
@@ -150,7 +152,7 @@ function EndBox(p: { view: WorkView; head: string; open: string[] }) {
             type="button"
             className="secondary"
             disabled={act.busy}
-            title="사람에게만 보인 리뷰 올림을 세션에 보내고 상자를 닫습니다"
+            title="열린 리뷰 올림을 세션에 보내고 상자를 닫습니다"
             onClick={() =>
               void act.run(async () => {
                 await window.relay.sendFindings(view.id, pass)
@@ -318,8 +320,8 @@ function Fold(p: { title: string; count?: number; open?: boolean; children: Reac
 }
 
 /**
- * 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄, 되먹임(V24: 세션에 보냄, 세션 몫이면 쉬면 저절로 감, 사람 몫이면 [세션에
- * 넘기기])
+ * 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄, 되먹임(V24: 세션에 보냄, 세션 몫이면 쉬면 저절로 감, 사람 몫이거나 저절로 가지
+ * 않는 세션 몫(상한, 사람 몫의 올림이 막음, 끝내기)이면 [세션에 넘기기])
  */
 function FindingList({ findings, view }: { findings: ReviewFinding[]; view: WorkView }) {
   const act = useAction()
@@ -342,7 +344,7 @@ function FindingList({ findings, view }: { findings: ReviewFinding[]; view: Work
               ) : null}
               {route === 'sent' ? <Tag tone="info">세션에 보냄</Tag> : null}
               {route === 'session' ? <Tag tone="info">세션 몫</Tag> : null}
-              {route === 'human' && view.state === 'working' ? (
+              {passable(view, f) && view.state === 'working' ? (
                 <button
                   type="button"
                   className="secondary mini"

@@ -147,10 +147,17 @@ export interface FeedbackRound {
 }
 
 /**
+ * 쉬는 세션에 되먹임(V24)을 저절로 보내지 않은 까닭: 라운드 상한에 닿음, 사람 몫의 리뷰 올림을 사람이 아직 넘기지 않음(세션이
+ * 고쳐 head가 움직이면 다음 리뷰가 그것을 다시 올리지 않을 수 있다), 사람이 입력 칸에 쓰다 둔 글이 있을 수 있음(그 글에 붙어
+ * 함께 보내진다), 사람이 최근 터미널에 입력함(창이 끝나면 다시 본다)
+ */
+export type FeedbackHold = 'cap' | 'human_findings' | 'draft' | 'human_input'
+
+/**
  * [증거]의 되먹임 상태(V24). rounds는 relay가 저절로 보낸 라운드(Work마다 max까지, 두 종류를 합쳐). sent는 지금 HEAD에 보낸
  * 파일(path는 그 파일). findings는 지금 HEAD의 묶음에 있는 리뷰 지적마다 갈래(session: 쉬는 세션에 저절로 감, human: 사람에게만,
- * [세션에 넘기기])와 이 head에 보냈는지. pending은 지금 HEAD의 세션 몫 사실 가운데 아직 보내지 않은 수, held는 그 까닭(사람이
- * 최근 터미널에 입력함, 상한에 닿음. 세션이 일하는 중이면 null: 쉬면 보낸다)
+ * [세션에 넘기기])와 이 head에 보냈는지. pending은 지금 HEAD의 세션 몫 사실 가운데 아직 보내지 않은 수, held는 그 까닭
+ * (세션이 일하는 중이면 null: 쉬면 보낸다)
  */
 export interface FeedbackView {
   rounds: number
@@ -158,7 +165,7 @@ export interface FeedbackView {
   sent: (FeedbackRound & { path: string })[]
   findings: Record<string, { route: 'session' | 'human'; sent: boolean }>
   pending: number
-  held: 'human_input' | 'cap' | null
+  held: FeedbackHold | null
 }
 
 /**

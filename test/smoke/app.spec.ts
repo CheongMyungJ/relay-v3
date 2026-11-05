@@ -5,7 +5,8 @@
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
 // 계약의 줄은 단위마다 묶여 보인다(V21). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
-// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 계약 밖 변경을 넘기는 단추가 있다.
+// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의
+// 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다.
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -384,13 +385,18 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(tabNotice.getByRole('button', { name: '초안 만들기' })).toHaveCount(0)
   await expect(evidence.getByTestId('next-step')).not.toContainText('relay init')
 
-  // 이 Work의 리뷰는 계약 밖 변경 하나를 low로 올린다(V26: 계약 밖 변경은 low도 올림). 가짜 리뷰어는 부를 때마다 읽는다
+  // 이 Work의 리뷰는 계약 밖 변경 하나를 low로 올린다(V26: 계약 밖 변경은 low도 올림). 세션 몫의 구조/중간도 하나 올린다.
+  // 가짜 리뷰어는 부를 때마다 읽는다
   const outside = {
     severity: 'low',
     raise: 'out_of_contract',
     text: '계약 밖에서 .gitignore를 바꿈',
   }
-  await writeFile(join(tmp, 'review.json'), JSON.stringify({ findings: [outside, ...NOTES] }))
+  const structure = { severity: 'medium', raise: 'structure', text: '경계값 시험이 없음' }
+  await writeFile(
+    join(tmp, 'review.json'),
+    JSON.stringify({ findings: [outside, structure, ...NOTES] }),
+  )
 
   // [끝내기](V25): 내보내기 증거(리뷰 포함)를 재는 동안은 걸린 끝. Work는 구현 중 그대로
   const head = page.locator('.work-head')
@@ -409,10 +415,13 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(endBox.getByTestId('end-open')).toContainText(
     '리뷰 올림(계약 밖 변경): 계약 밖에서 .gitignore를 바꿈',
   )
+  await expect(endBox.getByTestId('end-open')).toContainText('리뷰 올림(구조): 경계값 시험이 없음')
   await expect(endBox.getByText('변수 이름이 짧음')).toHaveCount(0)
   await expect(endBox.getByText('빈 입력 시험이 없음')).toHaveCount(0)
-  // 계약 밖 변경은 사람 몫이라 저절로 가지 않았다. 상자에서 세션에 넘길 수 있다(V24)
+  // 계약 밖 변경은 사람 몫이라 저절로 가지 않았다. 상자가 떠 있는 동안은 세션 몫도 가지 않는다. 상자에서 둘을 세션에 넘길
+  // 수 있다(V24). 상태 줄은 상자에 맡긴다
   await expect(endBox.getByRole('button', { name: '세션에 넘기기' })).toBeVisible()
+  await expect(evidence.getByTestId('feedback-status')).toHaveCount(0)
   await expect(head).toContainText('구현 중')
   await shot('end-box')
   // [리뷰 지적]은 올림 하나와 메모 둘로 나뉜다(V26)
@@ -421,8 +430,12 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   })
   if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
   const raisedGroup = evidence.getByTestId('review-raised')
-  await expect(raisedGroup).toContainText('올림 1 · 관문이 사람에게 보냅니다')
-  await expect(raisedGroup.locator('li')).toHaveText([/낮음\s*계약 밖 변경\s*계약 밖에서/])
+  await expect(raisedGroup).toContainText('올림 2 · 관문이 사람에게 보냅니다')
+  // 세션 몫도 상자가 떠 있는 동안은 저절로 가지 않으니 사람이 넘길 수 있다
+  await expect(raisedGroup.locator('li')).toHaveText([
+    /낮음\s*계약 밖 변경\s*계약 밖에서.*세션에 넘기기$/,
+    /중간\s*구조\s*경계값 시험이 없음\s*세션 몫\s*세션에 넘기기$/,
+  ])
   await expect(evidence.getByTestId('review-notes')).toContainText('메모 2')
   await fold.scrollIntoViewIfNeeded()
   await shot('review-groups')
@@ -432,10 +445,17 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(endBox).toBeHidden()
   await second.locator('.work-item').first().click()
   await expect(endBox).toBeVisible()
-  // [더 고치기]: 상자를 닫고 Work는 그대로
+  // [더 고치기]: 상자를 닫고 Work는 그대로. 사람 몫의 올림을 아직 넘기지 않았으니 세션 몫도 보내지 않는다(V24)
   await endBox.getByRole('button', { name: '더 고치기' }).click()
   await expect(endBox).toBeHidden()
   await expect(head).toContainText('구현 중')
+  await expect(evidence.getByTestId('feedback-status')).toHaveText(
+    /^사람 몫의 리뷰 올림이 있어 세션 몫 사실 1개를 보내지 않았습니다: /,
+  )
+  if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
+  await expect(raisedGroup.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(2)
+  await evidence.getByTestId('feedback-status').scrollIntoViewIfNeeded()
+  await shot('feedback-human-findings')
   // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [그래도 끝내기]
   await head.getByRole('button', { name: '끝내기' }).click()
   await expect(endBox).toBeVisible({ timeout: 30_000 })

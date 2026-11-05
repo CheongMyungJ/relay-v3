@@ -138,7 +138,9 @@ export class Works implements WorkCtx {
         autoMergeNote: null,
         endMoved: null,
         lastHumanInputAt: null,
+        draft: false,
         feedbackHeld: null,
+        feeding: Promise.resolve(),
         telling: Promise.resolve(),
       }
       this.rts.set(id, rt)
@@ -324,6 +326,8 @@ export class Works implements WorkCtx {
     switch (event) {
       case 'UserPromptSubmit': {
         rt.session = 'running'
+        // 입력 칸의 글은 이 프롬프트로 함께 갔다(V24)
+        rt.draft = false
         this.evidence.cancelDebounce(workId)
         // 재개 프롬프트로 전한 사람의 답을 세션이 받았다
         if (rt.noticeSent) {
@@ -458,7 +462,10 @@ export class Works implements WorkCtx {
     return this.feedback.sendFindings(id, ids)
   }
 
-  /** 사람이 화면에서 터미널에 친 글(ipc terminalWrite). 되먹임은 그 뒤 60초 동안 보내지 않는다(V24) */
+  /**
+   * 사람이 화면에서 터미널에 친 글(ipc terminalWrite). 되먹임은 그 뒤 60초 동안, 그리고 입력 칸에 쓰다 둔 글이 있을 수 있는
+   * 동안 보내지 않는다(V24)
+   */
   typed(id: string, data: string): void {
     if (this.works.has(id)) this.feedback.typed(id, data)
   }

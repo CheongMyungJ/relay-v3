@@ -6,6 +6,7 @@ import { revParse } from '../adapters/git.ts'
 import type { Contract, EvidenceBundle } from '../core/types.ts'
 import type { SessionState, WorkEvent } from '../core/work.ts'
 import type { HookEvent } from '../core/instructions.ts'
+import type { FeedbackHold } from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
 import type { ProjectRecord, Store, WorkRecord } from './store.ts'
 
@@ -82,6 +83,10 @@ export interface Runtime {
   head: string | null
   /** 지금 재고 있는 head */
   measuring: string | null
+  /**
+   * Stop 뒤 몰아 두기의 타이머. 되먹임(V24)을 사람의 최근 입력으로 미뤘으면 창이 끝날 때 다시 보는 타이머도 여기에 둔다:
+   * 세션이 다시 움직이면(UserPromptSubmit, push 등 cancelDebounce) 함께 지운다. 이것이 있는 동안은 아직 쉬는 때가 아니다
+   */
   debounce: ReturnType<typeof setTimeout> | null
   poll: ReturnType<typeof setInterval> | null
   /**
@@ -112,10 +117,17 @@ export interface Runtime {
   /** 사람이 화면에서 터미널에 마지막으로 입력한 때(ms, ipc terminalWrite. 앱의 tell은 세지 않는다, V24) */
   lastHumanInputAt: number | null
   /**
-   * 보내지 않고 둔 되먹임(V24): 그 head와 까닭(사람이 최근 입력함, 라운드 상한). 같은 까닭을 쉴 때마다 다시 적지 않게. 사람이
-   * 입력해 둔 것은 다음에 쉴 때 다시 본다
+   * 사람이 화면에서 터미널에 마지막으로 친 글이 Enter(나 입력 칸을 비우는 Ctrl+C)로 끝나지 않았다: 입력 칸에 보내지 않은 글이
+   * 있을 수 있다(V24). UserPromptSubmit과 세션을 띄울 때 거짓
    */
-  feedbackHeld: { head: string; reason: 'human_input' | 'cap' } | null
+  draft: boolean
+  /**
+   * 보내지 않고 둔 되먹임(V24): 그 head와 까닭. 같은 까닭을 쉴 때마다 다시 적지 않게. 사람의 최근 입력은 창이 끝날 때, 쓰다 둔
+   * 글은 사람이 Enter를 친 뒤 창이 끝날 때 다시 본다
+   */
+  feedbackHeld: { head: string; reason: FeedbackHold } | null
+  /** 되먹임 보내기(relay와 [세션에 넘기기])가 끝나는 때. 번호와 '이 head에 보낸 것'이 겹치지 않게 차례로 */
+  feeding: Promise<void>
   /** 터미널에 넣는 마지막 줄(tell)이 끝나는 때. 줄이 서로 섞이지 않게 차례로 넣는다 */
   telling: Promise<void>
 }
@@ -163,7 +175,10 @@ export interface WorkCtx {
   seeHead(id: string, head: string | null): Promise<void>
   /** 증거 재기 job이 하나 끝났다(works-evidence.ts의 줄 안에서): 걸린 끝을 다시 본다(V25, works-end.ts) */
   settleEnd(id: string, job: MeasureJob): Promise<void>
-  /** 세션이 쉰다(Stop 뒤 몰아 두기, 미리 리뷰를 허락한 재기 뒤): 세션 몫의 사실이 있으면 되먹임을 보낸다(V24) */
+  /**
+   * 세션이 쉴 수 있는 때(Stop 뒤 몰아 두기 끝, 재기가 끝날 때마다, [끝내기]를 거둔 뒤, 사람의 입력 창이 끝날 때): 세션 몫의
+   * 사실이 있으면 되먹임을 보낸다(V24). 실패는 삼킨다
+   */
   offerFeedback(id: string): Promise<void>
   /** 프로젝트의 품질 기준 상태(V20)를 뒤에서 다시 잰다(실패는 삼킨다) */
   refreshQuality(projectId: string): void

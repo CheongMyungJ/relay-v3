@@ -4,7 +4,8 @@
 // claude -p도 부르지 않는다). 그 증거가 아직 없거나 리뷰가 돌고 있거나 실패했으면 '걸린 끝'으로 두고 재며, 증거 재기가
 // 하나 끝날 때마다(EvidenceRunner의 줄 안에서) 다시 본다. 열린 것이 있으면 상자로 두고 사람이 [그래도 끝내기](V18의
 // [끝 확정])나 [더 고치기]를 고른다. 걸린 끝과 상자는 WorkRecord.end_pending이라 다른 Work로 갔다 오거나 앱을 다시 켜도
-// 남는다. head가 바뀌거나 계약이 바뀌거나 Work가 끝나면 지운다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
+// 남는다. head가 바뀌거나 계약이 바뀌거나 Work가 끝나면 지운다. 걸린 끝과 상자가 있는 동안은 쉬는 세션에 되먹임(V24)을
+// 보내지 않고, [취소]·[더 고치기] 뒤 다시 본다.
 
 import { openItems } from '../core/gate.ts'
 import { nextState } from '../core/work.ts'
@@ -63,7 +64,10 @@ export class EndDesk {
     return { head, ended: false, armed: true, open: [] }
   }
 
-  /** [취소](걸린 끝)와 [더 고치기](상자): 지운다. 도는 증거 재기는 그대로 끝난다(그 증거와 리뷰는 [증거]에 남는다) */
+  /**
+   * [취소](걸린 끝)와 [더 고치기](상자): 지운다. 도는 증거 재기는 그대로 끝난다(그 증거와 리뷰는 [증거]에 남는다). 걸린 끝과
+   * 상자 때문에 보내지 않은 되먹임(V24)을 쉬는 세션에 보낸다(기다리지 않는다)
+   */
   async cancel(id: string): Promise<void> {
     const rec = this.ctx.record(id)
     const p = rec.end_pending
@@ -72,6 +76,7 @@ export class EndDesk {
     rec.end_pending = null
     await this.ctx.save(rec)
     this.ctx.note(id, { type: 'end_cancelled', head: p.head, armed: p.armed, reason: 'human' })
+    void this.ctx.offerFeedback(id)
   }
 
   /**

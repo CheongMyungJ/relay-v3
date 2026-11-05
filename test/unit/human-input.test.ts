@@ -1,7 +1,13 @@
 // [단위] 되먹임(V24)의 '사람이 터미널에 입력함'(src/main/works-feedback.ts isHumanInput): 화면의 xterm이 claude의 물음에
-// 저절로 낸 답(포커스, 장치 속성, 커서 위치, 모드·색 보고)은 사람의 입력이 아니다. 앱의 tell은 이 길을 지나지 않는다
+// 저절로 낸 답(포커스, 장치 속성, 커서 위치, 모드·색 보고)은 사람의 입력이 아니다. 앱의 tell은 이 길을 지나지 않는다.
+// '입력 칸에 쓰다 둔 글'(leavesDraft): 마지막 입력이 Enter나 Ctrl+C로 끝나지 않았다
 import { describe, expect, test } from 'vitest'
-import { FEEDBACK_ROUNDS, isHumanInput, PREPARED_MAX } from '../../src/main/works-feedback.ts'
+import {
+  FEEDBACK_ROUNDS,
+  isHumanInput,
+  leavesDraft,
+  PREPARED_MAX,
+} from '../../src/main/works-feedback.ts'
 
 const ESC = '\u001b'
 
@@ -34,6 +40,30 @@ describe('isHumanInput', () => {
     ['답 뒤의 글자', `${ESC}[Ix`],
   ])('%s는 사람의 입력이다', (_, data) => {
     expect(isHumanInput(data)).toBe(true)
+  })
+})
+
+describe('leavesDraft: 입력 칸에 보내지 않은 글이 남을 수 있나(되먹임의 한 줄이 그 글에 붙지 않게)', () => {
+  test.each([
+    ['글자', 'a'],
+    ['보낸 뒤 다시 친 글', '고쳐 주세요\r다음'],
+    ['붙여 넣은 글(bracketed paste, 안의 Enter는 보내지 않는다)', `${ESC}[200~a\rb${ESC}[201~`],
+    ['화살표(지난 글 불러오기)', `${ESC}[A`],
+    ['지우기', '\u007f'],
+    ['Esc', ESC],
+    ['글 뒤의 포커스 보고', `a${ESC}[O`],
+  ])('%s는 남긴다', (_, data) => {
+    expect(leavesDraft(data)).toBe(true)
+  })
+
+  test.each([
+    ['Enter', '\r'],
+    ['글과 Enter', '고쳐 주세요\r'],
+    ['Ctrl+C(입력 칸을 비운다)', '\u0003'],
+    ['Enter 뒤의 포커스 보고', `\r${ESC}[I`],
+    ['터미널이 저절로 낸 답', `${ESC}[I${ESC}[?1;2c`],
+  ])('%s는 남기지 않는다', (_, data) => {
+    expect(leavesDraft(data)).toBe(false)
   })
 })
 

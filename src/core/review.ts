@@ -294,12 +294,12 @@ function commandFact(c: CommandEvidence): FeedbackFact {
   const exit = last === undefined ? '' : last.timed_out ? ' (timed out)' : ` (exit ${last.exit})`
   const out = [`**Command \`${c.id}\`: ${what}${exit}.**`]
   const failed = (last?.tests ?? []).filter((t) => t.status === 'failed' || t.status === 'error')
+  // 시험 이름은 레포의 자료다(매개변수 이름에 줄바꿈이 있을 수 있다): 출력처럼 울타리 안에, 한 줄에 하나
+  const more = failed.length > 10 ? [`and ${failed.length - 10} more`] : []
   if (failed.length > 0)
     out.push(
-      `Failed tests: ${listOf(
-        failed.map((t) => t.name),
-        10,
-      )}.`,
+      'Failed tests:',
+      block('text', [...failed.slice(0, 10).map((t) => t.name), ...more].join('\n')),
     )
   const tail = last?.stderr_tail.trim() || last?.stdout_tail.trim()
   if (tail) out.push('Last output:', block('text', tail.slice(-1_500)))
@@ -324,9 +324,6 @@ function examplesFeedback(f: ExamplesFileCheck): FeedbackFact {
   for (const d of f.diffs) out.push(`- ${exampleDiffText(d, 200)}`)
   return { key: `examples:${f.status}`, text: out.join('\n') }
 }
-
-const listOf = (items: string[], max: number): string =>
-  items.slice(0, max).join('; ') + (items.length > max ? ` and ${items.length - max} more` : '')
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)

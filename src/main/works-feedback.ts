@@ -1,19 +1,21 @@
 // 쉬는 세션에 주는 되먹임 (V24, docs/m2-modules.md 3절 works.ts의 되먹임, docs/m2.1-design.md 5절). works.ts가 600줄을
 // 넘지 않게 나눴다. 세션 몫의 사실(core feedbackFacts의 결정론 사실, routeFindings의 session: 코드 안에서 고칠 리뷰 올림)을
 // 자료 파일(works/<id>/feedback/<n>.md)에 쓰고 터미널에는 그 파일을 가리키는 한 줄만 넣는다. 보내는 때는 다음을 모두 채울
-// 때다: 세션이 쉰다(Stop 뒤 몰아 두기나 미리 리뷰를 허락한 재기 뒤, 그 사이 도구 호출이 없어 idle), 구현 중이고 [끝내기]가
-// 걸리거나 상자가 뜨지 않았다, 도는 재기·리뷰가 없다, 묶음이 지금 head와 계약의 것이다, 사람이 화면에서 터미널에 60초 넘게
-// 입력하지 않았다(앱의 tell은 세지 않는다), 이 head에 보내지 않은 사실이 있다. 사람이 최근 입력했으면 상태 줄에만 보이고
-// 다음에 쉴 때 본다. relay가 저절로 보내는 라운드는 Work마다 3까지다(두 종류를 합쳐, v2 D171). 바닥 신호와 계약의 몫(계약 밖
-// 변경, request_gap)은 보내지 않는다: 사람에게만 보이고, 사람은 [세션에 넘기기]로 지적을 보낸다(라운드로 세지 않는다).
-// 세션의 답은 받지 않는다: 고쳤으면 새 head의 증거와 새 맥락의 리뷰가 보고, 넘겼으면 그 head의 사실로 [끝내기]에 남는다.
-// 미리 리뷰(V23)의 상한은 처음 1번과 이 라운드 상한에서 나온다(PREPARED_MAX).
+// 때다: 세션이 쉰다(idle이고 몰아 두기가 끝났다. Stop 뒤 몰아 두기 끝, 재기가 끝날 때마다, [끝내기]를 거둔 뒤, 사람의 입력
+// 창이 끝날 때 본다), 구현 중이고 [끝내기]가 걸리거나 상자가 뜨지 않았다, 도는 재기·리뷰가 없다, 묶음이 지금 head와 계약의
+// 것이다, 이 head에 보내지 않은 사실이 있다. 그래도 다음이면 보내지 않고 상태 줄에 까닭을 보인다: 라운드 상한(Work마다 3,
+// 두 종류를 합쳐, v2 D171), 사람 몫의 리뷰 올림을 사람이 아직 넘기지 않음(세션이 고쳐 head가 움직이면 그 올림이 사라질 수
+// 있다), 사람이 입력 칸에 쓰다 둔 글(그 글에 붙어 함께 보내진다. 사람이 Enter를 친 뒤 창이 끝날 때 다시 본다), 사람이 화면에서
+// 터미널에 60초 안에 입력함(앱의 tell은 세지 않는다. 창이 끝날 때 다시 본다). 바닥 신호와 계약의 몫(계약 밖 변경,
+// request_gap)은 보내지 않는다: 사람에게만 보이고, 사람은 [세션에 넘기기]로 지적을 보낸다(라운드로 세지 않는다). 보내기는
+// Work마다 차례로 한다. 세션의 답은 받지 않는다: 고쳤으면 새 head의 증거와 새 맥락의 리뷰가 보고, 넘겼으면 그 head의 사실로
+// [끝내기]에 남는다. 미리 리뷰(V23)의 상한은 처음 1번과 이 라운드 상한에서 나온다(PREPARED_MAX).
 
 import { contractHash } from '../core/contract.ts'
 import { feedbackLine, feedbackText, FINDINGS_NOTE } from '../core/instructions.ts'
-import { evidenceFacts, feedbackFacts, findingKey, routeFindings } from '../core/review.ts'
+import { evidenceFacts, feedbackFacts, findingKey, raises, routeFindings } from '../core/review.ts'
 import type { EvidenceBundle, FeedbackFact, ReviewFinding } from '../core/types.ts'
-import type { FeedbackRound, FeedbackView } from '../shared/api.ts'
+import type { FeedbackHold, FeedbackRound, FeedbackView } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
 import { type WorkCtx, workHead } from './works-types.ts'
 
@@ -27,6 +29,7 @@ export const PREPARED_MAX = 1 + FEEDBACK_ROUNDS
 const HUMAN_QUIET_MS = 60_000
 
 const ESC = '\u001b'
+const CTRL_C = '\u0003'
 /**
  * 터미널(xterm)이 앱(claude)의 물음에 저절로 낸 답: 포커스 들어옴·나감, 장치 속성, 커서 위치, 상태, 창 크기, 키보드·모드
  * 보고, OSC·DCS 답. 사람의 입력이 아니다
@@ -39,6 +42,15 @@ const REPORT = new RegExp(
 /** 화면의 터미널에서 온 글이 사람의 입력인가(터미널의 저절로 낸 답만 있으면 아니다) */
 export function isHumanInput(data: string): boolean {
   return data.replace(REPORT, '') !== ''
+}
+
+/**
+ * 사람의 입력이 입력 칸에 글을 남길 수 있나: Enter(\r)나 입력 칸을 비우는 Ctrl+C로 끝나지 않았다. 붙여 넣은 글(bracketed
+ * paste)과 화살표(지난 글 불러오기)도 남긴다. 터미널이 저절로 낸 답은 빼고 본다
+ */
+export function leavesDraft(data: string): boolean {
+  const typed = data.replace(REPORT, '')
+  return typed !== '' && !typed.endsWith('\r') && !typed.endsWith(CTRL_C)
 }
 
 /** 이 head에 이미 보낸 사실과 지적의 이름 */
@@ -58,6 +70,18 @@ function unsent(
       (f) => !keys.has(findingKey(f)),
     ),
   }
+}
+
+/**
+ * 기록과 묶음만으로 정해지는, 저절로 보내지 않는 까닭: 라운드 상한, 사람 몫의 올림(계약 밖 변경, request_gap, 모르는 갈래)
+ * 가운데 사람이 이 head에서 아직 넘기지 않은 것. 화면은 지금 head의 묶음만 보므로 세션이 고쳐 head가 움직이면 다음 리뷰가
+ * 다시 올리지 않은 올림은 사람이 보지 못한다. 메모는 막지 않는다
+ */
+function blocked(rec: WorkRecord, e: EvidenceBundle): 'cap' | 'human_findings' | null {
+  if (rec.feedback.rounds >= FEEDBACK_ROUNDS) return 'cap'
+  const keys = sentKeys(rec, e.head)
+  const { human } = routeFindings(e.review?.findings ?? [])
+  return human.some((f) => raises(f) && !keys.has(findingKey(f))) ? 'human_findings' : null
 }
 
 /**
@@ -94,9 +118,20 @@ export class FeedbackDesk {
     return Date.parse(this.ctx.deps.now())
   }
 
-  /** ipc terminalWrite: 사람이 화면에서 터미널에 쳤다. 터미널이 저절로 낸 답은 세지 않는다 */
+  /**
+   * ipc terminalWrite: 사람이 화면에서 터미널에 쳤다. 터미널이 저절로 낸 답은 세지 않는다. 쓰다 둔 글 때문에 미룬 되먹임은
+   * 사람이 Enter를 치면 창이 끝날 때 다시 본다(빈 입력 칸의 Enter는 세션을 움직이지 않아 다음 쉼이 오지 않는다)
+   */
   typed(id: string, data: string): void {
-    if (isHumanInput(data)) this.ctx.runtime(id).lastHumanInputAt = this.nowMs()
+    if (!isHumanInput(data)) return
+    const rt = this.ctx.runtime(id)
+    rt.lastHumanInputAt = this.nowMs()
+    const was = rt.draft
+    rt.draft = leavesDraft(data)
+    if (was === rt.draft) return
+    const reason = rt.feedbackHeld?.reason
+    if (reason === 'draft' && !rt.draft) this.retry(id, this.quietMs)
+    if (reason === 'draft' || reason === 'human_input') this.ctx.publish(id)
   }
 
   /** 지금 묶음이 이 head와 지금 계약의 것이면 그 묶음 */
@@ -107,10 +142,14 @@ export class FeedbackDesk {
   }
 
   /**
-   * 세션이 쉰다: 보낼 때면 보낸다(머리글의 조건). 사람이 최근 입력했거나 라운드 상한에 닿았으면 보내지 않고 그 까닭을 한 번
-   * 적는다(events.jsonl feedback_held)
+   * 세션이 쉰다: 보낼 때면 보낸다(머리글의 조건). 보내지 않을 까닭이 있으면 head와 까닭마다 한 번 적는다(events.jsonl
+   * feedback_held). 사람의 최근 입력이면 창이 끝날 때 다시 본다. 보내기와 [세션에 넘기기]는 Work마다 차례로 한다
    */
-  async offer(id: string): Promise<void> {
+  offer(id: string): Promise<void> {
+    return this.serial(id, () => this.offerNow(id))
+  }
+
+  private async offerNow(id: string): Promise<void> {
     const rec = this.ctx.find(id)
     const rt = this.ctx.runtime(id)
     const resting = () =>
@@ -118,6 +157,7 @@ export class FeedbackDesk {
       rec.state === 'working' &&
       rec.end_pending === null &&
       rt.session === 'idle' &&
+      rt.debounce === null &&
       this.ctx.deps.sessions.isRunning(id) &&
       rt.measuring === null &&
       rt.pending === null &&
@@ -128,9 +168,11 @@ export class FeedbackDesk {
     if (e === null || head === null || !resting()) return
     const { facts, findings } = unsent(rec, e)
     if (facts.length + findings.length === 0) return
-    const quiet = rt.lastHumanInputAt !== null && this.nowMs() - rt.lastHumanInputAt < this.quietMs
-    const reason = rec.feedback.rounds >= FEEDBACK_ROUNDS ? 'cap' : quiet ? 'human_input' : null
+    const since = rt.lastHumanInputAt === null ? Infinity : this.nowMs() - rt.lastHumanInputAt
+    const reason: FeedbackHold | null =
+      blocked(rec, e) ?? (rt.draft ? 'draft' : since < this.quietMs ? 'human_input' : null)
     if (reason !== null) {
+      if (reason === 'human_input') this.retry(id, this.quietMs - since)
       if (rt.feedbackHeld?.head === head && rt.feedbackHeld.reason === reason) return
       rt.feedbackHeld = { head, reason }
       this.ctx.note(id, {
@@ -150,29 +192,48 @@ export class FeedbackDesk {
   }
 
   /**
+   * ms 뒤 다시 본다. 세션이 다시 움직이면 cancelDebounce가 지운다. 이미 기다리는 몰아 두기가 있으면 그것이 본다(Stop 뒤
+   * 재기나 되먹임으로 이어진다)
+   */
+  private retry(id: string, ms: number): void {
+    const rt = this.ctx.runtime(id)
+    if (rt.debounce !== null) return
+    rt.debounce = setTimeout(() => {
+      rt.debounce = null
+      void this.ctx.offerFeedback(id)
+    }, ms)
+  }
+
+  /** Work마다 차례로: 파일 번호와 '이 head에 보낸 것'을 앞 보내기가 끝난 뒤에 정한다 */
+  private serial(id: string, run: () => Promise<void>): Promise<void> {
+    const rt = this.ctx.runtime(id)
+    const turn = rt.feeding.then(run)
+    rt.feeding = turn.catch(() => {})
+    return turn
+  }
+
+  /**
    * [세션에 넘기기]: 지금 HEAD의 리뷰 지적을 되먹임 파일로 보낸다. 사람에게만 보이는 지적도 보낸다(사람이 정했다). 쉬는지,
    * 최근 입력했는지는 보지 않고 라운드로 세지 않는다. 구현 중이고 묶음이 지금 HEAD·계약의 것이어야 한다
    */
-  async sendFindings(id: string, ids: string[]): Promise<void> {
-    const rec = this.ctx.record(id)
-    if (rec.state !== 'working') throw new Error('구현 중인 Work만 세션에 넘길 수 있음')
-    const head = await workHead(rec)
-    const e = this.current(rec, head)
-    if (e === null) throw new Error('지금 HEAD를 지금 계약으로 잰 증거가 없음: 증거를 다시 재세요')
-    const all = e.review?.findings ?? []
-    const unknown = ids.filter((i) => !all.some((f) => f.id === i))
-    if (ids.length === 0 || unknown.length > 0)
-      throw new Error(`지금 HEAD의 리뷰에 없는 지적: ${unknown.join(', ') || '없음'}`)
-    await this.send(
-      rec,
-      head,
-      [],
-      all.filter((f) => ids.includes(f.id)),
-      'human',
-    )
+  sendFindings(id: string, ids: string[]): Promise<void> {
+    return this.serial(id, async () => {
+      const rec = this.ctx.record(id)
+      if (rec.state !== 'working') throw new Error('구현 중인 Work만 세션에 넘길 수 있음')
+      const head = await workHead(rec)
+      const e = this.current(rec, head)
+      if (e === null)
+        throw new Error('지금 HEAD를 지금 계약으로 잰 증거가 없음: 증거를 다시 재세요')
+      const all = e.review?.findings ?? []
+      const unknown = ids.filter((i) => !all.some((f) => f.id === i))
+      if (ids.length === 0 || unknown.length > 0)
+        throw new Error(`지금 HEAD의 리뷰에 없는 지적: ${unknown.join(', ') || '없음'}`)
+      const chosen = all.filter((f) => ids.includes(f.id))
+      await this.send(rec, head, [], chosen, 'human')
+    })
   }
 
-  /** 파일을 쓰고, 기록하고, 세션에 한 줄을 전한다(세션이 멈췄으면 다음 재개의 프롬프트로) */
+  /** 파일을 쓰고, 기록하고, 세션에 한 줄을 전한다(세션이 멈췄으면 다음 재개의 프롬프트로). 차례 안에서만 부른다 */
   private async send(
     rec: WorkRecord,
     head: string,
@@ -231,14 +292,17 @@ export class FeedbackDesk {
     ] as const)
       for (const f of of) findings[f.id] = { route, sent: keys.has(findingKey(f)) }
     const pending = left.facts.length + left.findings.length
+    // 상한과 사람 몫의 올림은 지금 기록으로, 사람의 입력은 마지막으로 본 때의 까닭과 지금 입력 칸으로
     const held = rt.feedbackHeld?.head === e?.head ? rt.feedbackHeld?.reason : undefined
+    const typing =
+      held === 'draft' || held === 'human_input' ? (rt.draft ? 'draft' : 'human_input') : null
     return {
       rounds: rec.feedback.rounds,
       max: FEEDBACK_ROUNDS,
       sent: sent.map((r) => ({ ...r, path: this.ctx.deps.store.feedbackPath(rec.id, r.n) })),
       findings,
       pending,
-      held: pending === 0 ? null : rec.feedback.rounds >= FEEDBACK_ROUNDS ? 'cap' : (held ?? null),
+      held: pending === 0 || e === null ? null : (blocked(rec, e) ?? typing),
     }
   }
 }

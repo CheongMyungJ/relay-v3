@@ -289,6 +289,8 @@ export async function launch(ctx: WorkCtx, rec: WorkRecord, wantResume: boolean)
     return
   }
   rt.session = 'starting'
+  // 새 claude의 입력 칸은 비어 있다(V24)
+  rt.draft = false
   // 사람의 답(notice)은 세션이 받은 뒤(UserPromptSubmit)에 지운다: 재개가 곧바로 실패해도 남는다
   rt.noticeSent = resume && rec.notice !== null
   rec.error = null

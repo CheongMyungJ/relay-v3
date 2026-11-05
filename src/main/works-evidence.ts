@@ -6,7 +6,7 @@
 // 다시 본다. 리뷰는 결정론적 증거와 관문을 먼저 보인 뒤 돌고 끝나면 다시 정한다(리뷰는 사람을 막지 않는다, V4). 장부 줄,
 // exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). exported_head는 지금 묶음이 내보내기로 잰 묶음일 때만 그
 // head다: 다른 재기가 묶음을 바꾸면 비운다(같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게). 엔진 check는
-// in-process로 부른다. 세션이 쉬는 때(Stop 뒤 몰아 두기, 미리 리뷰를 허락한 재기 뒤)에 되먹임(V24, works-feedback.ts)을 본다.
+// in-process로 부른다. Stop 뒤 몰아 두기 끝과 재기가 끝날 때마다 되먹임(V24, works-feedback.ts)을 본다(세션이 쉴 때만 보낸다).
 
 import type { PrCheck } from '../adapters/gh.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
@@ -174,8 +174,8 @@ export class EvidenceRunner {
    * check → (리뷰) → gate → (내보내기면 장부와 정책 머지). 돌고 있으면 그 뒤에 한 번 더 잰다(기다리는 요청은 합친다). 차례가
    * 와서 시작할 때 앞 재기가 이 head를 이미 쟀으면(내보내기면 다시 쓸 리뷰까지) 재지 않는다: 세션의 git push와 gh pr이
    * 잇달아 와도, 내보내기 리뷰가 도는 동안 gh pr이 또 와도 같은 head의 리뷰는 한 번이다. again([증거 다시 재기])이면 그래도
-   * 잰다. 내보내기 결론이 자동 머지 후보이고 PR이 있으면 바로 머지해 본다(by 'policy'). 미리 리뷰를 허락한 재기(세션이
-   * 쉴 때)가 끝나면 되먹임을 본다(V24)
+   * 잰다. 내보내기 결론이 자동 머지 후보이고 PR이 있으면 바로 머지해 본다(by 'policy'). 재기가 끝나면 되먹임을 본다(V24):
+   * 세션이 쉬는데 재기가 돌아 보내지 못한 것이 있을 수 있다(PR을 연 차례의 Stop, 내보내기의 [증거 다시 재기])
    */
   run(
     id: string,
@@ -200,7 +200,7 @@ export class EvidenceRunner {
       rt.pending = null
       await this.measure(id, pending)
       await this.ctx.settleEnd(id, pending)
-      if (pending.prepare) await this.ctx.offerFeedback(id)
+      await this.ctx.offerFeedback(id)
     })
     rt.pending = pending
     rt.chain = pending.done.catch(() => {})

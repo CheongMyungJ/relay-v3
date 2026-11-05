@@ -1,8 +1,9 @@
 // [흐름] 쉬는 세션에 주는 되먹임 (V24, src/main/works-feedback.ts). 경우: 결정론 실패(못 미침 줄, 실패한 명령)와 세션 몫의
 // 리뷰 올림이 파일과 터미널 한 줄로 가고 세션이 고친다, relay_check가 같은 사실을 준다, 라운드는 Work마다 3까지(상한에 닿으면
-// 보내지 않고 사람이 [세션에 넘기기]로 보냄), 사람이 최근 입력했으면 보내지 않고 다음에 쉴 때 보냄, 계약의 몫(계약 밖 변경)은
-// 사람에게만이고 [세션에 넘기기]로 보냄(라운드로 세지 않음), [끝내기]의 상자가 떠 있으면 보내지 않음.
-// 바탕은 test/support/works-flow.ts.
+// 보내지 않고 사람이 [세션에 넘기기]로 보냄), 사람이 입력 칸에 쓰다 둔 글이 있으면 보내지 않음, 사람이 말한 뒤에는 창이
+// 끝나면 보냄, 계약의 몫(계약 밖 변경)이 있으면 사람이 볼 때까지 보내지 않고 사람이 [세션에 넘기기]로 보냄(라운드로 세지
+// 않고 겹쳐도 번호가 겹치지 않음), 쉴 때 돌던 재기가 끝나면 보냄, [끝내기]의 상자가 떠 있으면 보내지 않고 [더 고치기] 뒤 보냄.
+// 사람의 입력은 ipc terminalWrite처럼 Works.typed를 지나 터미널에 넣는다(human). 바탕은 test/support/works-flow.ts.
 import { readFile } from 'node:fs/promises'
 import { expect, test, vi } from 'vitest'
 import { calc } from '../support/calc.ts'
@@ -12,6 +13,7 @@ import {
   CONTRACT,
   FIX_COMMIT,
   flowKit,
+  PUSH_AND_PR,
   RAISED_FINDINGS,
   REQUEST,
   SESSION_FINDINGS,
@@ -45,6 +47,12 @@ async function events(app: TestApp, id: string, type: string): Promise<Entry[]> 
       delete rest.ts
       return rest
     })
+}
+
+/** 사람이 화면의 터미널에 친다: ipc terminalWrite와 같이 Works.typed를 지나 세션에 넣는다 */
+function human(app: TestApp, id: string, data: string): void {
+  app.works.typed(id, data)
+  app.sessions.write(id, data)
 }
 
 /** 가짜 claude가 터미널에서 받은 줄 */
@@ -160,64 +168,122 @@ test('결정론 실패와 세션 몫의 리뷰 올림은 쉬는 세션에 파일
   await expect(works.sendFindings(id, ['R9'])).rejects.toThrow('지금 HEAD의 리뷰에 없는 지적: R9')
 })
 
-test('사람이 최근 터미널에 입력했으면 보내지 않고 상태 줄에만 보이고, 다음에 쉴 때 보낸다. 계약 밖 변경은 사람에게만이고 [세션에 넘기기]로 보낸다', async () => {
-  await kit.review([...RAISED_FINDINGS, ...SESSION_FINDINGS])
-  await scenario([SUBMIT, FIX_COMMIT, ...STOP_AND_WAIT, ...STOP_AND_WAIT, { do: 'waitInput' }])
+test('사람이 입력 칸에 글을 쓰다 두었으면 보내지 않는다([증거 다시 재기] 뒤에도). 사람이 말한 뒤에는 60초 창이 끝날 때 세션이 쉬고 있으면 보낸다(다음 쉼을 기다리지 않는다)', async () => {
+  await kit.review(SESSION_FINDINGS)
+  await scenario([SUBMIT, FIX_COMMIT, ...STOP_AND_WAIT, ...STOP_AND_WAIT])
   vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '1500')
   try {
-    const app = await kit.openApp(await makeTempDir('relay-home-'), { humanQuietMs: 3_000 })
+    const quiet = 2_000
+    const app = await kit.openApp(await makeTempDir('relay-home-'), { humanQuietMs: quiet })
     const { works } = app
     const id = await start(app)
     // 미리 리뷰가 도는 사이 사람이 터미널에 친다(ipc terminalWrite). 터미널이 저절로 낸 답은 세지 않는다
     await until(() => works.view(id).reviewRunning, '미리 리뷰 시작')
     works.typed(id, '\u001b[I')
     expect(works.runtime(id).lastHumanInputAt).toBeNull()
-    works.typed(id, '잠')
+    human(app, id, '잠')
     const typed = Date.now()
     await until(async () => (await events(app, id, 'feedback_held')).length === 1, '보내지 않음')
     const head = works.view(id).head ?? ''
-    expect(await events(app, id, 'feedback_held')).toEqual([
-      { type: 'feedback_held', head, reason: 'human_input', facts: 0, findings: 1 },
-    ])
+    const held = (reason: string) => ({
+      type: 'feedback_held',
+      head,
+      reason,
+      facts: 0,
+      findings: 1,
+    })
+    expect(await events(app, id, 'feedback_held')).toEqual([held('draft')])
     expect(works.view(id).feedback).toMatchObject({
       rounds: 0,
       pending: 1,
-      held: 'human_input',
+      held: 'draft',
       sent: [],
-      findings: { R1: { route: 'human', sent: false }, R2: { route: 'session', sent: false } },
+      findings: { R1: { route: 'session', sent: false } },
     })
+
+    // 창이 지나도 쓰다 둔 글이 있으면 [증거 다시 재기] 뒤에도 보내지 않는다(그 글에 붙어 함께 보내진다)
+    await new Promise((r) => setTimeout(r, Math.max(0, quiet + 100 - (Date.now() - typed))))
+    await works.runEvidence(id, { exportCandidate: false })
+    expect(works.record(id).feedback.sent).toEqual([])
+    expect(works.view(id).feedback.held).toBe('draft')
     expect(await inputs()).toEqual([])
 
-    // 사람이 말하고 세션이 같은 head에서 다시 쉰다: 60초(시험은 3초)가 지났으면 보낸다
-    await new Promise((r) => setTimeout(r, Math.max(0, 3_100 - (Date.now() - typed))))
-    app.sessions.write(id, '계속\r')
-    await until(() => works.record(id).feedback.rounds === 1, '다음에 쉴 때 보냄')
-    const text = await readFile(app.store.feedbackPath(id, 1), 'utf8')
-    expect(text).toContain('중복 구현')
-    expect(text).not.toContain('계약 밖에서 sub를 더함')
-    expect(works.view(id).feedback).toMatchObject({
-      pending: 0,
-      held: null,
-      findings: { R1: { route: 'human', sent: false }, R2: { route: 'session', sent: true } },
-    })
+    // 사람이 그 글을 보내고 세션이 답한 뒤 쉰다. 창 안이라 기다렸다가, 창이 끝나면 다음 쉼 없이 보낸다
+    human(app, id, '계속\r')
+    const said = Date.now()
+    await until(() => works.record(id).feedback.rounds === 1, '창이 끝난 뒤 보냄')
+    const round = works.record(id).feedback.sent[0]
+    expect(Date.parse(round?.at ?? '') - said).toBeGreaterThanOrEqual(quiet - 50)
+    expect(await events(app, id, 'feedback_held')).toEqual([held('draft'), held('human_input')])
+    expect(await readFile(app.store.feedbackPath(id, 1), 'utf8')).toContain('중복 구현')
+    expect(works.view(id).feedback).toMatchObject({ pending: 0, held: null })
+    await until(async () => (await inputs()).length === 2, '되먹임 한 줄')
+    expect((await inputs()).map((l) => l.slice(0, 18))).toEqual(['잠계속', 'relay feedback 1 f'])
+  } finally {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
+  }
+})
 
-    // 계약 밖 변경은 [세션에 넘기기]로만 간다. 라운드로 세지 않는다
-    await works.sendFindings(id, ['R1'])
-    expect(works.record(id).feedback).toMatchObject({ rounds: 1 })
-    expect(works.view(id).feedback.findings.R1).toEqual({ route: 'human', sent: true })
-    expect(await readFile(app.store.feedbackPath(id, 2), 'utf8')).toContain(
-      '계약 밖에서 sub를 더함',
-    )
-    await until(async () => (await inputs()).length === 3, '넘긴 지적의 한 줄')
-    expect((await inputs()).map((l) => l.slice(0, 18))).toEqual([
-      '계속',
-      'relay feedback 1 f',
-      'relay feedback 2 f',
-    ])
-    expect(await events(app, id, 'feedback')).toMatchObject([
-      { n: 1, head, by: 'relay', facts: 0, findings: 1 },
-      { n: 2, head, by: 'human', facts: 0, findings: 1 },
-    ])
+test('사람 몫의 올림(계약 밖 변경)이 있으면 세션 몫도 저절로 보내지 않는다: 사람이 보고 [세션에 넘기기]로 보낸다. 겹친 넘기기는 번호가 겹치지 않는다', async () => {
+  await kit.review([...RAISED_FINDINGS, ...SESSION_FINDINGS])
+  await scenario([SUBMIT, FIX_COMMIT, ...STOP_AND_WAIT, { do: 'waitInput' }, ...STOP_AND_WAIT])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await start(app)
+  await until(
+    () => works.view(id).evidence?.review?.status === 'done' && settled(works.view(id)),
+    '미리 리뷰',
+  )
+  await works.idle()
+  // 세션이 R2를 고쳐 head가 움직이면 다음 리뷰가 R1을 다시 올리지 않을 수 있다: 사람이 R1을 보기 전에는 보내지 않는다
+  const head = works.view(id).head ?? ''
+  expect(await events(app, id, 'feedback')).toEqual([])
+  expect(await events(app, id, 'feedback_held')).toEqual([
+    { type: 'feedback_held', head, reason: 'human_findings', facts: 0, findings: 1 },
+  ])
+  expect(works.view(id).feedback).toMatchObject({
+    rounds: 0,
+    pending: 1,
+    held: 'human_findings',
+    findings: { R1: { route: 'human', sent: false }, R2: { route: 'session', sent: false } },
+  })
+
+  // 사람이 둘을 잇달아 넘긴다: 차례로 보내 파일 번호가 겹치지 않는다. 라운드로 세지 않는다
+  await Promise.all([works.sendFindings(id, ['R1']), works.sendFindings(id, ['R2'])])
+  expect(works.record(id).feedback.sent.map((r) => [r.n, r.by, r.findings])).toEqual([
+    [1, 'human', 1],
+    [2, 'human', 1],
+  ])
+  expect(works.record(id).feedback.rounds).toBe(0)
+  expect(await readFile(app.store.feedbackPath(id, 1), 'utf8')).toContain('계약 밖에서 sub를 더함')
+  expect(await readFile(app.store.feedbackPath(id, 2), 'utf8')).toContain('중복 구현')
+  expect(works.view(id).feedback).toMatchObject({
+    pending: 0,
+    held: null,
+    findings: { R1: { route: 'human', sent: true }, R2: { route: 'session', sent: true } },
+  })
+  await until(async () => (await inputs()).length === 2, '넘긴 지적의 두 줄')
+  expect((await inputs()).map((l) => l.slice(0, 18))).toEqual([
+    'relay feedback 1 f',
+    'relay feedback 2 f',
+  ])
+})
+
+test('세션이 PR을 연 차례에 쉬면 내보내기 리뷰가 끝난 뒤 되먹임을 보낸다(쉴 때 재기가 돌고 있었어도)', async () => {
+  await scenario([SUBMIT, FAILING, ...PUSH_AND_PR, { do: 'waitInput' }, ...STOP_AND_WAIT])
+  vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '2500')
+  try {
+    const app = await kit.openApp(await makeTempDir('relay-home-'))
+    const { works } = app
+    const id = await start(app)
+    // 내보내기 리뷰가 도는 사이 세션이 쉰다: 몰아 두기 끝의 되먹임은 재기가 돌아 보내지 않는다
+    await until(() => works.view(id).reviewRunning, '내보내기 리뷰 시작')
+    app.sessions.write(id, '계속\r')
+    await until(() => works.record(id).feedback.rounds === 1, '재기 뒤 보냄')
+    expect(works.record(id).feedback.sent).toMatchObject([{ n: 1, by: 'relay', facts: 3 }])
+    expect((await events(app, id, 'evidence')).map((e) => e.export)).toEqual([true])
+    await until(async () => (await inputs()).length === 2, '되먹임 한 줄')
+    expect((await inputs())[1]).toMatch(/^relay feedback 1 for head /)
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
   }
@@ -241,6 +307,12 @@ test('[끝내기]가 걸렸다가 상자로 바뀌면 되먹임을 보내지 않
     expect(await events(app, id, 'feedback')).toEqual([])
     expect(works.view(id).feedback).toMatchObject({ pending: 1, held: null, rounds: 0 })
     expect(await inputs()).toEqual([])
+
+    // [더 고치기]로 상자를 닫으면 쉬는 세션에 보낸다
+    await works.cancelEnd(id)
+    await until(() => works.record(id).feedback.rounds === 1, '[더 고치기] 뒤 보냄')
+    await until(async () => (await inputs()).length === 1, '되먹임 한 줄')
+    expect((await inputs())[0]).toMatch(/^relay feedback 1 for head /)
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
   }
