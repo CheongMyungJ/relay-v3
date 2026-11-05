@@ -26,6 +26,7 @@
     "test:unit": "vitest run --project unit",
     "test:adapters": "vitest run --project adapters",
     "test:flow": "vitest run --project flow",
+    "test:replay": "vitest run --project unit test/unit/gate-replay.test.ts --silent=false",
     "test:smoke": "electron-vite build && playwright test",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run limits && npm test"
   },

@@ -1,3 +1,11 @@
+// 옮김(2026-11-05, V31): 이 계산은 [단위] test/unit/gate-replay.test.ts(관문 재생 래칫)로 옮겼다. 자료는
+// test/fixtures/gate-replay/m2.jsonl이고 scripts/gate-replay-fixture.ts가 만든다. 시험 수 래칫의 태그 고침은 이제 코드
+// (core/ratchet.ts)에 있어 아래의 diff 정규식 대신 자료를 만들 때 저장된 시험 결과로 다시 잰다. 고친 묶음은 26개로 수가 같고
+// 둘이 다르다(둘 다 relay3-noreview라 관문 결론은 같다): 08/relay3-noreview-3은 시험을 새 describe로 옮기며 태그를 붙여
+// 코드는 여전히 사라진 시험으로 보고(이 스크립트는 마지막 이름만 견줌), 44/relay3-noreview-5는 태그만 든 describe로 감싸
+// 코드가 같은 시험으로 본다(이 스크립트의 정규식은 이름 옆의 태그만 봄).
+// 이 스크립트는 posthoc-q4.md의 기록으로만 둔다. 지금 관문은 V26 규칙(구조/low는 메모)이라 다시 돌리면 그 표와 다른 값이 나온다.
+//
 // M2 평가 Q4의 사후 계산 (log.md '배치 1 도중'). 규약의 Q4 값과 따로, '사후'로만 보인다.
 // 평가 빌드의 시험 수 래칫은 있던 시험에 예시 태그를 붙이면 옛 이름을 '사라진 시험'으로 읽었다(거짓 양성). 저장된 내보내기
 // 증거(works/<id>/evidence.json)에서 tests 래칫이 그렇게 나빠졌고, 사라진 이름마다 그 Work의 diff(final/<id>.diff)에
