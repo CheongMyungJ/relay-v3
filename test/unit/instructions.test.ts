@@ -183,7 +183,7 @@ describe('instructionsText', () => {
     expect(t).toContain('JSON has no NaN, Infinity or undefined: write such a value as a string')
   })
 
-  test('단위(V21): 한 요청은 한 Work, 줄의 unit, 범위와 함께 정함, 모든 단위를 Work 브랜치에, 증거는 그 브랜치의 끝', () => {
+  test('단위(V21, V22): 한 요청은 한 Work, 줄의 unit, 범위와 함께 정함, 전달 방식(한 브랜치, 단위마다 브랜치), 증거는 그 브랜치의 끝', () => {
     const t = instructionsText({ ...base, questionMode: 'confirm_each' })
     expect(t).toContain('`unit` (optional): the part of the request the line belongs to')
     expect(t).toContain('one request is one Work, with one contract and one Work branch')
@@ -191,15 +191,23 @@ describe('instructionsText', () => {
     expect(t).toContain('A line without a unit belongs to every part.')
     expect(t).toContain('settle them with the scope')
     expect(t).toContain(
-      'All units are delivered on `relay/median-a1b2`, each unit in its own commits.',
+      'With `one_branch` (the default), all units are delivered on `relay/median-a1b2`, each unit in its own commits.',
     )
+    // V22: 단위 브랜치의 이름, 기준에서 만들고 Work 브랜치에도 모든 단위, 내보내기와 통합
+    expect(t).toContain('- `delivery` (optional): how the units are delivered; see Units below.')
+    expect(t).toContain(
+      'With `branch_per_unit`, for a human who wants a branch per unit (at least two units, and every change, new and remove line has a unit), create from `develop` a branch `relay/median-a1b2--<unit>` for each unit',
+    )
+    expect(t).toContain('keep all units on `relay/median-a1b2` too')
+    expect(t).toContain(
+      "relay measures each unit branch as an export (the unit's lines and the lines without a unit, with its own review and PR) and `relay/median-a1b2` as the integration of all units.",
+    )
+    expect(t).toContain('(with `branch_per_unit`, one per unit branch)')
     // 세션이 다른 브랜치로 옮겨도 relay는 Work 브랜치의 끝을 잰다
     expect(t).toContain(
-      'relay measures evidence on the tip of the Work branch `relay/median-a1b2`, whatever this worktree has checked out',
+      'relay measures evidence on the tip of the Work branch `relay/median-a1b2` (and with `branch_per_unit` on the tip of each unit branch), whatever this worktree has checked out',
     )
     expect(t).toContain('commits on other branches are not evidence')
-    // 앱이 아직 받지 않는 전달 방식(branch_per_unit, V22)은 지침에 없다
-    expect(t).not.toContain('branch_per_unit')
   })
 
   test('되먹임(V24): 쉬는 세션에 파일과 한 줄을 줄 수 있고, 지적은 주장이며, 사람의 답은 AskUserQuestion으로 묻는다', () => {

@@ -109,7 +109,8 @@ test('PR 내보내기로 이미 잰 깨끗한 head는 [끝내기]가 다시 재�
   const { works } = app
   const id = await startWork(app)
   await until(
-    () => works.find(id)?.exported_head === works.view(id).head && settled(works.view(id)),
+    () =>
+      works.find(id)?.exports[0]?.exported_head === works.view(id).head && settled(works.view(id)),
     'PR의 내보내기 증거',
   )
   await works.idle()
@@ -277,7 +278,7 @@ test('걸린 끝은 [취소]로 푼다(미리 리뷰는 끝까지 돌고 내보�
     await works.idle()
     // 깨끗한 head였지만 [취소]했으니 끝내지 않고, 내보내기로 재지도 않는다(장부 없음)
     expect(works.view(id).state).toBe('working')
-    expect(works.find(id)?.exported_head).toBeNull()
+    expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
     expect(await exportsOf(app, id)).toEqual([false])
 
     app.sessions.write(id, '하나 더\r')
@@ -369,7 +370,7 @@ test('앱을 닫아 끊긴 리뷰는 내보내기(exported_head, 장부, export 
     vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', '')
   }
   const rec = await workJson(first, id)
-  expect(rec.exported_head ?? null).toBeNull()
+  expect((rec.exports as Entry[])[0]?.exported_head ?? null).toBeNull()
   expect(rec.end_pending).toEqual({ head, armed: true, open: [] })
   expect(await exportsOf(first, id)).toEqual([false])
   expect((await first.store.readLedger()).length).toBe(ledger)
@@ -446,7 +447,8 @@ test('PR head를 다시 내보내기로 재는 동안(리뷰 중)의 [끝내기]
   const { works } = app
   const id = await startWork(app)
   await until(
-    () => works.find(id)?.exported_head === works.view(id).head && settled(works.view(id)),
+    () =>
+      works.find(id)?.exports[0]?.exported_head === works.view(id).head && settled(works.view(id)),
     'PR의 내보내기 증거',
   )
   await works.idle()
@@ -457,7 +459,7 @@ test('PR head를 다시 내보내기로 재는 동안(리뷰 중)의 [끝내기]
     const again = works.runEvidence(id, { exportCandidate: true })
     await until(() => works.view(id).reviewRunning, '다시 재는 리뷰')
     expect(works.view(id).evidence?.review).toBeNull()
-    expect(works.find(id)?.exported_head).toBeNull()
+    expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
     expect(await works.end(id, { head })).toEqual({ head, ended: false, armed: true, open: [] })
     await again
     await until(() => works.view(id).state === 'done', '리뷰 뒤 끝남')
@@ -479,7 +481,7 @@ test('PR head를 다시 재는 리뷰 중 앱을 닫으면 그 head는 내보내
   const id = await startWork(first)
   await until(
     () =>
-      first.works.find(id)?.exported_head === first.works.view(id).head &&
+      first.works.find(id)?.exports[0]?.exported_head === first.works.view(id).head &&
       settled(first.works.view(id)),
     'PR의 내보내기 증거',
   )
@@ -544,7 +546,7 @@ test('계약 바꾸기를 받아들일 때 앞 묶음이 내보내기였어도 �
   )
   await works.idle()
   // 새 head는 아무도 내보내지 않았다: 내보내기 계기를 기다린다
-  expect(works.find(id)?.exported_head).toBeNull()
+  expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
   expect((await app.store.readLedger()).filter((e) => e.work === id)).toEqual(ledger)
   expect(await exportsOf(app, id)).toEqual([false, true, false])
   expect(await reviews()).toBe(1)

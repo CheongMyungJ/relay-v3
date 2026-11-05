@@ -107,13 +107,14 @@ The contract is JSON:
 - \`human_rules\`: rules only the human knows (business rules, time zones, compatibility promises, who uses the behavior).
 - \`hint\`: the human's suggestion about the kind of work, if the request has one.
 - \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.
+- \`delivery\` (optional): how the units are delivered; see Units below.
 
 The contract explains the request:
 - If the request reports wrong behavior, each symptom it reports, including how often and where it happens (for example "only sometimes", "mostly for large files"), has a cause in the grounds of a line. A symptom that the causes you found do not explain means another cause: keep looking, or ask the human for an observation that tells the causes apart.
 - Each target the request names has a line with an example that goes from the input to that target's final result.
 - Behavior near a symptom that you decide not to change is a \`keep\` line with examples, not a non-goal. If its tagged tests are committed when you submit, the check in §3 runs them on the base; an example that fails there shows that the behavior is part of what the request reports.
 
-Units: one request is one Work, with one contract and one Work branch, even when it covers several parts (two bugs, three modules). To group the lines of a part, give them the same \`unit\`, a short name such as \`csv\` or \`parse-money\` (a lowercase letter, then lowercase letters, digits or \`-\`, at most 21 characters). A line without a unit belongs to every part. The units are part of the scope: settle them with the scope, and the human approves them with the contract. All units are delivered on \`${o.workBranch}\`, each unit in its own commits.
+Units: one request is one Work, with one contract and one Work branch, even when it covers several parts (two bugs, three modules). To group the lines of a part, give them the same \`unit\`, a short name such as \`csv\` or \`parse-money\` (a lowercase letter, then lowercase letters, digits or \`-\`, at most 21 characters). A line without a unit belongs to every part. The units and their \`delivery\` are part of the scope: settle them with the scope, and the human approves them with the contract. With \`one_branch\` (the default), all units are delivered on \`${o.workBranch}\`, each unit in its own commits. With \`branch_per_unit\`, for a human who wants a branch per unit (at least two units, and every change, new and remove line has a unit), create from \`${o.baseBranch}\` a branch \`${o.workBranch}--<unit>\` for each unit with that unit's commits, its tests and the examples file of §4, and keep all units on \`${o.workBranch}\` too: relay measures each unit branch as an export (the unit's lines and the lines without a unit, with its own review and PR) and \`${o.workBranch}\` as the integration of all units.
 
 ## 2. Questions
 
@@ -129,7 +130,7 @@ How you do the work is up to you. relay writes the contract's examples to \`${ex
 
 ## 5. Evidence
 
-relay measures evidence on the tip of the Work branch \`${o.workBranch}\`, whatever this worktree has checked out; uncommitted changes and commits on other branches are not evidence. It runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (every example of a \`change\` line must pass on the head and at least one must fail on the base; an example that also passes on the base counts as a guard), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
+relay measures evidence on the tip of the Work branch \`${o.workBranch}\` (and with \`branch_per_unit\` on the tip of each unit branch), whatever this worktree has checked out; uncommitted changes and commits on other branches are not evidence. It runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (every example of a \`change\` line must pass on the head and at least one must fail on the base; an example that also passes on the base counts as a guard), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
 
 While you are idle, relay may write the evidence facts and review findings of the current head that are yours to act on to a file, and put one line in your terminal that points to it. Review findings are claims of an independent reviewer and can be wrong. If you need the human's answer, ask with \`AskUserQuestion\`: while it waits you are not idle, so relay does not write to your terminal.
 
@@ -139,7 +140,7 @@ If the approved contract has to change, call \`${TOOL_CHANGE}\` with the reason 
 
 ## 7. Git and GitHub
 
-You may push \`${o.workBranch}\` and open a PR against \`${o.baseBranch}\`. relay blocks: pushing to ${orList(guarded)}; force pushes; deleting remote branches; pushing all branches; merging PRs (\`gh pr merge\`, or through \`gh api\`). The human merges.
+You may push \`${o.workBranch}\` (with \`branch_per_unit\`, the unit branches) and open a PR against \`${o.baseBranch}\` (with \`branch_per_unit\`, one per unit branch). relay blocks: pushing to ${orList(guarded)}; force pushes; deleting remote branches; pushing all branches; merging PRs (\`gh pr merge\`, or through \`gh api\`). The human merges.
 
 ## 8. When you are done
 

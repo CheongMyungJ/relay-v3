@@ -158,7 +158,8 @@ test('내보내기 리뷰가 도는 동안 relay_check는 먼저 보인 증거�
     const evidence = (await events(app, id)).filter((e) => e.type === 'evidence')
     expect(evidence.map((e) => e.export)).toEqual([true])
     const path = (await app.store.readText(id, 'work.json')) ?? ''
-    const file = (JSON.parse(path) as { evidence_path: string }).evidence_path
+    const file =
+      (JSON.parse(path) as { exports: { evidence_path: string }[] }).exports[0]?.evidence_path ?? ''
     const bundle = JSON.parse(await readFile(file, 'utf8')) as EvidenceBundle
     expect(bundle.review?.findings).toHaveLength(1)
   } finally {
@@ -227,7 +228,7 @@ test('[머지]: Work의 기준과 다른 PR, CI 실패·진행 중인 PR은 머�
   )
   await until(() => works.view(id).error?.includes('기준 브랜치(dev)') ?? false, '기준 알림')
   const head = works.view(id).head
-  expect(works.find(id)?.exported_head).toBeNull()
+  expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
   expect((await app.store.readLedger()).filter((e) => e.work === id)).toEqual([])
   expect(await works.merge(id)).toEqual({
     ok: false,
@@ -240,7 +241,7 @@ test('[머지]: Work의 기준과 다른 PR, CI 실패·진행 중인 PR은 머�
     kit.gh((state) => Object.assign(state.prs?.find((p) => p.number === pr) ?? {}, fields))
   await setPr({ baseRefName: 'main' })
   await until(
-    () => works.find(id)?.exported_head === head && settled(works.view(id)),
+    () => works.find(id)?.exports[0]?.exported_head === head && settled(works.view(id)),
     '내보내기 증거',
   )
   expect(works.view(id).error).toBeNull()

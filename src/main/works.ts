@@ -1,8 +1,9 @@
 // Work 조율 (docs/m2-modules.md 3절 works.ts, docs/m2-app.md). Electron을 모른다: [흐름] 시험이 Node에서 조립해 돌린다.
 // 프로젝트와 Work를 저장소에 두고, Work마다 worktree·작업 브랜치·세션(PTY의 claude)을 만든다. 훅과 MCP 도구 호출을 받아
-// 상태 기계(core/work.ts)를 움직인다. 계약 창구는 works-contract.ts, 증거·관문·머지·PR은 works-evidence.ts, 리뷰(미리
-// 리뷰 포함)는 works-review.ts, [끝내기]는 works-end.ts, 쉬는 세션에 주는 되먹임(V24)은 works-feedback.ts, worktree와 세션
-// 띄우기는 works-worktree.ts, 프로젝트와 품질 기준 상태는 works-projects.ts.
+// 상태 기계(core/work.ts)를 움직인다. 계약 창구는 works-contract.ts, 증거·관문은 works-evidence.ts, 내보내기(V22)의 머지·PR은
+// works-exports.ts, 리뷰(미리 리뷰 포함)는 works-review.ts, [끝내기]는 works-end.ts, 쉬는 세션에 주는 되먹임(V24)은
+// works-feedback.ts, 화면의 모양은 works-view.ts, worktree와 세션 띄우기는 works-worktree.ts, 프로젝트와 품질 기준 상태는
+// works-projects.ts.
 
 import { killActive } from '../adapters/exec.ts'
 import { killRunFiles } from '../adapters/pty.ts'
@@ -26,22 +27,27 @@ import {
   type WorkView,
 } from '../shared/api.ts'
 import { toolCommand, type HookReply } from './hooks.ts'
-import type { ProjectRecord, WorkRecord } from './store.ts'
+import { upgradeWork, type ProjectRecord, type WorkRecord } from './store.ts'
 import { ContractDesk } from './works-contract.ts'
 import { dropEnd, EndDesk } from './works-end.ts'
 import { EvidenceRunner, exportable, isExportCommand } from './works-evidence.ts'
-import { checkReply, FeedbackDesk } from './works-feedback.ts'
+import { checkReplies, FeedbackDesk } from './works-feedback.ts'
 import { ProjectDesk } from './works-projects.ts'
 import { followReview } from './works-review.ts'
 import {
+  delivered,
   isActive,
   measures,
+  perUnit,
+  readTips,
+  tipOf,
   type MeasureJob,
   type Runtime,
   type WorkCtx,
   type WorksDeps,
   workHead,
 } from './works-types.ts'
+import { workView } from './works-view.ts'
 import { launch, newWork, workDebt, workDiff } from './works-worktree.ts'
 
 export type { ReviewInput, WorksDeps } from './works-types.ts'
@@ -79,25 +85,26 @@ export class Works implements WorkCtx {
     const { store } = this.deps
     await this.projects.load()
     for (const id of await store.listWorkIds()) {
-      const rec = await store.readWork(id)
-      if (!rec || !this.projects.get(rec.project)) continue
-      // session_started가 없는 옛 기록은 세션이 떴던 것으로 본다(--resume)
-      this.works.set(id, {
-        ...rec,
-        notice: rec.notice ?? null,
-        session_started: rec.session_started ?? true,
-        end_pending: rec.end_pending ?? null,
-        prepared_reviews: rec.prepared_reviews ?? 0,
-        feedback: rec.feedback ?? { rounds: 0, sent: [] },
-        probe: rec.probe ?? null,
-      })
+      const raw = await store.readWork(id)
+      if (!raw || !this.projects.get(raw.project)) continue
+      // 옛 기록의 빈 칸을 채우고, V22 앞의 PR·증거·관문은 Work 브랜치의 내보내기 하나로 옮긴다
+      const rec = upgradeWork(raw)
+      this.works.set(id, rec)
       const rt = this.runtime(id)
       const text = await store.readText(id, 'contract.json')
       const parsed = text === null ? null : parseContract(text)
       rt.contract = parsed?.ok ? parsed.value : null
-      if (rec.evidence_path) rt.evidence = await readJson<EvidenceBundle>(rec.evidence_path)
+      const paths: [string, string | null][] = [
+        ...rec.exports.map((x) => [x.branch, x.evidence_path] as [string, string | null]),
+        [rec.branch, perUnit(rec) ? rec.integration_path : null],
+      ]
+      for (const [branch, path] of paths) {
+        const bundle = path ? await readJson<EvidenceBundle>(path) : null
+        if (bundle) rt.bundles.set(branch, bundle)
+      }
       await this.seeHead(id, await workHead(rec).catch(() => null))
-      if (rec.pr?.state === 'OPEN' && isActive(rec.state)) this.evidence.startPoll(id)
+      if (rec.exports.some((x) => x.pr?.state === 'OPEN') && isActive(rec.state))
+        this.evidence.exports.startPoll(id)
       this.ending.resume(id)
     }
   }
@@ -122,11 +129,14 @@ export class Works implements WorkCtx {
         controlToken: null,
         session: 'stopped',
         contract: null,
-        evidence: null,
+        bundles: new Map(),
+        policies: new Map(),
         evidenceRunning: false,
         reviewRunning: false,
         head: null,
+        tips: {},
         measuring: null,
+        measuringAt: null,
         debounce: null,
         poll: null,
         pending: null,
@@ -196,7 +206,7 @@ export class Works implements WorkCtx {
 
   async finish(id: string): Promise<void> {
     this.evidence.cancelDebounce(id)
-    this.evidence.stopPoll(id)
+    this.evidence.exports.stopPoll(id)
     // 돌고 있는 리뷰(claude -p)를 그만둔다
     this.runtime(id).abort.abort()
     this.runtime(id).endMoved = null
@@ -221,11 +231,14 @@ export class Works implements WorkCtx {
     const rec = this.works.get(id)
     if (!rec || head === null) return
     const rt = this.runtime(id)
-    const moved = rt.head !== head
+    // 단위 브랜치의 끝(V22)도 함께 읽는다: 그 브랜치의 리뷰와 걸린 끝·상자가 그것을 본다
+    const tips = await readTips(rec)
+    const moved = rt.head !== head || JSON.stringify(rt.tips) !== JSON.stringify(tips)
     rt.head = head
+    rt.tips = tips
     // 다른 head의 리뷰는 멈춘다(V23)
     followReview(rt)
-    if (this.ending.follow(rec, head)) await this.save(rec)
+    if (this.ending.follow(rec, head, tips)) await this.save(rec)
     else if (moved) this.publish(id)
   }
 
@@ -395,19 +408,18 @@ export class Works implements WorkCtx {
 
   /**
    * relay_check: 지금 head의 증거(영어, works-feedback.ts checkReply: 되먹임과 같은 세션 몫의 사실과 지적, V24). 지금 계약으로
-   * 재지 않았으면 잰다: 이 head를 재고 있거나 재기가 줄 서 있으면 그것을 기다리고 새로 줄 세우지 않는다(내보내기 증거의
-   * 리뷰를 덮지 않게). 관문 결론과 사람에게만 가는 지적은 주지 않는다
+   * 재지 않았으면 잰다: 재고 있거나 재기가 줄 서 있으면 그것을 기다리고 새로 줄 세우지 않는다(내보내기 증거의 리뷰를 덮지
+   * 않게). 관문 결론과 사람에게만 가는 지적은 주지 않는다. branch_per_unit(V22)은 통합 증거와 단위 브랜치마다 답한다
    */
   private async checkForSession(rec: WorkRecord): Promise<unknown> {
     const rt = this.runtime(rec.id)
     const head = await workHead(rec)
-    if (!this.evidence.measured(rec.id, head)) {
-      if (head === rt.measuring || rt.pending) await rt.chain
-      if (!this.evidence.measured(rec.id, head)) await this.evidence.run(rec.id, {})
+    const tips = await readTips(rec)
+    if (!this.evidence.measuredAll(rec, head, tips)) {
+      if (rt.measuring !== null || rt.pending) await rt.chain
+      if (!this.evidence.measuredAll(rec, head, tips)) await this.evidence.run(rec.id, {})
     }
-    const bundle = rt.evidence
-    if (!bundle) return { status: 'error', error: rec.error ?? 'No evidence.' }
-    return checkReply(bundle, head)
+    return checkReplies(rec, rt.bundles, head, tips)
   }
 
   // ── 사람의 동작 ────────────────────────────────────────────────────────────
@@ -435,32 +447,41 @@ export class Works implements WorkCtx {
       await this.save(rec)
     }
     const head = await workHead(rec).catch(() => null)
-    if (!measures(rec.state) || head === null || rt.evidence === null) return
-    if (this.evidence.measured(id, head)) return
-    const exported = rec.exported_head === head
-    const pr = exportable(rec.pr, rec.base, head)
+    if (!measures(rec.state) || head === null || rt.bundles.size === 0) return
+    const tips = await readTips(rec)
+    if (this.evidence.measuredAll(rec, head, tips)) return
+    // 지금 끝을 내보내기로 쟀던 내보내기만 내보내기로 다시 잰다(V22: 내보내기마다)
+    const was = rec.exports.filter((x) => {
+      const tip = tipOf(x, head, tips)
+      return !delivered(x) && tip !== null && x.exported_head === tip
+    })
+    const pr = was.some((x) => exportable(x.pr, rec.base, tipOf(x, head, tips)))
+    const only = was.map((x) => x.branch)
     void this.evidence
-      .run(id, exported ? { export: pr ? 'pr' : 'end' } : {})
+      .run(id, only.length > 0 ? { export: pr ? 'pr' : 'end', only } : {})
       .catch((e) => this.log('증거 실패', e))
   }
 
   /**
-   * [증거 다시 재기]: 이미 잰 head도 다시 잰다(흔들린 명령, 바깥이 바뀐 CI). 내보내기 후보면 리뷰도 다시 부르고, 아니면
-   * 미리 리뷰(V23)를 허락한다
+   * [증거 다시 재기]: 이미 잰 head도 다시 잰다(흔들린 명령, 바깥이 바뀐 CI). 내보내기 후보면 리뷰도 다시 부르고(V22: 열린 PR이
+   * 지금 끝을 가리키는 내보내기만), 아니면 미리 리뷰(V23)를 허락한다
    */
   runEvidence(id: string, o: { exportCandidate: boolean }): Promise<void> {
     const rec = this.record(id)
     if (!isActive(rec.state)) throw new Error('끝난 Work는 증거를 재지 않음')
     this.evidence.cancelDebounce(id)
-    return this.evidence.run(
-      id,
-      o.exportCandidate ? { export: 'pr', again: true } : { prepare: true, again: true },
-    )
+    if (!o.exportCandidate) return this.evidence.run(id, { prepare: true, again: true })
+    const rt = this.runtime(id)
+    const only = rec.exports
+      .filter((x) => exportable(x.pr, rec.base, tipOf(x, rt.head, rt.tips)))
+      .map((x) => x.branch)
+    const which = perUnit(rec) ? { only } : {}
+    return this.evidence.run(id, { export: 'pr', again: true, prepare: true, ...which })
   }
 
-  /** [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적을 되먹임 파일로 세션에 보낸다 */
-  sendFindings(id: string, ids: string[]): Promise<void> {
-    return this.feedback.sendFindings(id, ids)
+  /** [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적을 되먹임 파일로 세션에 보낸다. unit은 단위 브랜치의 내보내기(V22) */
+  sendFindings(id: string, ids: string[], unit?: string): Promise<void> {
+    return this.feedback.sendFindings(id, ids, unit)
   }
 
   /**
@@ -471,8 +492,9 @@ export class Works implements WorkCtx {
     if (this.works.has(id)) this.feedback.typed(id, data)
   }
 
-  async merge(id: string): Promise<MergeResult> {
-    const r = await this.evidence.merge(id, 'human')
+  /** [머지]: 내보내기 하나. unit은 단위 브랜치의 내보내기(V22) */
+  async merge(id: string, unit?: string): Promise<MergeResult> {
+    const r = await this.evidence.exports.merge(id, unit ?? null, 'human')
     return r.ok ? { ok: true } : { ok: false, error: r.error ?? '머지하지 못함' }
   }
 
@@ -512,45 +534,7 @@ export class Works implements WorkCtx {
 
   view(id: string): WorkView {
     const rec = this.record(id)
-    const rt = this.runtime(id)
-    return {
-      id,
-      project: rec.project,
-      title: rec.title,
-      state: rec.state,
-      session: rt.session,
-      branch: rec.branch,
-      base: rec.base,
-      contract: rt.contract,
-      pendingContract: rec.pending_contract,
-      pendingChange: rec.pending_change,
-      evidence: rt.evidence,
-      gate: rec.gate,
-      pr: rec.pr,
-      evidenceRunning: rt.evidenceRunning,
-      reviewRunning: rt.reviewRunning,
-      reviewDisabled: this.deps.reviewDisabled === true,
-      contractId: rec.contract_id,
-      hint: rec.hint,
-      groundings: rec.groundings,
-      head: rt.head,
-      createdAt: rec.created_at,
-      error: rec.error,
-      ...this.endView(rec),
-      feedback: this.feedback.view(rec),
-      probe: this.desk.shownProbe(rec),
-    }
-  }
-
-  /** 걸린 끝과 끝내기 상자(V25): 구현 중이고 지금 HEAD의 것만 보인다(HEAD를 모르면 보인다. [그래도 끝내기]가 다시 본다) */
-  private endView(rec: WorkRecord): Pick<WorkView, 'endPending' | 'endMoved'> {
-    const rt = this.runtime(rec.id)
-    const p = rec.end_pending
-    const live = isActive(rec.state)
-    return {
-      endPending: live && p !== null && (rt.head === null || p.head === rt.head) ? p : null,
-      endMoved: live ? rt.endMoved : null,
-    }
+    return workView(this, rec, this.feedback, this.desk.shownProbe(rec))
   }
 
   list(): WorkList {
@@ -568,7 +552,7 @@ export class Works implements WorkCtx {
     this.closing = true
     for (const id of this.works.keys()) {
       this.evidence.cancelDebounce(id)
-      this.evidence.stopPoll(id)
+      this.evidence.exports.stopPoll(id)
     }
     this.desk.cancel(null, { status: 'cancelled', message: 'relay is shutting down.' })
     for (const rt of this.rts.values()) rt.abort.abort()

@@ -1,15 +1,17 @@
 // 독립 리뷰 (V4, V23, docs/m2-modules.md 3절 works.ts의 review와 미리 리뷰). 언제 재는지는 works-evidence.ts가 정하고, 이
 // 파일은 리뷰를 부르고 묶음에 붙인다: 기본 구현(claudeReview: 새 맥락의 읽기 전용 claude -p), 내보내기의 리뷰(같은 head·
-// 계약의 끝난 리뷰를 다시 씀, 건너뜀), 미리 리뷰(세션이 쉬고 증거가 리뷰 준비인 head. Work마다 4번까지: 처음 1번과 되먹임
-// 라운드 상한 3, works-feedback.ts PREPARED_MAX). 리뷰는 (head, 계약 hash, 프롬프트 판)에 붙는다. 리뷰마다
-// AbortController를 따로 두고, 읽은 HEAD나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰어는
+// 계약의 끝난 리뷰를 다시 씀, 건너뜀), 미리 리뷰(세션이 쉬고 증거가 리뷰 준비인 head. 내보내기마다 4번까지: 처음 1번과
+// 되먹임 라운드 상한 3, works-feedback.ts PREPARED_MAX). 리뷰는 내보내기(V22: Work 브랜치 하나, 또는 단위 브랜치마다 계약의
+// 조각)의 (head, 계약 hash, 프롬프트 판)에 붙는다. 단위 브랜치의 리뷰어에게는 증거 요약에 그 범위를 알린다(다른 단위는 제
+// 브랜치로 간다). 리뷰마다 AbortController를 따로 두고, 읽은 그 브랜치의 끝이나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는
+// Runtime.abort가 끊는다. 리뷰어는
 // request.md를 받고, 받았으면 리뷰 결과에 request: true를 붙인다(V30. 없으면 관문이 '리뷰가 요청을 보지 않음'으로 사람
 // 머지). 리뷰 결과 가운데 세션 몫은 works-feedback.ts가 쉬는 세션에 보낸다(V24).
 
 import { claudeJson } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
 import { showFile } from '../adapters/git.ts'
-import { contractHash } from '../core/contract.ts'
+import { contractHash, sliceContract, unitsOf } from '../core/contract.ts'
 import { gate } from '../core/gate.ts'
 import { parseQuality } from '../core/quality.ts'
 import {
@@ -20,11 +22,12 @@ import {
   reviewPrompt,
   reviewReady,
 } from '../core/review.ts'
-import type { Contract, EvidenceBundle, Policy } from '../core/types.ts'
+import type { Contract, EvidenceBundle, Integration, Policy } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
-import type { ProjectRecord, WorkRecord } from './store.ts'
+import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import { PREPARED_MAX } from './works-feedback.ts'
 import {
+  exportContract,
   workHead,
   type ExportTrigger,
   type ReviewInput,
@@ -42,6 +45,27 @@ type Trigger = ExportTrigger | 'prepared'
 
 /** 리뷰가 도는 동안 묶음(결정론적 증거와 리뷰 없는 관문)을 먼저 보인다. 리뷰는 사람을 막지 않는다 */
 type Show = (bundle: EvidenceBundle) => Promise<unknown>
+
+/** 리뷰할 내보내기(V22) 하나: 그 계약(단위 브랜치는 조각), 결정론 묶음, 관문의 정책, 통합 증거(branch_per_unit) */
+export interface ReviewJob {
+  rec: WorkRecord
+  x: ExportRecord
+  project: ProjectRecord
+  contract: Contract | null
+  bundle: EvidenceBundle
+  policy: Policy
+  show: Show
+  whole: Integration | undefined
+}
+
+/** 단위 브랜치의 리뷰어에게 주는 범위(영어, 증거 요약의 한 줄): 다른 단위는 제 브랜치로 가므로 이 diff에 없다 */
+export function unitScope(contract: Contract, x: ExportRecord): string[] {
+  if (x.unit === null) return []
+  const others = unitsOf(contract).filter((u) => u !== x.unit)
+  return [
+    `scope: this change is the export of unit "${x.unit}" on branch ${x.branch}. The contract above is the part of the approved contract for this unit (its lines and the lines without a unit). The other units (${others.join(', ') || 'none'}) are exported on their own branches: the parts of the request that belong to them are not in this diff and are not a gap of it.`,
+  ]
+}
 
 /** 독립 리뷰의 기본 구현: 새 맥락의 읽기 전용 claude -p (V4). 실패는 status 'failed'(지적 없음) */
 export function claudeReview(o: {
@@ -92,12 +116,17 @@ export async function autoConditions(
   return parsed?.ok ? parsed.value.auto : []
 }
 
-/** 도는 리뷰가 읽은 HEAD나 지금 계약의 것이 아니면 끊는다(V23). seeHead와 계약이 바뀐 곳이 부른다 */
+/**
+ * 도는 리뷰가 읽은 그 브랜치의 끝(Work 브랜치는 HEAD, 단위 브랜치는 tips)이나 지금 계약(단위 브랜치는 조각)의 것이 아니면
+ * 끊는다(V23). seeHead와 계약이 바뀐 곳이 부른다
+ */
 export function followReview(rt: Runtime): void {
   const r = rt.review
   if (r === null) return
-  const moved = rt.head !== null && rt.head !== r.head
-  if (moved || rt.contract === null || contractHash(rt.contract) !== r.hash) r.abort.abort()
+  const now = r.unit === null ? rt.head : r.branch in rt.tips ? rt.tips[r.branch] : r.head
+  const c = rt.contract && (r.unit === null ? rt.contract : sliceContract(rt.contract, r.unit))
+  if ((now !== null && now !== r.head) || (r.unit !== null && now === null)) r.abort.abort()
+  else if (c === null || contractHash(c) !== r.hash) r.abort.abort()
 }
 
 export class ReviewDesk {
@@ -109,9 +138,15 @@ export class ReviewDesk {
 
   /**
    * 미리 리뷰할 때인가(V23): 구현 중이고, 세션이 쉬고(idle, 또는 세션이 끝남), 평가에서 리뷰를 빼지 않았고, 묶음에 리뷰가
-   * 없고, Work의 미리 리뷰가 상한(처음 1번과 되먹임 라운드 상한 3) 아래이고, 묶음이 지금 HEAD와 계약으로 리뷰 준비다
+   * 없고, 내보내기의 미리 리뷰가 상한(처음 1번과 되먹임 라운드 상한 3) 아래이고, 묶음이 그 브랜치의 지금 끝과 계약(단위
+   * 브랜치는 조각)으로 리뷰 준비다
    */
-  preparable(rec: WorkRecord, bundle: EvidenceBundle | null, head: string): boolean {
+  preparable(
+    rec: WorkRecord,
+    x: ExportRecord,
+    bundle: EvidenceBundle | null,
+    head: string,
+  ): boolean {
     const rt = this.ctx.runtime(rec.id)
     return (
       bundle !== null &&
@@ -119,8 +154,8 @@ export class ReviewDesk {
       (rt.session === 'idle' || rt.session === 'stopped') &&
       this.ctx.deps.reviewDisabled !== true &&
       bundle.review === null &&
-      rec.prepared_reviews < PREPARED_MAX &&
-      reviewReady(bundle, rt.contract, head)
+      x.prepared_reviews < PREPARED_MAX &&
+      reviewReady(bundle, exportContract(rt, x), head)
     )
   }
 
@@ -130,13 +165,16 @@ export class ReviewDesk {
    */
   async prepares(
     rec: WorkRecord,
+    x: ExportRecord,
     project: ProjectRecord,
     bundle: EvidenceBundle,
     head: string,
+    whole: Integration | undefined,
   ): Promise<boolean> {
-    if (!this.preparable(rec, bundle, head)) return false
+    if (!this.preparable(rec, x, bundle, head)) return false
     const conditions = await autoConditions(rec.worktree, bundle)
-    return this.needed(project, this.ctx.runtime(rec.id).contract, bundle, conditions)
+    const contract = exportContract(this.ctx.runtime(rec.id), x)
+    return this.needed(project, contract, bundle, conditions, whole)
   }
 
   /**
@@ -145,26 +183,29 @@ export class ReviewDesk {
    * 리뷰한다(사람 머지 경로만 줄일 수 있다). 평가에서 리뷰를 뺀 쪽(reviewDisabled)은 리뷰할 자리에서 부르지 않고 건너뜀으로
    * 둔다(events.jsonl의 review 기록은 남긴다: 평가가 건너뛴 수를 센다). 리뷰가 끊겼으면 null(부른 쪽은 버린다)
    */
-  async forExport(
-    rec: WorkRecord,
-    project: ProjectRecord,
-    contract: Contract | null,
-    bundle: EvidenceBundle,
-    policy: Policy,
-    trigger: ExportTrigger,
-    show: Show,
-  ): Promise<EvidenceBundle | null> {
+  async forExport(j: ReviewJob, trigger: ExportTrigger): Promise<EvidenceBundle | null> {
+    const { rec, x, contract, bundle } = j
+    const unit = x.unit === null ? {} : { unit: x.unit }
     if (reusable(bundle.review)) {
       const findings = bundle.review?.findings.length ?? 0
-      this.ctx.note(rec.id, { type: 'review', trigger, reused: true, status: 'done', findings })
+      this.ctx.note(rec.id, {
+        type: 'review',
+        trigger,
+        ...unit,
+        reused: true,
+        status: 'done',
+        findings,
+      })
       return bundle
     }
     const skipped: EvidenceBundle = { ...bundle, review: { status: 'skipped', findings: [] } }
-    if (!contract || !this.needed(project, contract, bundle, policy.conditions)) return skipped
+    if (!contract || !this.needed(j.project, contract, bundle, j.policy.conditions, j.whole))
+      return skipped
     if (this.ctx.deps.reviewDisabled) {
       this.ctx.note(rec.id, {
         type: 'review',
         trigger,
+        ...unit,
         status: 'skipped',
         findings: 0,
         disabled: true,
@@ -172,34 +213,31 @@ export class ReviewDesk {
       return skipped
     }
     // 실패한 리뷰는 다시 부른다. 도는 동안은 리뷰 없는 묶음을 보인다
-    return this.run(rec, contract, { ...bundle, review: null }, trigger, show)
+    return this.run({ ...j, contract, bundle: { ...bundle, review: null } }, trigger)
   }
 
   /**
    * 미리 리뷰(V23)를 붙인 묶음. 'auto_only'에서 자동 조건을 못 채우면 돌리지 않고 세지 않는다(내보내기가 건너뜀으로
-   * 정한다). 리뷰어를 부르면 Work의 미리 리뷰 수를 올린다. 리뷰가 끊겼으면 null
+   * 정한다). 리뷰어를 부르면 내보내기의 미리 리뷰 수를 올린다. 리뷰가 끊겼으면 null
    */
-  async prepare(
-    rec: WorkRecord,
-    project: ProjectRecord,
-    contract: Contract | null,
-    bundle: EvidenceBundle,
-    policy: Policy,
-    show: Show,
-  ): Promise<EvidenceBundle | null> {
-    if (!contract || !this.needed(project, contract, bundle, policy.conditions)) return bundle
-    return this.run(rec, contract, bundle, 'prepared', show)
+  async prepare(j: ReviewJob): Promise<EvidenceBundle | null> {
+    const { contract } = j
+    if (!contract || !this.needed(j.project, contract, j.bundle, j.policy.conditions, j.whole))
+      return j.bundle
+    return this.run({ ...j, contract }, 'prepared')
   }
 
   /**
-   * 리뷰를 불러야 하나: 계약이 있고, 리뷰 범위가 'auto_only'면 리뷰가 됐다고 친 관문이 자동 조건을 채울 때만. 관문이 채운
-   * 조건(condition)은 정책의 조건과 묶음만으로 정해진다(스위치, 서버 보호, 실적과 상관없다): 그래서 조건만 받는다
+   * 리뷰를 불러야 하나: 계약이 있고, 리뷰 범위가 'auto_only'면 리뷰가 됐다고 친 관문이 자동 조건을 채울 때만(V22: 통합 증거와
+   * Work 전체 diff도). 관문이 채운 조건(condition)은 정책의 조건과 묶음만으로 정해진다(스위치, 서버 보호, 실적과 상관없다):
+   * 그래서 조건만 받는다
    */
   private needed(
     project: ProjectRecord,
     contract: Contract | null,
     bundle: EvidenceBundle,
     conditions: Policy['conditions'],
+    whole: Integration | undefined,
   ): boolean {
     if (contract === null) return false
     if (project.settings.review !== 'auto_only') return true
@@ -215,26 +253,33 @@ export class ReviewDesk {
       track_record_ok: {},
     }
     // head는 묶음의 head: 낡음은 리뷰 뒤의 관문이 지금 HEAD로 다시 본다
-    return gate(done, contract, policy, bundle.head).condition !== null
+    const integration = whole && { ...whole, head: whole.evidence?.head ?? null }
+    return gate(done, contract, policy, bundle.head, integration).condition !== null
   }
 
   /**
    * 리뷰를 부른다(works-evidence.ts의 재기 안에서만). 묶음과 리뷰 없는 관문을 먼저 보인다. 이 리뷰의 AbortController는
-   * Runtime.review에 두고, 앱을 닫는 Runtime.abort에도 끊긴다. 끝나면 HEAD를 다시 읽는다(훅 없이 한 커밋도 여기서 본다):
-   * 그사이 HEAD나 계약이 바뀌었으면 버리고 null(events.jsonl에 aborted). 실패는 status 'failed'(지적 없음)
+   * Runtime.review에 두고, 앱을 닫는 Runtime.abort에도 끊긴다. 끝나면 HEAD(와 단위 브랜치의 끝)를 다시 읽는다(훅 없이 한
+   * 커밋도 여기서 본다): 그사이 그 브랜치의 끝이나 계약이 바뀌었으면 버리고 null(events.jsonl에 aborted). 실패는 status
+   * 'failed'(지적 없음)
    */
   private async run(
-    rec: WorkRecord,
-    contract: Contract,
-    bundle: EvidenceBundle,
+    j: ReviewJob & { contract: Contract },
     trigger: Trigger,
-    show: Show,
   ): Promise<EvidenceBundle | null> {
+    const { rec, x, contract, bundle } = j
     const id = rec.id
     const rt = this.ctx.runtime(id)
-    await show(bundle)
+    const unit = x.unit === null ? {} : { unit: x.unit }
+    await j.show(bundle)
     const own = new AbortController()
-    rt.review = { head: bundle.head, hash: contractHash(contract), abort: own }
+    rt.review = {
+      unit: x.unit,
+      branch: x.branch,
+      head: bundle.head,
+      hash: contractHash(contract),
+      abort: own,
+    }
     // 보이는 사이 HEAD나 계약이 바뀌었으면 부르지 않는다
     followReview(rt)
     const signal = AbortSignal.any([rt.abort.signal, own.signal])
@@ -244,7 +289,7 @@ export class ReviewDesk {
     const version = { prompt_version: REVIEW_PROMPT_VERSION }
     try {
       if (trigger === 'prepared' && !signal.aborted) {
-        rec.prepared_reviews += 1
+        x.prepared_reviews += 1
         await this.ctx.save(rec)
       }
       const range = [bundle.base, bundle.head]
@@ -261,14 +306,18 @@ export class ReviewDesk {
             request,
             diffStat,
             diff,
-            evidenceSummary: evidenceFacts(bundle),
+            evidenceSummary: [
+              ...evidenceFacts(bundle),
+              ...(rt.contract ? unitScope(rt.contract, x) : []),
+            ],
             signal,
           })
       await this.ctx.seeHead(id, await workHead(rec).catch(() => null))
-      if (signal.aborted) return this.aborted(id, trigger)
+      if (signal.aborted) return this.aborted(id, trigger, unit)
       this.ctx.note(id, {
         type: 'review',
         trigger,
+        ...unit,
         status: result?.status ?? null,
         findings: result?.findings.length ?? 0,
         ...(result?.usage ? { usage: result.usage } : {}),
@@ -280,7 +329,7 @@ export class ReviewDesk {
         review: result && { status: result.status, findings: result.findings, ...version, ...saw },
       }
     } catch (e) {
-      if (signal.aborted) return this.aborted(id, trigger)
+      if (signal.aborted) return this.aborted(id, trigger, unit)
       this.ctx.log(`리뷰 실패 (${id})`, e)
       return { ...bundle, review: { status: 'failed', findings: [], ...version } }
     } finally {
@@ -289,8 +338,8 @@ export class ReviewDesk {
     }
   }
 
-  private aborted(id: string, trigger: Trigger): null {
-    this.ctx.note(id, { type: 'review', trigger, aborted: true })
+  private aborted(id: string, trigger: Trigger, unit: { unit?: string }): null {
+    this.ctx.note(id, { type: 'review', trigger, ...unit, aborted: true })
     return null
   }
 }

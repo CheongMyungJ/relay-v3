@@ -82,8 +82,9 @@ const CONTRACT_SCHEMA = {
     tidy: { ...strings, description: 'Debt item ids taken on as a tidy-up.' },
     delivery: {
       type: 'string',
-      enum: ['one_branch'],
-      description: 'Optional. All units go on the Work branch, each unit in its own commits.',
+      enum: ['one_branch', 'branch_per_unit'],
+      description:
+        'Optional. one_branch (default): all units go on the Work branch, each unit in its own commits. branch_per_unit: also a branch <Work branch>--<unit> from the base branch for each unit, measured and reviewed as its own export with its own PR.',
     },
   },
   required: ['version', 'id', 'goal', 'lines', 'examples', 'non_goals', 'human_rules', 'tidy'],

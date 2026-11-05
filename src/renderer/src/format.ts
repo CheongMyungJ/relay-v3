@@ -151,10 +151,17 @@ export function canMergeView(v: WorkView): boolean {
  */
 export const REVIEW_DISABLED = '리뷰가 꺼져 있음(평가 설정)'
 
-/** 관문의 사실 한 줄(decisive, reasons)을 화면 글로. 리뷰를 평가용으로 껐으면 리뷰 없음·건너뜀을 그 뜻으로 */
+/** 열린 것의 단위 머리(V22, '<단위>: …')와 그 뒤 */
+const UNIT_FACT = /^([a-z][a-z0-9-]{0,20}: )?(.*)$/s
+
+/**
+ * 관문의 사실 한 줄(decisive, reasons, 상자의 열린 것)을 화면 글로. 리뷰를 평가용으로 껐으면 리뷰 없음·건너뜀을 그 뜻으로
+ * (단위 머리가 있어도)
+ */
 export function factText(fact: string, v: Pick<WorkView, 'reviewDisabled'>): string {
-  return v.reviewDisabled && (fact === '리뷰 없음' || fact === '리뷰를 건너뜀')
-    ? REVIEW_DISABLED
+  const [, unit = '', rest = fact] = UNIT_FACT.exec(fact) ?? []
+  return v.reviewDisabled && (rest === '리뷰 없음' || rest === '리뷰를 건너뜀')
+    ? `${unit}${REVIEW_DISABLED}`
     : fact
 }
 
@@ -258,8 +265,11 @@ export function endArmed(v: WorkView): boolean {
  */
 export function endMovedText(v: WorkView): string | null {
   const from = v.endMoved
-  if (!from || v.head === null || v.head === from || !ending(v)) return null
   const what = v.reviewDisabled ? '증거' : '증거와 리뷰'
+  // 단위 브랜치(V22)만 움직였다: Work 브랜치의 끝은 그대로다
+  if (from && v.head === from && v.exports.length > 0 && ending(v))
+    return `[끝내기] 뒤 세션이 단위 브랜치에 새로 커밋했습니다. 새 커밋의 ${what}를 보려면 끝내기를 다시 누르세요`
+  if (!from || v.head === null || v.head === from || !ending(v)) return null
   return `[끝내기] 뒤 세션이 새로 커밋했습니다(${shortSha(from)} → ${shortSha(v.head)}). 새 커밋의 ${what}를 보려면 끝내기를 다시 누르세요`
 }
 
@@ -281,10 +291,12 @@ export function endTexts(v: Pick<WorkView, 'reviewDisabled'>): {
   }
 }
 
-/** 상자(V25)의 열린 것 한 줄: 관문 사실의 화면 글. 리뷰가 실패했으면 다시 누르면 다시 돈다고 붙인다 */
+/** 상자(V25)의 열린 것 한 줄: 관문 사실의 화면 글. 리뷰가 실패했으면 다시 누르면 다시 돈다고 붙인다(단위 머리가 있어도) */
 export function openText(fact: string, v: Pick<WorkView, 'reviewDisabled'>): string {
   const t = factText(fact, v)
-  return fact === '리뷰 실패' ? `${t}: 끝내기를 다시 누르면 리뷰를 다시 돌립니다` : t
+  return UNIT_FACT.exec(fact)?.[2] === '리뷰 실패'
+    ? `${t}: 끝내기를 다시 누르면 리뷰를 다시 돌립니다`
+    : t
 }
 
 const QUALITY_EFFECT = '앱이 명령을 돌리지 못해 증거가 비고, 결론은 늘 사람 머지입니다.'

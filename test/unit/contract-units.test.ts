@@ -1,7 +1,14 @@
 // [단위] 단위와 전달 방식(V21): 줄의 unit 꼴, delivery 값, branch_per_unit의 약속(단위 둘 이상, change·new·remove 줄의
-// 단위), unitsOf, sliceContract. 앱이 branch_per_unit을 아직 받지 않는 것은 [흐름](works-units.test.ts)이 본다.
+// 단위), unitsOf, sliceContract(V22: 전달 방식을 뺀 조각), unitBranch. 앱이 단위 브랜치를 내보내기로 재는 것은
+// [흐름](works-exports.test.ts)이 본다.
 import { describe, expect, test } from 'vitest'
-import { contractHash, parseContract, sliceContract, unitsOf } from '../../src/core/contract.ts'
+import {
+  contractHash,
+  parseContract,
+  sliceContract,
+  unitBranch,
+  unitsOf,
+} from '../../src/core/contract.ts'
 import type { Contract, ContractLine } from '../../src/core/types.ts'
 
 const line = (id: string, kind: ContractLine['kind'], unit?: string): ContractLine => ({
@@ -114,7 +121,7 @@ test('unitsOf: 줄에 처음 나온 차례로, 겹침 없이. 단위가 없으�
   expect(unitsOf({ ...twoBugs, lines: [line('C1', 'change')] })).toEqual([])
 })
 
-test('sliceContract: 그 단위의 줄과 단위가 없는 줄, 그 줄들의 예시. 계약 id와 줄 밖의 칸은 그대로', () => {
+test('sliceContract: 그 단위의 줄과 단위가 없는 줄, 그 줄들의 예시. 계약 id와 줄 밖의 칸은 그대로, 전달 방식은 뺀다', () => {
   const csv = sliceContract({ ...twoBugs, delivery: 'branch_per_unit' }, 'csv')
   expect(csv.lines.map((l) => l.id)).toEqual(['C1', 'C3', 'C4', 'C5'])
   expect(csv.examples.map((x) => x.id)).toEqual(['C1.1', 'C3.1', 'C4.1'])
@@ -122,8 +129,11 @@ test('sliceContract: 그 단위의 줄과 단위가 없는 줄, 그 줄들의 �
     id: 'w-units',
     goal: twoBugs.goal,
     non_goals: twoBugs.non_goals,
-    delivery: 'branch_per_unit',
   })
+  // 조각은 제 브랜치 하나로 간다: branch_per_unit(단위 둘 이상)이 남으면 조각이 모양 검사를 지나지 못한다
+  expect('delivery' in csv).toBe(false)
+  expect(parse(csv).ok).toBe(true)
+  expect(unitBranch('relay/x-ab12', 'csv')).toBe('relay/x-ab12--csv')
   const money = sliceContract(twoBugs, 'money')
   expect(money.lines.map((l) => l.id)).toEqual(['C2', 'C3', 'C5'])
   expect(money.examples.map((x) => x.id)).toEqual(['C2.1', 'C3.1'])

@@ -59,6 +59,11 @@ export interface CheckOptions {
   /** 기본 HEAD */
   head?: string
   contractPath?: string
+  /**
+   * 예시 자료(V27)를 얹고 커밋된 것과 견줄 계약 파일. 없으면 contractPath. 단위 브랜치(V22)는 조각의 줄을 재지만, 세션이
+   * 커밋하는 예시 자료는 앱이 계약 전체에서 쓴 파일 하나다
+   */
+  examplesContractPath?: string
   /** 요청 글 파일. 계약 근거의 request 인용을 확인한다 */
   requestPath?: string
   home: string
@@ -89,6 +94,10 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
   const diff = await readDiff(root, base, head, missing)
   const report = await findSignals(root, diff, q ?? defaultQuality(), missing)
   const contract = await loadContract(opts.contractPath, missing)
+  const whole =
+    opts.examplesContractPath === undefined
+      ? contract
+      : await loadContract(opts.examplesContractPath, missing)
   const request = await loadRequest(opts.requestPath, missing)
 
   const key = repoKey(root)
@@ -117,7 +126,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
   let examplesFile: ExamplesFileCheck | null = null
   let groundings: GroundingCheck[] | null = null
   // 수용 시험은 계약의 예시 자료(정규 파일)를 얹어 돈다(V27)
-  const examples = q !== null && contract !== null ? canonicalExamples(q, contract) : null
+  const examples = q !== null && whole !== null ? canonicalExamples(q, whole) : null
   try {
     // 4. 명령. 수용 시험도 명령으로 돈다(래칫 test_count가 있으면 base에서도)
     let acceptance: CommandEvidence | null = null
@@ -152,7 +161,8 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
           return judgeLines(contract, null, null)
         },
       )
-      if (q !== null) examplesFile = await committedExamples(root, head, q, contract, missing)
+      if (q !== null && whole !== null)
+        examplesFile = await committedExamples(root, head, q, whole, missing)
       groundings = await checkGroundings(root, head, contract, request)
     }
   } finally {

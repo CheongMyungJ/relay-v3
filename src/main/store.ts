@@ -3,6 +3,8 @@
 //   works/<id>/work.json                  Work의 상태(WorkRecord)
 //   works/<id>/request.md                 요청 글과 일의 성격 제안
 //   works/<id>/contract.json              승인된 계약
+//   works/<id>/contract.<단위>.json       단위 브랜치(V22)를 잴 때 쓰는 계약의 조각
+//   works/<id>/evidence/<자리>.json        단위 브랜치(V22)의 내보내기(unit-<단위>)와 통합(integration)의 마지막 묶음
 //   works/<id>/events.jsonl               훅과 사람의 동작 기록(한 줄에 하나)
 //   works/<id>/settings.json, instructions.md, mcp.json   세션에 주는 파일
 //   works/<id>/feedback/<n>.md            쉬는 세션에 준 되먹임(V24, 자료)
@@ -30,6 +32,30 @@ export interface ProjectRecord {
   added_at: string
 }
 
+/**
+ * 내보내기 하나(V22): PR, 리뷰, 관문, 장부가 따로 있는 브랜치. one_branch는 Work 브랜치 하나(unit null, 계약 전체),
+ * branch_per_unit은 단위마다 `<Work 브랜치>--<단위>`(계약의 조각)다
+ */
+export interface ExportRecord {
+  /** 단위. Work 브랜치의 내보내기(one_branch)는 null */
+  unit: string | null
+  branch: string
+  pr: PrInfo | null
+  /** 마지막 증거 묶음 파일 */
+  evidence_path: string | null
+  gate: GateResult | null
+  /**
+   * 지금 묶음을 내보내기(리뷰 포함)로 쟀으면 그 head(V23). 내보내기가 아닌 재기가 묶음을 바꾸거나 내보내기 리뷰가 도는
+   * 동안은 null: 같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게
+   */
+  exported_head: string | null
+  /**
+   * 미리 리뷰(V23, works-review.ts)를 부른 수. 내보내기마다 4번까지다(처음 1번과 되먹임 라운드 상한 3, works-feedback.ts
+   * PREPARED_MAX)
+   */
+  prepared_reviews: number
+}
+
 export interface WorkRecord {
   version: 1
   id: string
@@ -54,25 +80,18 @@ export interface WorkRecord {
   pending_contract: Contract | null
   pending_change: string | null
   groundings: GroundingCheck[] | null
-  pr: PrInfo | null
-  /** 마지막 증거 묶음 파일($RELAY_HOME/evidence/…) */
-  evidence_path: string | null
-  gate: GateResult | null
   /**
-   * 지금 묶음을 내보내기(리뷰 포함)로 쟀으면 그 head(V23). 내보내기가 아닌 재기가 묶음을 바꾸거나 내보내기 리뷰가 도는
-   * 동안은 null: 같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게
+   * 내보내기(V22): 승인된 계약의 전달 방식으로 정한다(one_branch는 Work 브랜치 하나, branch_per_unit은 단위 브랜치마다). 옛
+   * 기록의 pr·evidence_path·gate·exported_head·prepared_reviews는 읽을 때 Work 브랜치의 내보내기 하나로 옮긴다(upgradeWork)
    */
-  exported_head: string | null
+  exports: ExportRecord[]
+  /** branch_per_unit의 통합 증거(V22: Work 브랜치를 계약 전체로 잰 결정론 증거) 묶음 파일. 아니면 null */
+  integration_path: string | null
   error: string | null
   /** 세션이 멈춘 사이 사람이 답한 것. 다음 재개의 프롬프트로 전한다 */
   notice: string | null
   /** [끝내기]의 걸린 끝이나 상자(V25, works-end.ts). 옛 기록에는 없다(읽을 때 null) */
   end_pending: EndPending | null
-  /**
-   * 미리 리뷰(V23, works-review.ts)를 부른 수. 4번까지다(처음 1번과 되먹임 라운드 상한 3, works-feedback.ts PREPARED_MAX). 옛
-   * 기록에는 없다(읽을 때 0)
-   */
-  prepared_reviews: number
   /**
    * 쉬는 세션에 준 되먹임(V24, works-feedback.ts). rounds는 relay가 저절로 보낸 라운드(두 종류를 합쳐 Work마다 3까지), sent는
    * 보낸 파일마다 한 줄(사람의 [세션에 넘기기]도). 옛 기록에는 없다(읽을 때 빈 것)
@@ -89,6 +108,7 @@ export type WorkFile =
   | 'work.json'
   | 'request.md'
   | 'contract.json'
+  | `contract.${string}.json`
   | 'events.jsonl'
   | 'settings.json'
   | 'instructions.md'
@@ -119,6 +139,53 @@ async function atomicWrite(path: string, text: string): Promise<void> {
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Work 브랜치의 내보내기(one_branch) 하나 */
+export function branchExport(branch: string): ExportRecord {
+  return {
+    unit: null,
+    branch,
+    pr: null,
+    evidence_path: null,
+    gate: null,
+    exported_head: null,
+    prepared_reviews: 0,
+  }
+}
+
+/** 옛 기록(V22 앞)의 내보내기 칸 */
+type OldRecord = Partial<Pick<ExportRecord, 'pr' | 'evidence_path' | 'gate' | 'exported_head'>> & {
+  prepared_reviews?: number
+}
+
+/**
+ * 읽은 기록에 뒤에 더한 칸을 채운다: 옛 기록에는 없는 칸(세션이 떴던 것으로 보고 --resume, 빈 되먹임 등)과, V22 앞의 기록이
+ * Work에 둔 PR·증거·관문·내보낸 head·미리 리뷰 수를 Work 브랜치의 내보내기 하나로 옮긴다
+ */
+export function upgradeWork(raw: WorkRecord): WorkRecord {
+  const old = raw as WorkRecord & OldRecord
+  const { pr, evidence_path, gate, exported_head, prepared_reviews, ...rec } = old
+  const exports = rec.exports ?? [
+    {
+      ...branchExport(rec.branch),
+      pr: pr ?? null,
+      evidence_path: evidence_path ?? null,
+      gate: gate ?? null,
+      exported_head: exported_head ?? null,
+      prepared_reviews: prepared_reviews ?? 0,
+    },
+  ]
+  return {
+    ...rec,
+    notice: rec.notice ?? null,
+    session_started: rec.session_started ?? true,
+    end_pending: rec.end_pending ?? null,
+    feedback: rec.feedback ?? { rounds: 0, sent: [] },
+    probe: rec.probe ?? null,
+    exports,
+    integration_path: rec.integration_path ?? null,
+  }
+}
 
 export class Store {
   readonly home: string
@@ -155,6 +222,11 @@ export class Store {
   /** 되먹임 파일(V24): works/<id>/feedback/<n>.md */
   feedbackPath(id: string, n: number): string {
     return join(this.workDir(id), 'feedback', `${n}.md`)
+  }
+
+  /** 단위 브랜치(V22)의 내보내기(unit-<단위>)와 통합(integration)의 마지막 묶음: works/<id>/evidence/<자리>.json */
+  bundlePath(id: string, slot: string): string {
+    return join(this.workDir(id), 'evidence', `${slot}.json`)
   }
 
   /** Work의 git worktree 자리 */

@@ -8,7 +8,12 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { evidencePath, repoKey } from '../../src/adapters/store.ts'
 import { gate } from '../../src/core/gate.ts'
-import { contractHash, examplesFileText, parseContract } from '../../src/core/contract.ts'
+import {
+  contractHash,
+  examplesFileText,
+  parseContract,
+  sliceContract,
+} from '../../src/core/contract.ts'
 import { parseQuality, qualityHash } from '../../src/core/quality.ts'
 import type {
   AutoCondition,
@@ -226,6 +231,43 @@ describe('계약이 있는 버그 고침', () => {
       status: 'differs',
       diffs: [{ id: 'C1.1', field: 'output', expected: 10, found: 0 }],
     })
+  })
+
+  test('단위 브랜치(V22): 조각의 줄만 재고, 예시 자료는 계약 전체(examplesContractPath)로 얹고 견준다', async () => {
+    // 세션이 커밋하는 예시 자료는 앱이 계약 전체에서 쓴 파일 하나다
+    const units: Contract = {
+      ...contract,
+      delivery: 'branch_per_unit',
+      lines: contract.lines.map((l, i) => ({ ...l, unit: i === 0 ? 'clamp' : 'add' })),
+    }
+    const files = await makeTempDir('relay-work-')
+    const whole = join(files, 'contract.json')
+    const slice = join(files, 'contract.clamp.json')
+    await writeFile(whole, JSON.stringify(units))
+    await writeFile(slice, JSON.stringify(sliceContract(units, 'clamp')))
+    // 다른 head에서 잰다(같은 head의 묶음 파일을 덮지 않게)
+    await repo.branch('fix-units', 'main')
+    await repo.commit('clamp 고침(단위)', {
+      'src/calc.js': calc('hi'),
+      'test/calc.test.js': TESTS_FIXED,
+      '.relay/examples/fix-clamp.json': examplesFileText(contract),
+    })
+    const head = 'fix-units'
+    const opts = { repo: repo.dir, base: 'main', head, contractPath: slice, home, now: NOW }
+    const b = await check({ ...opts, examplesContractPath: whole })
+    expect(b.lines?.map((l) => [l.line, l.status])).toEqual([['C1', 'met']])
+    expect(b.contract).toEqual({
+      id: 'fix-clamp',
+      hash: contractHash(sliceContract(units, 'clamp')),
+    })
+    expect(b.examples_file).toEqual({
+      path: '.relay/examples/fix-clamp.json',
+      status: 'same',
+      diffs: [],
+    })
+    // 조각으로 견주면 다른 단위의 예시가 승인본에 없는 예시로 보인다
+    const alone = await check(opts)
+    expect(alone.examples_file).toMatchObject({ status: 'differs', diffs: [{ id: 'C2.1' }] })
   })
 
   test('근거: 코드 줄과 요청 인용은 확인되고 추측은 확인되지 않는다', () => {

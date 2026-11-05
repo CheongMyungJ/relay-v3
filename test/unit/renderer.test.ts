@@ -357,6 +357,8 @@ describe('증거 패널의 글', () => {
     pr: null,
     evidenceRunning: false,
     reviewRunning: false,
+    exports: [],
+    integration: null,
   } as unknown as WorkView
   const pr = {
     number: 3,

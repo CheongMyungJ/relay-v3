@@ -1,11 +1,12 @@
 // 고른 Work 하나: 머리(요청, 상태, 브랜치, 동작), 가운데 터미널, 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
-// [끝내기](V25)는 화면의 HEAD를 넘긴다. 열린 것이 없으면 Work가 끝나고, 재는 동안은 걸린 끝, 열린 것이 있으면 [증거]의
+// [끝내기](V25)는 화면의 HEAD(V22: 와 단위 브랜치의 끝)를 넘긴다. 열린 것이 없으면 Work가 끝나고, 재는 동안은 걸린 끝, 열린 것이 있으면 [증거]의
 // 상자다. 걸린 끝과 상자는 메인이 Work에 둔다(view.endPending): 다른 Work로 갔다 와도 남는다.
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectView, WorkState, WorkView } from '../../shared/api.ts'
 import { DebtPanel, DiffPanel } from './ChangesPanel.tsx'
 import { ContractPanel } from './ContractPanel.tsx'
 import { EvidencePanel } from './EvidencePanel.tsx'
+import { endTips } from './exports.ts'
 import { SESSION_LABEL, STATE_LABEL, endArmed, endTexts, isActive, workTone } from './format.ts'
 import { TerminalView } from './TerminalView.tsx'
 import { ErrorLine, Tag, useAction } from './ui.tsx'
@@ -130,7 +131,10 @@ function WorkHeader(p: {
             onClick={() => {
               p.onEnding()
               void ending.run(() =>
-                window.relay.end(view.id, view.head === null ? {} : { head: view.head }),
+                window.relay.end(
+                  view.id,
+                  view.head === null ? {} : { head: view.head, ...endTips(view) },
+                ),
               )
             }}
           >

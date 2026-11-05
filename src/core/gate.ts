@@ -16,6 +16,7 @@ import type {
   EvidenceBundle,
   ExampleFileDiff,
   GateResult,
+  Integration,
   LineStatus,
   LineVerdict,
   Policy,
@@ -28,12 +29,15 @@ import type {
 /**
  * head는 지금 브랜치 끝의 SHA다. 묶음의 head와 다르면 낡은 증거라 사람에게 보낸다(V6).
  * 모르면 null을 주고, 그때도 낡았는지 확인하지 못했으니 사람에게 보낸다.
+ * whole은 단위 브랜치를 내보낼 때(V22)의 통합 증거다: 그것에 열린 것이 있거나 Work 전체 diff가 같은 조건을 못 채우면, 내보내기는
+ * 자동 조건을 채운 것이 아니다(그림자도). 브랜치를 나눠도 한 diff로 낼 때보다 자동 조건을 쉽게 채우지 못한다.
  */
 export function gate(
   evidence: EvidenceBundle,
   contract: Contract | null,
   policy: Policy,
   head: string | null,
+  whole?: Integration,
 ): GateResult {
   const change = changeRequest(evidence, contract)
   if (change !== null) {
@@ -48,10 +52,13 @@ export function gate(
 
   const facts = humanFacts(evidence, contract, head)
   if (facts.length > 0) return human(facts, null, false)
+  const open = whole === undefined ? [] : integrationFacts(whole)
+  if (open.length > 0) return human(open, null, false)
 
   const misses: string[] = []
   for (const c of policy.conditions) {
-    const why = conditionMisses(c, evidence)
+    const all = whole?.evidence ? conditionMisses(c, whole.evidence) : []
+    const why = [...conditionMisses(c, evidence), ...all.map((w) => `Work 전체 ${w}`)]
     if (why.length === 0) return decideAuto(c, policy)
     misses.push(`조건 ${c.id}: ${why.join(', ')}`)
   }
@@ -62,15 +69,22 @@ export function gate(
 /**
  * 열린 것(V25, 앱의 [끝내기]): 관문이 계약 다시나 사람 머지로 보내는 사실 그대로다. gate와 같은 함수로 계산하고 새 판단은
  * 없다. 자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적, 리뷰 메모(올림이 아닌 지적, V26)는 넣지 않는다. 비면 [끝내기]가
- * 상자 없이 끝낸다
+ * 상자 없이 끝낸다. review가 거짓이면 리뷰 사실을 보지 않는다(V22의 통합 증거는 리뷰하지 않는다)
  */
 export function openItems(
   evidence: EvidenceBundle,
   contract: Contract | null,
   head: string | null,
+  review = true,
 ): string[] {
   const change = changeRequest(evidence, contract)
-  return [...(change === null ? [] : [change]), ...humanFacts(evidence, contract, head)]
+  return [...(change === null ? [] : [change]), ...humanFacts(evidence, contract, head, review)]
+}
+
+/** 통합 증거(V22)의 열린 것: 리뷰를 빼고 계약 전체로 */
+function integrationFacts(w: Integration): string[] {
+  if (w.evidence === null) return ['통합 증거 없음']
+  return openItems(w.evidence, w.contract, w.head, false).map((f) => `통합 증거: ${f}`)
 }
 
 function human(reasons: string[], condition: string | null, shadow: boolean): GateResult {
@@ -88,7 +102,12 @@ function changeRequest(e: EvidenceBundle, contract: Contract | null): string | n
 
 // ── 2. 사람 머지로 보내는 사실 (엄격한 것부터) ─────────────────────────────────
 
-function humanFacts(e: EvidenceBundle, contract: Contract | null, head: string | null): string[] {
+function humanFacts(
+  e: EvidenceBundle,
+  contract: Contract | null,
+  head: string | null,
+  review = true,
+): string[] {
   const facts = [
     ...staleFacts(e, head),
     ...signalFacts(e.signals, ['human_path', 'guard_path', 'test_weakening']),
@@ -100,7 +119,7 @@ function humanFacts(e: EvidenceBundle, contract: Contract | null, head: string |
     ...bundleContractFacts(e, contract),
     ...lineFacts(e.lines, contract),
     ...examplesFileFacts(e.examples_file),
-    ...reviewFacts(e.review),
+    ...(review ? reviewFacts(e.review) : []),
     ...e.missing.map((name) => `없는 증거: ${name}`),
     ...(e.quality.from === 'base' || e.quality.from === 'head' ? [] : ['품질 기준 없음']),
   ]

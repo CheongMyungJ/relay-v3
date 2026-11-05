@@ -1,14 +1,23 @@
 // Works의 의존과 안쪽 모양 (docs/m2-modules.md 3절 works.ts). works.ts가 600줄을 넘지 않게 계약 창구(works-contract.ts),
-// 증거·머지(works-evidence.ts), 리뷰(works-review.ts), [끝내기](works-end.ts), 되먹임(works-feedback.ts)을 나눴다. 이 파일의 WorkCtx로 Works를 본다.
-// 모두가 읽는 Work의 head(Work 브랜치의 끝, V21)도 여기에 둔다. Electron을 모른다.
+// 증거(works-evidence.ts), 머지·PR(works-exports.ts), 리뷰(works-review.ts), [끝내기](works-end.ts), 되먹임(works-feedback.ts),
+// 화면(works-view.ts)을 나눴다. 이 파일의 WorkCtx로 Works를 본다. 모두가 읽는 Work의 head(Work 브랜치의 끝, V21)와 재는
+// 자리(V22: 내보내기와 통합 증거)도 여기에 둔다. Electron을 모른다.
 
 import { revParse } from '../adapters/git.ts'
-import type { Contract, EvidenceBundle } from '../core/types.ts'
+import { sliceContract, unitBranch, unitsOf } from '../core/contract.ts'
+import type { Contract, EvidenceBundle, Policy } from '../core/types.ts'
 import type { SessionState, WorkEvent } from '../core/work.ts'
 import type { HookEvent } from '../core/instructions.ts'
 import type { FeedbackHold } from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
-import type { ProjectRecord, Store, WorkRecord } from './store.ts'
+import {
+  branchExport,
+  type ExportRecord,
+  type ProjectRecord,
+  type Store,
+  type WorkFile,
+  type WorkRecord,
+} from './store.ts'
 
 /** 독립 리뷰(V4)에 주는 것. 기본 구현은 works-review.ts의 claudeReview(claude -p, 읽기 도구만) */
 export interface ReviewInput {
@@ -78,13 +87,23 @@ export interface Runtime {
   session: SessionState
   /** 승인된 계약(contract.json) */
   contract: Contract | null
-  evidence: EvidenceBundle | null
+  /**
+   * 자리(브랜치)마다 마지막 묶음(V22): 내보내기는 그 브랜치, branch_per_unit의 통합 증거는 Work 브랜치. one_branch는 Work
+   * 브랜치 하나가 내보내기다
+   */
+  bundles: Map<string, EvidenceBundle>
+  /** 자리마다 마지막으로 계산한 관문의 정책(통합 증거가 바뀌면 내보내기의 관문을 다시 계산한다, V22) */
+  policies: Map<string, Policy>
   evidenceRunning: boolean
   reviewRunning: boolean
   /** Work 브랜치의 끝(V21, 마지막으로 읽은 것). 화면과 기록은 HEAD라 부른다 */
   head: string | null
+  /** 단위 브랜치(V22)의 끝(마지막으로 읽은 것). 브랜치가 없으면 null */
+  tips: Tips
   /** 지금 재고 있는 head */
   measuring: string | null
+  /** 지금 재고 있는 자리(브랜치) */
+  measuringAt: string | null
   /**
    * Stop 뒤 몰아 두기의 타이머. 되먹임(V24)을 사람의 최근 입력으로 미뤘으면 창이 끝날 때 다시 보는 타이머도 여기에 둔다:
    * 세션이 다시 움직이면(UserPromptSubmit, push 등 cancelDebounce) 함께 지운다. 이것이 있는 동안은 아직 쉬는 때가 아니다
@@ -108,10 +127,16 @@ export interface Runtime {
   /** Work가 끝나거나 앱이 끝나면 끊는다(돌고 있는 리뷰를 그만둔다) */
   abort: AbortController
   /**
-   * 도는 리뷰(V23): 그 head와 계약 hash, 리뷰마다 따로 두는 AbortController. 읽은 HEAD나 계약이 바뀌면 끊는다
-   * (works-review.ts followReview). 앱을 닫을 때는 abort가 끊는다
+   * 도는 리뷰(V23): 그 내보내기(V22)의 단위와 브랜치, head와 계약 hash, 리뷰마다 따로 두는 AbortController. 읽은 그 브랜치의
+   * 끝이나 계약이 바뀌면 끊는다(works-review.ts followReview). 앱을 닫을 때는 abort가 끊는다
    */
-  review: { head: string; hash: string; abort: AbortController } | null
+  review: {
+    unit: string | null
+    branch: string
+    head: string
+    hash: string
+    abort: AbortController
+  } | null
   /** 마지막으로 기록한 자동 머지의 기다림·실패 까닭(같은 까닭을 PR 확인마다 다시 적지 않게) */
   autoMergeNote: string | null
   /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(V25, 화면의 한 줄). 다시 [끝내기]·[취소]하거나 Work가 끝나면 null */
@@ -138,16 +163,22 @@ export interface Runtime {
 export type ExportTrigger = 'pr' | 'end'
 
 /**
- * 증거 재기 하나: export는 내보내기 계기(아니면 null), prepare는 미리 리뷰를 허락함(V23), again은 이미 잰 head도 다시 잼.
- * head는 재기가 시작할 때 읽은 head다(줄 설 때는 모른다. 읽지 못했으면 null): 걸린 끝(V25)은 끝난 재기가 어느 head를
- * 쟀는지로 다음 일을 정한다
+ * 증거 재기 하나: export는 내보내기 계기(아니면 null), only는 그 계기로 잴 내보내기의 브랜치(null이면 모두, V22), prepare는
+ * 미리 리뷰를 허락함(V23), again은 이미 잰 head도 다시 잼. 계기가 없는 내보내기와 통합 증거는 재지 않았을 때만 잰다. head와
+ * tips는 재기가 시작할 때 읽은 Work 브랜치와 단위 브랜치의 끝이다(줄 설 때는 모른다. 읽지 못했으면 null): 걸린 끝(V25)은
+ * 끝난 재기가 어느 head를 쟀는지로 다음 일을 정한다
  */
 export interface MeasureJob {
   export: ExportTrigger | null
+  only: string[] | null
   prepare: boolean
   again: boolean
   head: string | null
+  tips: Tips | null
 }
+
+/** 단위 브랜치(V22)마다 끝. 브랜치가 없으면 null. one_branch는 빈 것 */
+export type Tips = Record<string, string | null>
 
 /** works-contract.ts와 works-evidence.ts가 보는 Works */
 export interface WorkCtx {
@@ -210,6 +241,57 @@ export function refHead(worktree: string, branch: string): Promise<string> {
 /** Work의 지금 head: Work 브랜치의 끝(refHead) */
 export function workHead(rec: Pick<WorkRecord, 'worktree' | 'branch'>): Promise<string> {
   return refHead(rec.worktree, rec.branch)
+}
+
+// ── 재는 자리(V22) ─────────────────────────────────────────────────────────
+
+/** 단위 브랜치로 내보내는 Work(branch_per_unit): Work 브랜치는 통합 증거이고 내보내기가 아니다 */
+export function perUnit(rec: Pick<WorkRecord, 'exports'>): boolean {
+  return rec.exports.some((x) => x.unit !== null)
+}
+
+/** 승인된 계약의 내보내기: 같은 브랜치의 기록(PR, 증거, 미리 리뷰 수)은 잇는다 */
+export function planExports(rec: WorkRecord, contract: Contract): ExportRecord[] {
+  const units = contract.delivery === 'branch_per_unit' ? unitsOf(contract) : []
+  const branches = units.length === 0 ? [rec.branch] : units.map((u) => unitBranch(rec.branch, u))
+  return branches.map((branch, i) => {
+    const kept = rec.exports.find((x) => x.branch === branch)
+    return kept ?? { ...branchExport(branch), unit: units[i] ?? null }
+  })
+}
+
+/** 내보내기를 잴 계약: Work 브랜치는 계약 전체, 단위 브랜치는 조각(V22) */
+export function exportContract(rt: Pick<Runtime, 'contract'>, x: ExportRecord): Contract | null {
+  return rt.contract === null || x.unit === null ? rt.contract : sliceContract(rt.contract, x.unit)
+}
+
+/** 엔진에 줄 계약 파일: Work 브랜치는 contract.json, 단위 브랜치는 조각(contract.<단위>.json) */
+export function contractFile(x: Pick<ExportRecord, 'unit'>): WorkFile {
+  return x.unit === null ? 'contract.json' : `contract.${x.unit}.json`
+}
+
+/** 머지된 내보내기는 다 갔다(V22): 다시 재지 않고 [끝내기]의 열린 것에 넣지 않는다 */
+export const delivered = (x: ExportRecord): boolean => x.pr?.state === 'MERGED'
+
+/** 단위 브랜치의 끝(V22). one_branch는 빈 것 */
+export async function readTips(rec: WorkRecord): Promise<Tips> {
+  const out: Tips = {}
+  for (const x of rec.exports)
+    if (x.unit !== null) out[x.branch] = await refHead(rec.worktree, x.branch).catch(() => null)
+  return out
+}
+
+/** 두 끝 모음이 같다(없으면 빈 것) */
+export function sameTips(a: Tips | null | undefined, b: Tips | null | undefined): boolean {
+  const x = a ?? {}
+  const y = b ?? {}
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)])
+  return [...keys].every((k) => x[k] === y[k])
+}
+
+/** 내보내기의 지금 끝: Work 브랜치는 head, 단위 브랜치는 tips(없으면 null) */
+export function tipOf(x: ExportRecord, head: string | null, tips: Tips): string | null {
+  return x.unit === null ? head : (tips[x.branch] ?? null)
 }
 
 export type { HookEvent }

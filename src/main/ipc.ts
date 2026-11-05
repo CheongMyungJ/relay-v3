@@ -21,6 +21,17 @@ const obj = (v: unknown, what: string): Record<string, unknown> => {
   return v as Record<string, unknown>
 }
 
+/** 단위(V22): 없으면 Work 브랜치의 내보내기 */
+const unitArg = (v: unknown): string | undefined => (v === undefined ? undefined : str(v, '단위'))
+
+/** 단위 브랜치의 끝(V22): 브랜치 → SHA 또는 null */
+const tipsArg = (v: unknown): Record<string, string | null> => {
+  const out: Record<string, string | null> = {}
+  for (const [k, x] of Object.entries(obj(v, '단위 브랜치의 끝')))
+    out[k] = x === null ? null : str(x, '끝')
+  return out
+}
+
 export function registerIpc(o: {
   works: Works
   sessions: SessionHost
@@ -65,30 +76,33 @@ export function registerIpc(o: {
         message: typeof x.message === 'string' ? x.message : '',
       })
     },
-    [IPC.merge]: (id) => works.merge(str(id, 'id')),
-    // [끝내기]와 [그래도 끝내기](V25): head는 화면의 HEAD나 상자의 head, force는 [그래도 끝내기]
+    [IPC.merge]: (id, unit) => works.merge(str(id, 'id'), unitArg(unit)),
+    // [끝내기]와 [그래도 끝내기](V25): head는 화면의 HEAD나 상자의 head, force는 [그래도 끝내기], tips는 화면의 단위
+    // 브랜치의 끝(V22)
     [IPC.end]: (id, input) => {
       const x = obj(input, '입력')
       return works.end(str(id, 'id'), {
         ...(x.head === undefined ? {} : { head: str(x.head, 'head') }),
         ...(x.force === true ? { force: true } : {}),
+        ...(x.tips === undefined ? {} : { tips: tipsArg(x.tips) }),
       })
     },
     [IPC.cancelEnd]: (id) => works.cancelEnd(str(id, 'id')),
     [IPC.abandon]: (id) => works.abandon(str(id, 'id')),
-    // [증거 다시 재기]: 열린 PR이 지금 HEAD를 가리키고 Work의 기준으로 가면 내보내기 후보로(리뷰 포함). PR이 뒤처진
-    // HEAD를 내보내기로 재지 않는다(PR head가 아니면 머지할 수 없다)
+    // [증거 다시 재기]: 열린 PR이 지금 끝을 가리키고 Work의 기준으로 가면 내보내기 후보로(리뷰 포함, V22: 그런 내보내기만).
+    // PR이 뒤처진 끝을 내보내기로 재지 않는다(PR head가 아니면 머지할 수 없다)
     [IPC.runEvidence]: (id) => {
       const view = works.view(str(id, 'id'))
-      return works.runEvidence(view.id, {
-        exportCandidate: exportable(view.pr, view.base, view.head),
-      })
+      const candidate =
+        exportable(view.pr, view.base, view.head) ||
+        view.exports.some((x) => exportable(x.pr, view.base, x.head))
+      return works.runEvidence(view.id, { exportCandidate: candidate })
     },
-    // [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적 id들
-    [IPC.sendFindings]: (id, ids) => {
+    // [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적 id들. unit은 단위 브랜치의 내보내기(V22)
+    [IPC.sendFindings]: (id, ids, unit) => {
       if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string'))
         throw new Error('지적 id 목록이 아님')
-      return works.sendFindings(str(id, 'id'), ids)
+      return works.sendFindings(str(id, 'id'), ids, unitArg(unit))
     },
     [IPC.terminalAttach]: (id) => {
       works.view(str(id, 'id'))

@@ -112,8 +112,8 @@ export interface Example {
 }
 
 /**
- * 단위를 내보내는 방식(V21). one_branch: 모든 단위가 Work 브랜치 하나에 있고 단위마다 커밋을 따로 한다. branch_per_unit:
- * 단위마다 브랜치(V22). 앱은 아직 branch_per_unit을 받지 않는다(사용자 결정을 기다림)
+ * 단위를 내보내는 방식(V21). one_branch: 모든 단위가 Work 브랜치 하나에 있고 단위마다 커밋을 따로 한다. branch_per_unit(V22):
+ * 단위마다 브랜치 `<Work 브랜치>--<단위>`(내보내기)를 두고, Work 브랜치에도 모든 단위를 둔다(통합)
  */
 export type Delivery = 'one_branch' | 'branch_per_unit'
 
@@ -369,6 +369,13 @@ export interface Policy {
 }
 
 export type Conclusion = 'human_merge' | 'auto_merge_candidate' | 'recontract'
+
+/** 통합 증거(V22): Work 브랜치를 계약 전체로 잰 결정론 증거(리뷰 없음, 재지 못했으면 null), 그 계약, 지금 Work 브랜치의 끝 */
+export interface Integration {
+  evidence: EvidenceBundle | null
+  contract: Contract | null
+  head: string | null
+}
 
 export interface GateResult {
   conclusion: Conclusion

@@ -9,15 +9,52 @@
 // 터미널에 60초 안에 입력함(앱의 tell은 세지 않는다. 창이 끝날 때 다시 본다). 바닥 신호와 계약의 몫(계약 밖 변경,
 // request_gap)은 보내지 않는다: 사람에게만 보이고, 사람은 [세션에 넘기기]로 지적을 보낸다(라운드로 세지 않는다). 보내기는
 // Work마다 차례로 한다. 세션의 답은 받지 않는다: 고쳤으면 새 head의 증거와 새 맥락의 리뷰가 보고, 넘겼으면 그 head의 사실로
-// [끝내기]에 남는다. 미리 리뷰(V23)의 상한은 처음 1번과 이 라운드 상한에서 나온다(PREPARED_MAX).
+// [끝내기]에 남는다. 미리 리뷰(V23)의 상한은 처음 1번과 이 라운드 상한에서 나온다(PREPARED_MAX). 보는 자리(V22)는
+// one_branch면 Work 브랜치의 내보내기 하나, branch_per_unit이면 통합 증거(Work 브랜치)와 단위 브랜치마다다: 한 라운드에 자리마다
+// 파일 하나(머리에 그 브랜치와 끝)를 쓰고 라운드는 하나로 센다.
 
 import { contractHash } from '../core/contract.ts'
 import { feedbackLine, feedbackText, FINDINGS_NOTE } from '../core/instructions.ts'
 import { evidenceFacts, feedbackFacts, findingKey, raises, routeFindings } from '../core/review.ts'
-import type { EvidenceBundle, FeedbackFact, ReviewFinding } from '../core/types.ts'
+import type { Contract, EvidenceBundle, FeedbackFact, ReviewFinding } from '../core/types.ts'
 import type { FeedbackHold, FeedbackRound, FeedbackView } from '../shared/api.ts'
-import type { WorkRecord } from './store.ts'
-import { type WorkCtx, workHead } from './works-types.ts'
+import type { ExportRecord, WorkRecord } from './store.ts'
+import {
+  delivered,
+  exportContract,
+  perUnit,
+  readTips,
+  tipOf,
+  type Tips,
+  type WorkCtx,
+  workHead,
+} from './works-types.ts'
+
+/** 되먹임을 보는 자리(V22): 내보내기(x)나 branch_per_unit의 통합 증거(x null, Work 브랜치) */
+export interface Spot {
+  branch: string
+  x: ExportRecord | null
+}
+
+/** 자리 하나에 보낼 것: 그 끝, 묶음, 아직 보내지 않은 세션 몫 */
+interface Item {
+  spot: Spot
+  head: string
+  e: EvidenceBundle
+  facts: FeedbackFact[]
+  findings: ReviewFinding[]
+}
+
+/** 자리들: one_branch는 Work 브랜치의 내보내기 하나, branch_per_unit은 통합 증거와 머지되지 않은 단위 브랜치마다 */
+export function spotsOf(rec: WorkRecord): Spot[] {
+  const exports = rec.exports.filter((x) => !delivered(x)).map((x) => ({ branch: x.branch, x }))
+  return perUnit(rec) ? [{ branch: rec.branch, x: null }, ...exports] : exports
+}
+
+/** 되먹임을 미룬 까닭을 적은 때(head와 단위 브랜치의 끝): 같은 때에 같은 까닭을 다시 적지 않게 */
+function heldKey(head: string | null, tips: Tips): string | null {
+  return head === null || Object.keys(tips).length === 0 ? head : `${head} ${JSON.stringify(tips)}`
+}
 
 /** relay가 저절로 보내는 되먹임 라운드의 상한(Work마다, 결정론과 리뷰를 합쳐) */
 export const FEEDBACK_ROUNDS = 3
@@ -107,6 +144,34 @@ export function checkReply(bundle: EvidenceBundle, head: string): Record<string,
   }
 }
 
+/**
+ * relay_check의 답(V22): one_branch는 Work 브랜치의 답(checkReply), branch_per_unit은 통합 증거와 단위 브랜치마다(없는 단위
+ * 브랜치는 missing)
+ */
+export function checkReplies(
+  rec: WorkRecord,
+  bundles: Map<string, EvidenceBundle>,
+  head: string,
+  tips: Tips,
+): Record<string, unknown> {
+  const reply = (branch: string, at: string | null) => {
+    const bundle = bundles.get(branch)
+    if (at === null)
+      return { status: 'missing', error: `The unit branch ${branch} does not exist.` }
+    return bundle ? checkReply(bundle, at) : { status: 'error', error: rec.error ?? 'No evidence.' }
+  }
+  if (!perUnit(rec)) return reply(rec.branch, head)
+  return {
+    status: 'ok',
+    integration: { branch: rec.branch, ...reply(rec.branch, head) },
+    exports: rec.exports.map((x) => ({
+      unit: x.unit,
+      branch: x.branch,
+      ...reply(x.branch, tipOf(x, head, tips)),
+    })),
+  }
+}
+
 export class FeedbackDesk {
   private readonly ctx: WorkCtx
 
@@ -134,11 +199,31 @@ export class FeedbackDesk {
     if (reason === 'draft' || reason === 'human_input') this.ctx.publish(id)
   }
 
-  /** 지금 묶음이 이 head와 지금 계약의 것이면 그 묶음 */
-  private current(rec: WorkRecord, head: string | null): EvidenceBundle | null {
-    const { evidence: e, contract } = this.ctx.runtime(rec.id)
+  /** 자리의 지금 끝 */
+  private tip(spot: Spot, head: string | null, tips: Tips): string | null {
+    return spot.x === null ? head : tipOf(spot.x, head, tips)
+  }
+
+  /** 그 자리의 지금 묶음이 이 끝과 지금 계약(단위 브랜치는 조각)의 것이면 그 묶음 */
+  private current(rec: WorkRecord, spot: Spot, head: string | null): EvidenceBundle | null {
+    const rt = this.ctx.runtime(rec.id)
+    const e = rt.bundles.get(spot.branch) ?? null
+    const contract: Contract | null = spot.x ? exportContract(rt, spot.x) : rt.contract
     if (e === null || head === null || e.head !== head || contract === null) return null
     return e.contract?.hash === contractHash(contract) ? e : null
+  }
+
+  /** 자리마다 아직 보내지 않은 세션 몫 */
+  private items(rec: WorkRecord, head: string, tips: Tips): Item[] {
+    const out: Item[] = []
+    for (const spot of spotsOf(rec)) {
+      const at = this.tip(spot, head, tips)
+      const e = this.current(rec, spot, at)
+      if (e === null || at === null) continue
+      const { facts, findings } = unsent(rec, e)
+      if (facts.length + findings.length > 0) out.push({ spot, head: at, e, facts, findings })
+    }
+    return out
   }
 
   /**
@@ -164,27 +249,42 @@ export class FeedbackDesk {
       !rt.reviewRunning
     if (!resting() || rec === null) return
     const head = await workHead(rec).catch(() => null)
-    const e = this.current(rec, head)
-    if (e === null || head === null || !resting()) return
-    const { facts, findings } = unsent(rec, e)
-    if (facts.length + findings.length === 0) return
+    const tips = await readTips(rec)
+    const items = head === null ? [] : this.items(rec, head, tips)
+    if (items.length === 0 || head === null || !resting()) return
     const since = rt.lastHumanInputAt === null ? Infinity : this.nowMs() - rt.lastHumanInputAt
+    const stop = this.blockedAll(
+      rec,
+      items.map((i) => i.e),
+    )
     const reason: FeedbackHold | null =
-      blocked(rec, e) ?? (rt.draft ? 'draft' : since < this.quietMs ? 'human_input' : null)
+      stop ?? (rt.draft ? 'draft' : since < this.quietMs ? 'human_input' : null)
     if (reason !== null) {
       if (reason === 'human_input') this.retry(id, this.quietMs - since)
-      if (rt.feedbackHeld?.head === head && rt.feedbackHeld.reason === reason) return
-      rt.feedbackHeld = { head, reason }
+      const key = heldKey(head, tips) ?? head
+      if (rt.feedbackHeld?.head === key && rt.feedbackHeld.reason === reason) return
+      rt.feedbackHeld = { head: key, reason }
+      const count = (f: (i: Item) => number) => items.reduce((n, i) => n + f(i), 0)
       this.ctx.note(id, {
         type: 'feedback_held',
         head,
         reason,
-        facts: facts.length,
-        findings: findings.length,
+        facts: count((i) => i.facts.length),
+        findings: count((i) => i.findings.length),
       })
       return this.ctx.publish(id)
     }
-    await this.send(rec, head, facts, findings, 'relay')
+    await this.send(rec, items, 'relay')
+  }
+
+  /** 자리들 가운데 하나라도 막으면 막는다(라운드 상한, 사람이 넘기지 않은 사람 몫의 올림) */
+  private blockedAll(rec: WorkRecord, bundles: EvidenceBundle[]): 'cap' | 'human_findings' | null {
+    const reasons = bundles.map((e) => blocked(rec, e))
+    return reasons.includes('cap')
+      ? 'cap'
+      : reasons.includes('human_findings')
+        ? 'human_findings'
+        : null
   }
 
   private get quietMs(): number {
@@ -214,73 +314,79 @@ export class FeedbackDesk {
 
   /**
    * [세션에 넘기기]: 지금 HEAD의 리뷰 지적을 되먹임 파일로 보낸다. 사람에게만 보이는 지적도 보낸다(사람이 정했다). 쉬는지,
-   * 최근 입력했는지는 보지 않고 라운드로 세지 않는다. 구현 중이고 묶음이 지금 HEAD·계약의 것이어야 한다
+   * 최근 입력했는지는 보지 않고 라운드로 세지 않는다. 구현 중이고 묶음이 지금 HEAD·계약의 것이어야 한다. unit은 단위 브랜치의
+   * 내보내기(V22, branch_per_unit에서는 꼭 준다)
    */
-  sendFindings(id: string, ids: string[]): Promise<void> {
+  sendFindings(id: string, ids: string[], unit?: string): Promise<void> {
     return this.serial(id, async () => {
       const rec = this.ctx.record(id)
       if (rec.state !== 'working') throw new Error('구현 중인 Work만 세션에 넘길 수 있음')
-      const head = await workHead(rec)
-      const e = this.current(rec, head)
-      if (e === null)
+      const spot = spotsOf(rec).find((s) => s.x !== null && s.x.unit === (unit ?? null))
+      if (spot === undefined) throw new Error(`리뷰가 있는 내보내기가 아님: ${unit ?? '단위 없음'}`)
+      const head = this.tip(spot, await workHead(rec), await readTips(rec))
+      const e = this.current(rec, spot, head)
+      if (e === null || head === null)
         throw new Error('지금 HEAD를 지금 계약으로 잰 증거가 없음: 증거를 다시 재세요')
       const all = e.review?.findings ?? []
       const unknown = ids.filter((i) => !all.some((f) => f.id === i))
       if (ids.length === 0 || unknown.length > 0)
         throw new Error(`지금 HEAD의 리뷰에 없는 지적: ${unknown.join(', ') || '없음'}`)
       const chosen = all.filter((f) => ids.includes(f.id))
-      await this.send(rec, head, [], chosen, 'human')
+      await this.send(rec, [{ spot, head, e, facts: [], findings: chosen }], 'human')
     })
   }
 
-  /** 파일을 쓰고, 기록하고, 세션에 한 줄을 전한다(세션이 멈췄으면 다음 재개의 프롬프트로). 차례 안에서만 부른다 */
-  private async send(
-    rec: WorkRecord,
-    head: string,
-    facts: FeedbackFact[],
-    findings: ReviewFinding[],
-    by: FeedbackRound['by'],
-  ): Promise<void> {
+  /**
+   * 자리마다 파일을 쓰고, 기록하고, 세션에 한 줄씩 전한다(세션이 멈췄으면 다음 재개의 프롬프트로). relay가 보낸 것은 라운드
+   * 하나로 센다. 차례 안에서만 부른다
+   */
+  private async send(rec: WorkRecord, items: Item[], by: FeedbackRound['by']): Promise<void> {
     const { store } = this.ctx.deps
-    const n = rec.feedback.sent.length + 1
-    const path = store.feedbackPath(rec.id, n)
-    await store.writeFileAtomic(
-      path,
-      feedbackText({ n, head, workBranch: rec.branch, facts, findings, by }),
-    )
-    const keys = [...facts.map((f) => f.key), ...findings.map(findingKey)]
-    const round: FeedbackRound = {
-      n,
-      head,
-      at: this.ctx.deps.now(),
-      by,
-      keys,
-      facts: facts.length,
-      findings: findings.length,
+    const lines: string[] = []
+    for (const { spot, head, facts, findings } of items) {
+      const n = rec.feedback.sent.length + 1
+      const path = store.feedbackPath(rec.id, n)
+      await store.writeFileAtomic(
+        path,
+        feedbackText({ n, head, workBranch: spot.branch, facts, findings, by }),
+      )
+      const keys = [...facts.map((f) => f.key), ...findings.map(findingKey)]
+      const round: FeedbackRound = {
+        n,
+        head,
+        at: this.ctx.deps.now(),
+        by,
+        keys,
+        facts: facts.length,
+        findings: findings.length,
+      }
+      rec.feedback.sent.push(round)
+      const unit = spot.x?.unit ? { unit: spot.x.unit } : {}
+      this.ctx.note(rec.id, {
+        type: 'feedback',
+        n,
+        head,
+        by,
+        ...unit,
+        facts: round.facts,
+        findings: round.findings,
+        keys,
+      })
+      lines.push(
+        feedbackLine({ n, head, by, path, facts: facts.length, findings: findings.length }),
+      )
     }
-    rec.feedback.sent.push(round)
     if (by === 'relay') rec.feedback.rounds += 1
     this.ctx.runtime(rec.id).feedbackHeld = null
     await this.ctx.save(rec)
-    this.ctx.note(rec.id, {
-      type: 'feedback',
-      n,
-      head,
-      by,
-      facts: round.facts,
-      findings: round.findings,
-      keys,
-    })
-    await this.ctx.tell(
-      rec.id,
-      feedbackLine({ n, head, by, path, facts: facts.length, findings: findings.length }),
-    )
+    for (const line of lines) await this.ctx.tell(rec.id, line)
   }
 
-  /** [증거]의 되먹임 상태(지금 HEAD의 묶음으로) */
-  view(rec: WorkRecord): FeedbackView {
+  /** [증거]의 되먹임 상태(그 자리의 지금 끝의 묶음으로). 자리를 주지 않으면 첫 자리(Work 브랜치) */
+  view(rec: WorkRecord, spot: Spot | undefined = spotsOf(rec)[0]): FeedbackView {
     const rt = this.ctx.runtime(rec.id)
-    const e = this.current(rec, rt.head)
+    const at = spot === undefined ? null : this.tip(spot, rt.head, rt.tips)
+    const e = spot === undefined ? null : this.current(rec, spot, at)
     const sent = e === null ? [] : rec.feedback.sent.filter((r) => r.head === e.head)
     const keys = new Set(sent.flatMap((r) => r.keys))
     const findings: FeedbackView['findings'] = {}
@@ -293,7 +399,8 @@ export class FeedbackDesk {
       for (const f of of) findings[f.id] = { route, sent: keys.has(findingKey(f)) }
     const pending = left.facts.length + left.findings.length
     // 상한과 사람 몫의 올림은 지금 기록으로, 사람의 입력은 마지막으로 본 때의 까닭과 지금 입력 칸으로
-    const held = rt.feedbackHeld?.head === e?.head ? rt.feedbackHeld?.reason : undefined
+    const now = heldKey(rt.head, perUnit(rec) ? rt.tips : {})
+    const held = e !== null && rt.feedbackHeld?.head === now ? rt.feedbackHeld.reason : undefined
     const typing =
       held === 'draft' || held === 'human_input' ? (rt.draft ? 'draft' : 'human_input') : null
     return {

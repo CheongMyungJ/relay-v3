@@ -283,14 +283,20 @@ export function unitsOf(c: Contract): string[] {
 }
 
 /**
- * 한 단위의 조각(V22가 단위 브랜치를 잴 때): 그 단위의 줄과 단위가 없는 줄, 그 줄들의 예시. 계약 id와 줄 밖의 칸은 그대로다
+ * 한 단위의 조각(V22가 단위 브랜치를 잴 때): 그 단위의 줄과 단위가 없는 줄, 그 줄들의 예시. 계약 id와 줄 밖의 칸은 그대로다.
+ * 전달 방식은 뺀다: 조각은 제 브랜치 하나로 간다(branch_per_unit은 단위가 둘 이상이어야 해 조각이 모양 검사를 지나지 못한다)
  */
 export function sliceContract(c: Contract, unit: string): Contract {
   const lines = c.lines.filter((l) => l.unit === undefined || l.unit === unit)
   const ids = new Set(lines.map((l) => l.id))
   const examples = c.examples.filter((x) => ids.has(EXAMPLE_ID.exec(x.id)?.[1] ?? ''))
-  return { ...c, lines, examples }
+  const out = { ...c, lines, examples }
+  delete out.delivery
+  return out
 }
+
+/** 단위 브랜치의 이름(V22) */
+export const unitBranch = (workBranch: string, unit: string): string => `${workBranch}--${unit}`
 
 // ── 근거 확인 ───────────────────────────────────────────────────────────────
 

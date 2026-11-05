@@ -1,6 +1,7 @@
 // [끝내기] (V25, docs/m2-modules.md 3절 works.ts, docs/m2.1-design.md 6절). works.ts가 600줄을 넘지 않게 나눴다.
-// [끝내기]는 지금 head의 내보내기 증거(리뷰 포함)를 본다. 열린 것(core openItems: 관문이 사람에게 보내는 사실 그대로)이
-// 없고 그사이 head가 그대로면 바로 끝낸다. 미리 리뷰(V23)가 끝난 head는 그 자리에서 내보내기로 잰다(다시 재지 않고
+// [끝내기]는 지금 head의 내보내기 증거(리뷰 포함)를 본다(V22: 머지되지 않은 내보내기마다, branch_per_unit이면 통합 증거도).
+// 열린 것(core openItems: 관문이 사람에게 보내는 사실 그대로. 통합 증거는 리뷰를 빼고, 없는 단위 브랜치는 '단위 브랜치
+// 없음')이 없고 그사이 head(와 단위 브랜치의 끝)가 그대로면 바로 끝낸다. 미리 리뷰(V23)가 끝난 head는 그 자리에서 내보내기로 잰다(다시 재지 않고
 // claude -p도 부르지 않는다). 그 증거가 아직 없거나 리뷰가 돌고 있거나 실패했으면 '걸린 끝'으로 두고 재며, 증거 재기가
 // 하나 끝날 때마다(EvidenceRunner의 줄 안에서) 다시 본다. 열린 것이 있으면 상자로 두고 사람이 [그래도 끝내기](V18의
 // [끝 확정])나 [더 고치기]를 고른다. 걸린 끝과 상자는 WorkRecord.end_pending이라 다른 Work로 갔다 오거나 앱을 다시 켜도
@@ -11,8 +12,21 @@ import { openItems } from '../core/gate.ts'
 import { nextState } from '../core/work.ts'
 import type { EndInput, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
-import type { EvidenceRunner } from './works-evidence.ts'
-import { isActive, measures, type MeasureJob, type WorkCtx, workHead } from './works-types.ts'
+import { missingFact, type EvidenceRunner } from './works-evidence.ts'
+import {
+  delivered,
+  exportContract,
+  isActive,
+  measures,
+  perUnit,
+  readTips,
+  sameTips,
+  tipOf,
+  type MeasureJob,
+  type Tips,
+  type WorkCtx,
+  workHead,
+} from './works-types.ts'
 
 /** 끝낸 방식(events.jsonl의 ended.how): 한 번에, 걸렸다가, 상자에서 [그래도 끝내기] */
 type How = 'once' | 'armed' | 'box'
@@ -46,16 +60,18 @@ export class EndDesk {
     if (!ok.ok) throw new Error(ok.errors.join('; '))
     if (o.force === true) return this.force(rec, o.head)
     const head = o.head === undefined ? await workHead(rec) : await this.sameHead(id, o.head)
+    const tips = await this.checkTips(id, o.tips)
     this.ctx.runtime(id).endMoved = null
     // 미리 리뷰가 끝난 head: 결정론 증거와 리뷰를 다시 써서 바로 내보내기로 잰다(장부 한 줄). 그 사이 정책이 머지했으면
     // 끝났다. 그 사이 HEAD가 바뀌었으면 끝내지 않는다
-    if (this.evidence.promotable(id, head)) {
+    if (this.evidence.promotable(id, head, tips)) {
       await this.evidence.run(id, { export: 'end' })
       if (!isActive(rec.state)) return { head: null, ended: true, armed: false, open: [] }
       await this.sameHead(id, head)
+      await this.checkTips(id, tips)
     }
-    if (this.ready(id, head)) return this.decide(rec, head, 'once')
-    rec.end_pending = { head, armed: true, open: [] }
+    if (this.ready(rec, head, tips)) return this.decide(rec, head, tips, 'once')
+    rec.end_pending = { head, armed: true, open: [], ...this.tipsOf(rec, tips) }
     await this.ctx.save(rec)
     this.ctx.note(id, { type: 'end_armed', head })
     // 도는 재기(미리 리뷰 등)가 있으면 그것이 끝난 뒤 settle이 내보내기를 줄 세운다: 그사이 HEAD가 바뀌면 재지 않는다
@@ -93,13 +109,17 @@ export class EndDesk {
     const rt = this.ctx.runtime(id)
     if (rt.abort.signal.aborted || rt.pending !== null) return
     const head = await workHead(rec).catch(() => null)
-    if (head !== null && head !== p.head) return this.ctx.seeHead(id, head)
-    if (head !== null && this.evidence.exported(id, head)) {
-      await this.decide(rec, head, 'armed')
+    const tips = await readTips(rec)
+    if (head !== null && (head !== p.head || !sameTips(tips, p.tips)))
+      return this.ctx.seeHead(id, head)
+    if (head !== null && this.evidence.exportedAll(rec, head, tips)) {
+      await this.decide(rec, head, tips, 'armed')
       return
     }
-    const other = job.head !== null && job.head !== p.head
-    if (head !== null && (job.export === null || other)) return this.measure(id)
+    // 모든 내보내기를 이 끝들로 재는 [끝내기]의 재기가 아니었다
+    const all = job.export !== null && job.only === null
+    const other = job.head !== null && (job.head !== p.head || !sameTips(job.tips, p.tips))
+    if (head !== null && (!all || other)) return this.measure(id)
     rec.end_pending = null
     await this.ctx.save(rec)
     this.ctx.note(id, { type: 'end_failed', head: p.head })
@@ -112,10 +132,13 @@ export class EndDesk {
     if (p?.armed === true && measures(rec.state)) this.measure(id)
   }
 
-  /** 읽은 HEAD가 걸린 끝이나 상자의 head가 아니면 지운다(화면은 endMoved로 까닭을 보인다). 지웠으면 참: 부른 쪽이 저장한다 */
-  follow(rec: WorkRecord, head: string): boolean {
+  /**
+   * 읽은 HEAD(와 단위 브랜치의 끝)가 걸린 끝이나 상자의 것이 아니면 지운다(화면은 endMoved로 까닭을 보인다). 지웠으면 참:
+   * 부른 쪽이 저장한다
+   */
+  follow(rec: WorkRecord, head: string, tips: Tips): boolean {
     const p = rec.end_pending
-    if (p === null || p.head === head) return false
+    if (p === null || (p.head === head && sameTips(p.tips, tips))) return false
     rec.end_pending = null
     this.ctx.runtime(rec.id).endMoved = p.head
     this.ctx.note(rec.id, { type: 'end_moved', from: p.head, to: head, armed: p.armed })
@@ -123,25 +146,55 @@ export class EndDesk {
   }
 
   /**
-   * 지금 묶음이 이 head를 지금 계약으로 내보내기(리뷰까지)로 잰 것이고 그 리뷰가 실패하지 않았다: 열린 것을 바로 볼 수 있다.
-   * 같은 head를 다시 내보내기로 재는 동안(리뷰 없는 묶음을 먼저 보임)은 아니다: 걸어 두고 그 리뷰 뒤에 정한다
+   * 지금 묶음들이 이 끝들을 지금 계약으로 내보내기(리뷰까지)로 잰 것이고 그 리뷰가 실패하지 않았다: 열린 것을 바로 볼 수
+   * 있다. 같은 head를 다시 내보내기로 재는 동안(리뷰 없는 묶음을 먼저 보임)은 아니다: 걸어 두고 그 리뷰 뒤에 정한다
    */
-  private ready(id: string, head: string): boolean {
-    return (
-      this.evidence.exported(id, head) && this.ctx.runtime(id).evidence?.review?.status !== 'failed'
+  private ready(rec: WorkRecord, head: string, tips: Tips): boolean {
+    const rt = this.ctx.runtime(rec.id)
+    const failed = rec.exports.some(
+      (x) => !delivered(x) && rt.bundles.get(x.branch)?.review?.status === 'failed',
     )
+    return this.evidence.exportedAll(rec, head, tips) && !failed
   }
 
-  /** 이 head의 내보내기 증거로 정한다: 열린 것이 없으면 끝내고, 있으면 상자로 둔다 */
-  private async decide(rec: WorkRecord, head: string, how: How): Promise<PreparedEnd> {
+  /** branch_per_unit이면 단위 브랜치의 끝을 걸린 끝과 상자에 둔다(V22) */
+  private tipsOf(rec: WorkRecord, tips: Tips): { tips?: Tips } {
+    return perUnit(rec) ? { tips } : {}
+  }
+
+  /**
+   * 이 끝들의 내보내기 증거의 열린 것. one_branch는 그 묶음의 열린 것 그대로다. branch_per_unit은 통합 증거의 열린 것(리뷰
+   * 빼고, '통합 증거: '), 머지되지 않은 내보내기마다 '<단위>: '를 붙인 열린 것, 없는 단위 브랜치. 묶음이 없으면 null
+   */
+  private openOf(rec: WorkRecord, head: string, tips: Tips): string[] | null {
     const rt = this.ctx.runtime(rec.id)
-    if (rt.evidence === null) throw new Error('증거가 없음: 끝내기를 다시 누르세요')
-    const open = openItems(rt.evidence, rt.contract, head)
+    if (!perUnit(rec)) {
+      const b = rt.bundles.get(rec.branch)
+      return b ? openItems(b, rt.contract, head) : null
+    }
+    const whole = rt.bundles.get(rec.branch)
+    if (!whole) return null
+    const out = openItems(whole, rt.contract, head, false).map((f) => `통합 증거: ${f}`)
+    for (const x of rec.exports) {
+      const tip = tipOf(x, head, tips)
+      const b = rt.bundles.get(x.branch)
+      if (delivered(x)) continue
+      if (tip === null) out.push(missingFact(x))
+      else if (!b) return null
+      else out.push(...openItems(b, exportContract(rt, x), tip).map((f) => `${x.unit}: ${f}`))
+    }
+    return out
+  }
+
+  /** 이 끝들의 내보내기 증거로 정한다: 열린 것이 없으면 끝내고, 있으면 상자로 둔다 */
+  private async decide(rec: WorkRecord, head: string, tips: Tips, how: How): Promise<PreparedEnd> {
+    const open = this.openOf(rec, head, tips)
+    if (open === null) throw new Error('증거가 없음: 끝내기를 다시 누르세요')
     if (open.length === 0) {
       await this.ctx.transition(rec, { type: 'ended' }, { how, head })
       return { head, ended: true, armed: false, open }
     }
-    rec.end_pending = { head, armed: false, open }
+    rec.end_pending = { head, armed: false, open, ...this.tipsOf(rec, tips) }
     await this.ctx.save(rec)
     this.ctx.note(rec.id, { type: 'end_box', head, open: open.length })
     return { head, ended: false, armed: false, open }
@@ -164,12 +217,13 @@ export class EndDesk {
     if (head === undefined) throw new Error('[그래도 끝내기]에는 상자의 head가 필요함')
     const id = rec.id
     await this.sameHead(id, head)
+    const tips = await this.checkTips(id, rec.end_pending?.tips)
     await this.exportHead(id)
     // 그 증거로 정책이 머지했으면 이미 끝났다
     if (!isActive(rec.state)) return { head: null, ended: true, armed: false, open: [] }
     await this.sameHead(id, head)
-    const rt = this.ctx.runtime(id)
-    const open = rt.evidence === null ? [] : openItems(rt.evidence, rt.contract, head)
+    await this.checkTips(id, tips)
+    const open = this.openOf(rec, head, tips) ?? []
     await this.ctx.transition(rec, { type: 'ended' }, { how: 'box', head, open: open.length })
     return { head, ended: true, armed: false, open }
   }
@@ -184,11 +238,24 @@ export class EndDesk {
     )
   }
 
-  /** 지금 HEAD를 내보내기(리뷰 포함)로 재지 않았으면 잰다. 이미 도는 같은 HEAD의 내보내기에는 합친다 */
+  /**
+   * 단위 브랜치의 끝(V22)을 돌려준다. tips를 넘겼는데(화면이나 상자의 것) 지금과 다르면 화면을 고치고(상자를 지운다) 던진다.
+   * one_branch는 빈 것
+   */
+  private async checkTips(id: string, tips: Tips | undefined): Promise<Tips> {
+    const rec = this.ctx.record(id)
+    const now = await readTips(rec)
+    if (tips === undefined || sameTips(tips, now)) return now
+    await this.ctx.seeHead(id, await workHead(rec).catch(() => null))
+    throw new Error('단위 브랜치가 바뀜: 끝내기를 다시 눌러 새 커밋의 증거와 리뷰를 보세요')
+  }
+
+  /** 지금 끝들을 내보내기(리뷰 포함)로 재지 않았으면 잰다. 이미 도는 같은 끝의 내보내기에는 합친다 */
   private async exportHead(id: string): Promise<void> {
     const rec = this.ctx.record(id)
     const head = await workHead(rec).catch(() => null)
     if (!measures(rec.state) || head === null) return
-    if (!this.evidence.exported(id, head)) await this.evidence.run(id, { export: 'end' })
+    if (!this.evidence.exportedAll(rec, head, await readTips(rec)))
+      await this.evidence.run(id, { export: 'end' })
   }
 }

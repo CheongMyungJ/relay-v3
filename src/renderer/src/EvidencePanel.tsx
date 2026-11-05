@@ -4,10 +4,13 @@
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
 // 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다). 결론 아래 되먹임 상태 한
 // 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시와 [세션에 넘기기](사람 몫, 그리고 저절로 가지 않는
-// 세션 몫), 상자에도 [세션에 넘기기].
+// 세션 몫), 상자에도 [세션에 넘기기](걸린 끝과 상자는 EndPanels.tsx). 단위 브랜치로 내보내면(V22) Work 브랜치의 통합 증거
+// 칸 하나(열린 것, 명령·줄·래칫·신호, 리뷰 없음)와 내보내기마다 칸 하나(결론, 되먹임, PR과 [머지], 펼침)를 보인다.
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
-import type { ProjectView, WorkView } from '../../shared/api.ts'
+import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
+import { EndArmed, EndBox } from './EndPanels.tsx'
+import { exportSection, integrationText } from './exports.ts'
 import {
   LINE_STATUS,
   OUTCOME,
@@ -19,13 +22,11 @@ import {
   decisiveText,
   endArmed,
   endMovedText,
-  endTexts,
   factText,
   isActive,
   isStale,
   missingOf,
   nextStep,
-  openText,
   outcomeOf,
   qualityNotice,
   reviewMeta,
@@ -34,14 +35,7 @@ import {
   showEndBox,
   timeText,
 } from './format.ts'
-import {
-  feedbackStatus,
-  findingGroups,
-  findingRoute,
-  passable,
-  passableFindings,
-  raiseLabel,
-} from './findings.ts'
+import { feedbackStatus, findingGroups, findingRoute, passable, raiseLabel } from './findings.ts'
 import { QualityNotice } from './QualityNotice.tsx'
 import { Empty, ErrorLine, Spinner, Tag, useAction } from './ui.tsx'
 
@@ -62,110 +56,125 @@ export function EvidencePanel(p: { view: WorkView; project: ProjectView | null }
           {moved}
         </p>
       ) : null}
-      {view.gate ? (
-        <Verdict
-          gate={view.gate}
-          view={view}
-          qualityNotice={notice}
-          ending={armed || box !== null}
-        />
-      ) : e === null ? (
-        <Empty title="아직 증거가 없습니다">
-          세션이 커밋하고 쉬면, 또는 PR을 열면 앱이 품질 기준의 명령을 돌려 증거를 잽니다.
-        </Empty>
+      {view.exports.length > 0 ? (
+        <UnitSections view={view} qualityNotice={notice} ending={armed || box !== null} />
       ) : (
-        <Empty title="관문의 결론이 아직 없습니다">증거를 다시 재면 관문을 다시 계산합니다.</Empty>
+        <>
+          {view.gate ? (
+            <Verdict
+              gate={view.gate}
+              view={view}
+              qualityNotice={notice}
+              ending={armed || box !== null}
+            />
+          ) : e === null ? (
+            <Empty title="아직 증거가 없습니다">
+              세션이 커밋하고 쉬면, 또는 PR을 열면 앱이 품질 기준의 명령을 돌려 증거를 잽니다.
+            </Empty>
+          ) : (
+            <Empty title="관문의 결론이 아직 없습니다">
+              증거를 다시 재면 관문을 다시 계산합니다.
+            </Empty>
+          )}
+          <FeedbackLine view={view} />
+          {view.evidenceRunning ? <Spinner label="증거를 재는 중…" /> : null}
+          {view.reviewRunning ? <Spinner label="리뷰 도는 중…" /> : null}
+          <Actions view={view} unit={undefined} measure />
+          {e ? <Details view={view} e={e} unit={undefined} /> : null}
+        </>
       )}
-      <FeedbackLine view={view} />
-      {view.evidenceRunning ? <Spinner label="증거를 재는 중…" /> : null}
-      {view.reviewRunning ? <Spinner label="리뷰 도는 중…" /> : null}
-      <Actions view={view} />
-      {e ? <Details view={view} e={e} /> : null}
-    </div>
-  )
-}
-
-/** 걸린 끝(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. [취소]로 푼다 */
-function EndArmed({ view }: { view: WorkView }) {
-  const act = useAction()
-  return (
-    <div
-      className="callout tone-info"
-      role="region"
-      aria-label="걸린 끝내기"
-      data-testid="end-armed"
-    >
-      <p className="callout-title">{endTexts(view).armed}</p>
-      <div className="row">
-        <button
-          type="button"
-          className="secondary"
-          disabled={act.busy}
-          onClick={() => void act.run(() => window.relay.cancelEnd(view.id))}
-        >
-          취소
-        </button>
-      </div>
-      <ErrorLine text={act.error} />
     </div>
   )
 }
 
 /**
- * [끝내기]의 상자(V25): 열린 것(관문이 사람에게 보내는 사실)만 보인다. 사람이 보고 [그래도 끝내기]하거나, 세션에게 더
- * 고치라고 말하고 [더 고치기]로 닫는다. [그래도 끝내기]는 상자의 head를 넘긴다: 그사이 세션이 커밋했으면 메인이 끝내지 않는다
+ * 단위 브랜치의 내보내기(V22): Work 브랜치의 통합 증거 칸(결정론만, 리뷰·관문·PR 없음)과 내보내기마다 칸. 내보내기의 칸은
+ * 그 내보내기로 바꾼 WorkView(exportSection)로 one_branch와 같은 결론·되먹임·펼침을 그린다
  */
-function EndBox(p: { view: WorkView; head: string; open: string[] }) {
-  const act = useAction()
+function UnitSections(p: { view: WorkView; qualityNotice: boolean; ending: boolean }) {
   const { view } = p
-  // 열린 것에 보이는 올림을 세션에 보내고 상자를 닫는다(V24): 상자가 떠 있는 동안은 세션 몫도 저절로 가지 않는다
-  const pass = view.state === 'working' ? passableFindings(view) : []
+  const e = view.evidence
+  const others = view.exports.some((x) => x.evidenceRunning || x.reviewRunning)
   return (
-    <div className="callout tone-warn" role="region" aria-label="끝내기 확인" data-testid="end-box">
-      <p className="callout-title">{endTexts(view).box}</p>
-      <ul className="plain-list" data-testid="end-open">
-        {p.open.map((fact, i) => (
-          <li key={i}>{openText(fact, view)}</li>
-        ))}
-      </ul>
-      <div className="row">
-        <button
-          type="button"
-          className="primary"
-          disabled={act.busy}
-          onClick={() =>
-            void act.run(() => window.relay.end(view.id, { head: p.head, force: true }))
-          }
+    <>
+      <section className="export-section" data-testid="integration">
+        <p className="export-title">
+          통합 · <code>{view.branch}</code>
+        </p>
+        <p className="muted small">
+          모든 단위가 함께 있는 Work 브랜치를 계약 전체로 잽니다(리뷰 없음). 내보내기가 자동 조건을
+          채우려면 여기에 열린 것이 없어야 합니다.
+        </p>
+        <p
+          className={`integration-status${view.integration?.length ? ' warn-text' : ''}`}
+          data-testid="integration-status"
         >
-          그래도 끝내기
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={act.busy}
-          onClick={() => void act.run(() => window.relay.cancelEnd(view.id))}
-        >
-          더 고치기
-        </button>
-        {pass.length > 0 ? (
-          <button
-            type="button"
-            className="secondary"
-            disabled={act.busy}
-            title="열린 리뷰 올림을 세션에 보내고 상자를 닫습니다"
-            onClick={() =>
-              void act.run(async () => {
-                await window.relay.sendFindings(view.id, pass)
-                await window.relay.cancelEnd(view.id)
-              })
-            }
-          >
-            세션에 넘기기
-          </button>
+          {integrationText(view)}
+        </p>
+        {view.integration && view.integration.length > 0 ? (
+          <ul className="plain-list" data-testid="integration-open">
+            {view.integration.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
         ) : null}
-      </div>
-      <ErrorLine text={act.error} />
-    </div>
+        {e ? (
+          <p className="verdict-meta">
+            <span>
+              HEAD <code>{shortSha(e.head)}</code>
+            </span>
+            <span>{timeText(e.created_at)}</span>
+          </p>
+        ) : null}
+        {isStale(view) ? <p className="stale">낡은 증거: 다시 재야 합니다.</p> : null}
+        <FeedbackLine view={view} />
+        {view.evidenceRunning && !others ? <Spinner label="증거를 재는 중…" /> : null}
+        <Actions view={view} unit={undefined} measure />
+        {e ? <Details view={view} e={e} unit={undefined} integration /> : null}
+      </section>
+      {view.exports.map((x) => (
+        <ExportSection
+          key={x.branch}
+          x={x}
+          view={exportSection(view, x)}
+          qualityNotice={p.qualityNotice}
+          ending={p.ending}
+        />
+      ))}
+    </>
+  )
+}
+
+/** 내보내기 하나(V22): 단위와 브랜치, 결론(없는 브랜치면 그 사실), 되먹임, PR과 [머지], 펼침 */
+function ExportSection(p: {
+  x: ExportView
+  view: WorkView
+  qualityNotice: boolean
+  ending: boolean
+}) {
+  const { x, view } = p
+  return (
+    <section className="export-section" data-testid="export" data-unit={x.unit}>
+      <p className="export-title">
+        단위 {x.unit} · <code>{x.branch}</code>
+      </p>
+      {x.missing ? (
+        <p className="stale" role="note" data-testid="export-missing">
+          단위 브랜치가 없습니다: 세션이 {x.branch}를 기준 브랜치에서 만들고 이 단위의 커밋을 얹어야
+          합니다.
+        </p>
+      ) : null}
+      {view.gate ? (
+        <Verdict gate={view.gate} view={view} qualityNotice={p.qualityNotice} ending={p.ending} />
+      ) : (
+        <Empty title="아직 증거가 없습니다">세션이 이 단위 브랜치에 커밋하고 쉬면 잽니다.</Empty>
+      )}
+      <FeedbackLine view={view} />
+      {view.evidenceRunning ? <Spinner label="증거를 재는 중…" /> : null}
+      {view.reviewRunning ? <Spinner label="리뷰 도는 중…" /> : null}
+      <Actions view={view} unit={x.unit} measure={false} />
+      {view.evidence ? <Details view={view} e={view.evidence} unit={x.unit} /> : null}
+    </section>
   )
 }
 
@@ -247,14 +256,15 @@ function Verdict(p: { gate: GateResult; view: WorkView; qualityNotice: boolean; 
   )
 }
 
-function Actions({ view }: { view: WorkView }) {
+/** [머지](unit: 그 내보내기, V22)와 measure이면 [증거 다시 재기](모든 자리를 다시 잰다) */
+function Actions({ view, unit, measure }: { view: WorkView; unit?: string; measure: boolean }) {
   const act = useAction()
   const [merged, setMerged] = useState<string | null>(null)
   const running = view.evidenceRunning || view.reviewRunning
-  const measurable = view.state === 'working' || view.state === 'recontract'
+  const measurable = measure && (view.state === 'working' || view.state === 'recontract')
   const merge = () =>
     void act.run(async () => {
-      const r = await window.relay.merge(view.id)
+      const r = await window.relay.merge(view.id, unit)
       if (!r.ok) throw new Error(r.error ?? '머지하지 못함')
       setMerged('머지했습니다')
     })
@@ -323,9 +333,10 @@ function Fold(p: { title: string; count?: number; open?: boolean; children: Reac
  * 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄, 되먹임(V24: 세션에 보냄, 세션 몫이면 쉬면 저절로 감, 사람 몫이거나 저절로 가지
  * 않는 세션 몫(상한, 사람 몫의 올림이 막음, 끝내기)이면 [세션에 넘기기])
  */
-function FindingList({ findings, view }: { findings: ReviewFinding[]; view: WorkView }) {
+function FindingList(p: { findings: ReviewFinding[]; view: WorkView; unit?: string }) {
+  const { findings, view } = p
   const act = useAction()
-  const send = (id: string) => void act.run(() => window.relay.sendFindings(view.id, [id]))
+  const send = (id: string) => void act.run(() => window.relay.sendFindings(view.id, [id], p.unit))
   return (
     <>
       <ul className="fact-list">
@@ -368,13 +379,13 @@ function FindingList({ findings, view }: { findings: ReviewFinding[]; view: Work
  * 올림과 메모(V26): 올림은 관문이 사람에게 보내는 사실이고(위 '사람에게 보낸 까닭'에도 있다), 메모(구조/낮음, 갈래가 없는
  * 지적)는 관문 사실이 아니다. 빈 묶음은 보이지 않는다
  */
-function FindingGroups({ findings, view }: { findings: ReviewFinding[]; view: WorkView }) {
-  const { raised, notes } = findingGroups(findings)
+function FindingGroups(p: { findings: ReviewFinding[]; view: WorkView; unit?: string }) {
+  const { raised, notes } = findingGroups(p.findings)
   const group = (id: string, title: string, of: ReviewFinding[]) =>
     of.length === 0 ? null : (
       <section data-testid={id}>
         <p className="muted small">{title}</p>
-        <FindingList findings={of} view={view} />
+        <FindingList findings={of} view={p.view} unit={p.unit} />
       </section>
     )
   return (
@@ -385,7 +396,8 @@ function FindingGroups({ findings, view }: { findings: ReviewFinding[]; view: Wo
   )
 }
 
-function Details(p: { view: WorkView; e: EvidenceBundle }) {
+/** 펼침. unit은 지적의 내보내기(V22), integration은 통합 증거(리뷰 없음: 리뷰 지적을 보이지 않는다) */
+function Details(p: { view: WorkView; e: EvidenceBundle; unit?: string; integration?: boolean }) {
   const { e, view } = p
   const gate = view.gate
   const findings = e.review?.findings ?? []
@@ -464,14 +476,16 @@ function Details(p: { view: WorkView; e: EvidenceBundle }) {
           ))}
         </ul>
       </Fold>
-      <Fold title="리뷰 지적" count={findings.length}>
-        {review ? (
-          <p className="muted" data-testid="review-note">
-            {review}
-          </p>
-        ) : null}
-        <FindingGroups findings={findings} view={view} />
-      </Fold>
+      {p.integration ? null : (
+        <Fold title="리뷰 지적" count={findings.length}>
+          {review ? (
+            <p className="muted" data-testid="review-note">
+              {review}
+            </p>
+          ) : null}
+          <FindingGroups findings={findings} view={view} unit={p.unit} />
+        </Fold>
+      )}
       <Fold title="없는 증거" count={missing.length}>
         {missing.length === 0 ? <p className="muted">없음</p> : null}
         <ul className="plain-list">

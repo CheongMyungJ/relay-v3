@@ -185,14 +185,14 @@ describe('한 Work의 생애', () => {
     expect(reviewed?.usage).toMatchObject({ input_tokens: 1000, output_tokens: 50 })
     // 미리 리뷰로 자동 조건을 채워도(그림자) 내보내기가 아니면 장부에 쓰지 않는다(V23)
     expect(v.gate).toMatchObject({ conclusion: 'human_merge', condition: 'small', shadow: true })
-    expect(works.find(id)?.exported_head).toBeNull()
+    expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
     expect(await app.store.readLedger()).toEqual([])
     expect(v.head).toBe(head)
 
     // 세션이 push하고 PR을 연다 → 내보내기 후보: 같은 head·계약의 증거와 미리 리뷰를 다시 쓴다(claude -p 한 번)
     app.sessions.write(id, 'go\r')
     await until(
-      () => works.find(id)?.exported_head === head && settled(works.view(id)),
+      () => works.find(id)?.exports[0]?.exported_head === head && settled(works.view(id)),
       '내보내기 증거',
     )
     v = works.view(id)

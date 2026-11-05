@@ -104,10 +104,13 @@ export interface WorkView {
   pendingContract: Contract | null
   /** 세션의 계약 바꾸기 요청 까닭(recontract) */
   pendingChange: string | null
-  /** 마지막 증거 묶음 */
+  /**
+   * 마지막 증거 묶음. Work 브랜치의 것이다: one_branch는 내보내기, branch_per_unit은 통합 증거(V22: 계약 전체, 결정론만)
+   */
   evidence: EvidenceBundle | null
-  /** 마지막 관문 결론 */
+  /** 마지막 관문 결론(Work 브랜치의 내보내기). branch_per_unit은 null(내보내기마다 exports에) */
   gate: GateResult | null
+  /** Work 브랜치의 내보내기의 PR. branch_per_unit은 null(내보내기마다 exports에) */
   pr: PrInfo | null
   evidenceRunning: boolean
   reviewRunning: boolean
@@ -133,6 +136,30 @@ export interface WorkView {
   feedback: FeedbackView
   /** 보이는 계약(pendingContract, 없으면 contract)의 제출 때 기준 확인(V28). 다른 계약의 것이거나 없으면 null */
   probe: ContractProbe | null
+  /** 단위 브랜치의 내보내기(V22, branch_per_unit). one_branch는 빈 목록이다(위 칸들이 Work 브랜치의 내보내기다) */
+  exports: ExportView[]
+  /**
+   * branch_per_unit의 통합 증거(evidence)의 열린 것(core openItems, 리뷰를 빼고 지금 HEAD로). 아직 재지 않았으면 null.
+   * one_branch는 null
+   */
+  integration: string[] | null
+}
+
+/**
+ * 단위 브랜치의 내보내기 하나(V22): 그 브랜치의 끝, 계약의 조각으로 잰 증거, 관문, PR, 되먹임. head가 null이면 아직 읽지
+ * 못했고, missing이면 브랜치가 없다(관문은 '단위 브랜치 없음')
+ */
+export interface ExportView {
+  unit: string
+  branch: string
+  head: string | null
+  missing: boolean
+  evidence: EvidenceBundle | null
+  gate: GateResult | null
+  pr: PrInfo | null
+  evidenceRunning: boolean
+  reviewRunning: boolean
+  feedback: FeedbackView
 }
 
 /** 세션에 보낸 되먹임 파일 하나(V24, works/<id>/feedback/<n>.md) */
@@ -180,6 +207,8 @@ export interface EndPending {
   head: string
   armed: boolean
   open: string[]
+  /** branch_per_unit(V22)의 단위 브랜치마다 끝(없으면 null). 이것이 바뀌어도 지운다 */
+  tips?: Record<string, string | null>
 }
 
 export interface WorkList {
@@ -220,10 +249,14 @@ export interface PreparedEnd {
   open: string[]
 }
 
-/** [끝내기]의 입력. force는 [그래도 끝내기]이고 head는 상자의 head다. 아니면 head는 화면의 HEAD(다르면 끝내지 않는다) */
+/**
+ * [끝내기]의 입력. force는 [그래도 끝내기]이고 head는 상자의 head다. 아니면 head는 화면의 HEAD(다르면 끝내지 않는다)이고
+ * tips는 화면의 단위 브랜치의 끝(V22, 다르면 끝내지 않는다)
+ */
 export interface EndInput {
   head?: string
   force?: boolean
+  tips?: Record<string, string | null>
 }
 
 /** terminal.attach의 답: 최근 출력(최대 200KB)과 그다음 조각의 번호. 이후 조각은 seq ≥ 이 값만 받는다 */
@@ -280,7 +313,8 @@ export interface RelayApi {
   approveContract(id: string): Promise<void>
   askChanges(id: string, message: string): Promise<void>
   answerChange(id: string, o: ChangeAnswer): Promise<void>
-  merge(id: string): Promise<MergeResult>
+  /** [머지]: 내보내기 하나. unit은 단위 브랜치의 내보내기(V22, branch_per_unit에서는 꼭 준다) */
+  merge(id: string, unit?: string): Promise<MergeResult>
   /**
    * [끝내기](V25): 지금 HEAD의 내보내기 증거(리뷰 포함)에 열린 것이 없으면 끝낸다. 아직 재지 않았으면 걸어 두고 재며, 열린
    * 것이 있으면 상자로 둔다. force([그래도 끝내기])는 head(상자의 head)가 지금 HEAD일 때만 끝낸다. 다르면 던진다
@@ -293,9 +327,9 @@ export interface RelayApi {
   runEvidence(id: string): Promise<void>
   /**
    * [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적(id)을 되먹임 파일로 세션에 보낸다. 사람에게만 보이는 지적(계약 밖 변경, 메모
-   * 등)도 보낸다. 라운드 상한에 세지 않는다
+   * 등)도 보낸다. 라운드 상한에 세지 않는다. unit은 그 지적의 내보내기(V22, branch_per_unit에서는 꼭 준다)
    */
-  sendFindings(id: string, ids: string[]): Promise<void>
+  sendFindings(id: string, ids: string[], unit?: string): Promise<void>
   terminal: {
     attach(id: string): Promise<TerminalBacklog>
     write(id: string, data: string): void

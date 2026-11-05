@@ -628,3 +628,26 @@
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+
+/* 단위 브랜치의 내보내기(V22): 통합 증거 한 칸과 내보내기마다 한 칸 */
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.export-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+.export-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+.integration-status {
+  margin: 0;
+  font-weight: 600;
+  font-size: 15px;
+}

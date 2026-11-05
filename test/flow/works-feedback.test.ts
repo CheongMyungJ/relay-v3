@@ -115,7 +115,7 @@ test('결정론 실패와 세션 몫의 리뷰 올림은 쉬는 세션에 파일
     { type: 'feedback_held', head: last, reason: 'cap', facts: 0, findings: 1 },
   ])
   // 미리 리뷰는 고친 head부터 셋(V23의 상한 4 안)
-  expect(rec.prepared_reviews).toBe(3)
+  expect(rec.exports[0]?.prepared_reviews).toBe(3)
 
   // 파일은 자료다: 결정론 사실, 인용으로 감싼 지적과 주장이라는 말. 터미널에는 그 파일을 가리키는 한 줄만
   const file = (n: number) => readFile(app.store.feedbackPath(id, n), 'utf8')

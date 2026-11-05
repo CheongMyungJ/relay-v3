@@ -1,4 +1,4 @@
-// [단위] 실적 장부(그림자): 일치·불일치, 버전이 바뀌면 다시 잼, 장부 읽기
+// [단위] 실적 장부(그림자): 일치·불일치, 버전이 바뀌면 다시 잼, Work를 조건마다 한 건으로(V22 내보내기), 장부 읽기
 import { describe, expect, test } from 'vitest'
 import { parseLedger, trackRecord, type LedgerEntry } from '../../src/core/ledger.ts'
 
@@ -97,6 +97,36 @@ describe('trackRecord', () => {
     expect(trackRecord(decidedNow, 'p1', 20, NOW)).toEqual({ small: true })
   })
 
+  test('Work를 조건마다 한 건으로 센다(V22): 그 조건을 채운 내보내기가 모두 그 head로 머지돼야 일치', () => {
+    const unit = (u: string, head: string, more: Partial<LedgerEntry> = {}) =>
+      shadow('u', head, { export: u, ...more })
+    const fate = (u: string, head: string, more: Partial<LedgerEntry> = {}) =>
+      unit(u, head, { merged_head: head, by: 'human', condition: null, ...more })
+    // 내보내기 둘이 각자 조건을 채운 head 그대로 머지됨: Work 하나, 일치 하나
+    const both = [unit('csv', 'a'), unit('money', 'b'), fate('csv', 'a'), fate('money', 'b')]
+    expect(trackRecord(both, 'p1', 1, NOW)).toEqual({ small: true })
+    expect(trackRecord(both, 'p1', 2, NOW)).toEqual({ small: false })
+    // 하나가 더 커밋해 머지됨: 그 Work는 불일치
+    const moved = [unit('csv', 'a'), unit('money', 'b'), fate('csv', 'a'), fate('money', 'c')]
+    expect(trackRecord([...matches(19), ...moved], 'p1', 1, NOW)).toEqual({ small: true })
+    expect(trackRecord([...matches(18), ...moved], 'p1', 1, NOW)).toEqual({ small: false })
+    // 하나가 아직 열렸거나 정책이 머지함: 세지 않는다
+    expect(
+      trackRecord([unit('csv', 'a'), unit('money', 'b'), fate('csv', 'a')], 'p1', 0, NOW),
+    ).toEqual({})
+    const policy = [...both.slice(0, 3), fate('money', 'b', { by: 'policy' })]
+    expect(trackRecord(policy, 'p1', 0, NOW)).toEqual({})
+    // 조건을 채우지 않은 내보내기의 끝은 그 조건에 들지 않는다
+    const one = [
+      unit('csv', 'a'),
+      fate('csv', 'a'),
+      unit('money', 'b', { closed: true, condition: null }),
+    ]
+    expect(trackRecord(one, 'p1', 1, NOW)).toEqual({ small: true })
+    // 내보내기의 끝은 내보내기마다: Work 브랜치의 머지(export 없음)는 단위 브랜치의 끝이 아니다
+    expect(trackRecord([unit('csv', 'a'), merged('u', 'a')], 'p1', 0, NOW)).toEqual({})
+  })
+
   test('조건마다 따로 잰다', () => {
     const big = [shadow('q', 'h', { condition: 'docs' }), shadow('q', 'h', { closed: true })]
     expect(trackRecord([...matches(20), ...big], 'p1', 20, NOW)).toEqual({
@@ -117,6 +147,7 @@ describe('parseLedger', () => {
       JSON.stringify({ ...a, conclusion: 'merge' }),
       JSON.stringify({ ...a, by: 'robot' }),
       JSON.stringify({ ...a, relay_version: undefined }),
+      JSON.stringify({ ...a, export: 3 }),
       '[1,2]',
       JSON.stringify(b) + '\r',
     ].join('\n')

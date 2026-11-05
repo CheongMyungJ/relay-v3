@@ -50,6 +50,9 @@ const reviewsOf = async (app: TestApp, id: string) =>
 const workJson = async (app: TestApp, id: string) =>
   JSON.parse((await app.store.readText(id, 'work.json')) ?? '') as Entry
 
+/** work.json의 미리 리뷰 수: Work 브랜치의 내보내기(V22) */
+const prepared = (w: Entry) => (w.exports as Entry[])[0]?.prepared_reviews
+
 async function start(app: TestApp, projectId?: string): Promise<string> {
   const { works } = app
   const project = projectId ?? (await works.addProject(kit.repo.dir)).id
@@ -80,9 +83,9 @@ test('미리 리뷰가 끝난 head의 [끝내기]는 걸리지 않고 한 번에
   )
   const head = works.view(id).head ?? ''
   // 내보내기가 아니다: 장부에 쓰지 않는다
-  expect(works.find(id)?.exported_head).toBeNull()
+  expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
   expect(await app.store.readLedger()).toEqual([])
-  expect((await workJson(app, id)).prepared_reviews).toBe(1)
+  expect(prepared(await workJson(app, id))).toBe(1)
 
   expect(await works.end(id, { head })).toEqual({ head, ended: true, armed: false, open: [] })
   expect(works.view(id).state).toBe('done')
@@ -183,7 +186,7 @@ describe('자동 머지가 켜진 프로젝트 (보호된 main, 조건 small의 
     const id = await start(app, projectId)
     await until(() => {
       const v = works.view(id)
-      return v.head !== null && works.find(id)?.exported_head === v.head && settled(v)
+      return v.head !== null && works.find(id)?.exports[0]?.exported_head === v.head && settled(v)
     }, 'PR의 내보내기')
     const first = works.view(id).head ?? ''
     expect(works.view(id).gate?.conclusion).toBe('human_merge')
@@ -203,7 +206,7 @@ describe('자동 머지가 켜진 프로젝트 (보호된 main, 조건 small의 
       pr: { state: 'OPEN', headRefOid: first },
     })
     // 지금 묶음은 내보내기로 잰 것이 아니다(첫 head의 내보내기 묶음을 바꿨다)
-    expect(works.find(id)?.exported_head).toBeNull()
+    expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
     const mine = async () => (await app.store.readLedger()).filter((e) => e.work === id)
     expect((await mine()).map((e) => [e.head, e.conclusion])).toEqual([[first, 'human_merge']])
     const merges = async () =>
@@ -251,13 +254,13 @@ test('내보내기로 잰 head로 세션이 되돌아와 미리 리뷰를 새로
   const first = works.view(id).head ?? ''
   // [끝내기]가 미리 리뷰를 내보내기로 잰다(장부 한 줄): 올림이 있어 상자. [더 고치기]
   expect(await works.end(id, { head: first })).toMatchObject({ armed: false })
-  expect(works.find(id)?.exported_head).toBe(first)
+  expect(works.find(id)?.exports[0]?.exported_head).toBe(first)
   await works.cancelEnd(id)
 
   await kit.review(NOTE_FINDINGS)
   const second = await nextHead(app, id, first, '다른 길을 해 보세요')
   // 내보내기가 아닌 재기가 묶음을 바꿨다: 지금 묶음은 내보내기로 잰 것이 아니다
-  expect(works.find(id)?.exported_head).toBeNull()
+  expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
   app.sessions.write(id, '되돌려 주세요\r')
   await until(() => {
     const v = works.view(id)
@@ -265,7 +268,7 @@ test('내보내기로 잰 head로 세션이 되돌아와 미리 리뷰를 새로
   }, '되돌린 head의 미리 리뷰')
   expect(second).not.toBe(first)
   expect(works.view(id).evidence?.review).toMatchObject({ status: 'done' })
-  expect(works.find(id)?.exported_head).toBeNull()
+  expect(works.find(id)?.exports[0]?.exported_head).toBeNull()
 
   // 같은 head지만 묶음(올림 없는 미리 리뷰)은 내보내기가 아니다: [끝내기]가 내보내기로 재서(다시 씀) 장부에 남긴다
   expect(await works.end(id, { head: first })).toEqual({
@@ -317,7 +320,7 @@ test("리뷰 범위 'auto_only'에서 자동 조건을 못 채운 head는 쉴 �
   expect(await events(app, id, 'evidence')).toHaveLength(1)
   expect((await jsonl(kit.ghLog)).length).toBe(asked)
   expect(await reviewCalls()).toBe(0)
-  expect((await workJson(app, id)).prepared_reviews).toBe(0)
+  expect(prepared(await workJson(app, id))).toBe(0)
 })
 
 test('세션이 셸 명령으로 커밋하면 도는 미리 리뷰를 바로 멈추고 버린다(리뷰마다 AbortController). 새 head는 다시 쉴 때 미리 리뷰한다', async () => {
@@ -359,7 +362,7 @@ test('세션이 셸 명령으로 커밋하면 도는 미리 리뷰를 바로 멈
     ])
     // 멈춘 리뷰의 head는 증거 기록(결론)을 남기지 않는다
     expect((await events(app, id, 'evidence')).map((e) => e.head)).toEqual([v.head])
-    expect((await workJson(app, id)).prepared_reviews).toBe(2)
+    expect(prepared(await workJson(app, id))).toBe(2)
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
   }
@@ -432,7 +435,7 @@ test('리뷰 준비가 아니면(시험 실패) 미리 리뷰하지 않는다(�
   // 고친 head와 메모 셋까지 넷은 미리 리뷰했다. 다섯째 head에는 리뷰가 없다
   expect(await reviewCalls()).toBe(4)
   expect(works.view(id).evidence?.review).toBeNull()
-  expect((await workJson(app, id)).prepared_reviews).toBe(4)
+  expect(prepared(await workJson(app, id))).toBe(4)
   expect(await works.end(id, { head })).toMatchObject({ armed: true })
   await until(() => works.view(id).state === 'done', '[끝내기]의 리뷰 뒤 끝남')
   expect(await reviewCalls()).toBe(5)

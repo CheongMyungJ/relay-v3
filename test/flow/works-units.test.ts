@@ -1,6 +1,7 @@
-// [흐름] 한 요청은 한 Work다(V21): 단위가 있는 계약을 한 번에 승인하고, 앱이 아직 받지 않는 전달 방식(branch_per_unit,
-// V22)은 바로 invalid다. 증거는 Work 브랜치의 ref로 잰다: 세션이 worktree에서 다른 브랜치로 옮겨 커밋해도 증거, 화면의
-// HEAD, [변경], [끝내기]가 재는 대상은 Work 브랜치의 끝 그대로다. 단위의 꼴과 약속은 [단위](contract-units.test.ts).
+// [흐름] 한 요청은 한 Work다(V21): 단위가 있는 계약을 한 번에 승인한다(one_branch). 증거는 Work 브랜치의 ref로 잰다:
+// 세션이 worktree에서 다른 브랜치로 옮겨 커밋해도 증거, 화면의 HEAD, [변경], [끝내기]가 재는 대상은 Work 브랜치의 끝
+// 그대로다. 단위의 꼴과 약속은 [단위](contract-units.test.ts), 단위 브랜치의 내보내기(branch_per_unit, V22)는
+// works-exports.test.ts.
 import { expect, test } from 'vitest'
 import { makeTempDir, runGit } from '../support/repo.ts'
 import {
@@ -13,24 +14,13 @@ import {
 } from '../support/works-flow.ts'
 
 const kit = flowKit()
-const { scenario, fake, mcpResults, until } = kit
+const { scenario, fake, until } = kit
 
 /** 버그 고침(clamp 단위)과 모든 단위에 걸친 지킴 줄 */
 const [C1, C2] = CONTRACT.lines
 const UNITS = { ...CONTRACT, lines: [{ ...C1, unit: 'clamp' }, C2] }
-/** branch_per_unit의 모양은 맞는 계약(단위 둘): 앱만 아직 받지 않는다 */
-const PER_UNIT = {
-  ...CONTRACT,
-  delivery: 'branch_per_unit',
-  lines: [
-    { ...C1, unit: 'clamp' },
-    { ...C2, unit: 'add' },
-  ],
-}
-
-test('단위가 있는 계약: branch_per_unit은 invalid, one_branch는 승인. 다른 브랜치로 옮긴 커밋은 재지 않고 Work 브랜치의 끝으로 [끝내기]', async () => {
+test('단위가 있는 계약(one_branch)은 한 번에 승인. 다른 브랜치로 옮긴 커밋은 재지 않고 Work 브랜치의 끝으로 [끝내기]', async () => {
   await scenario([
-    { do: 'mcp', tool: 'submit_contract', args: PER_UNIT },
     { do: 'mcp', tool: 'submit_contract', args: { ...UNITS, delivery: 'one_branch' } },
     FIX_COMMIT,
     { do: 'stop' },
@@ -46,20 +36,16 @@ test('단위가 있는 계약: branch_per_unit은 invalid, one_branch는 승인.
   const project = await works.addProject(kit.repo.dir)
   const { id, branch } = await works.createWork({ project: project.id, request: REQUEST })
 
-  // 앱이 아직 받지 않는 전달 방식은 모양 검사 전에 바로 invalid(영어, 세션이 읽는다)
   await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
-  expect((await mcpResults('submit_contract'))[0]).toEqual({
-    status: 'invalid',
-    errors: [
-      `delivery: "branch_per_unit" (a branch per unit) is not available yet. Leave delivery out or use "one_branch": all units go on the Work branch ${branch}, each unit in its own commits.`,
-    ],
-  })
   expect(works.view(id).pendingContract).toMatchObject({
     delivery: 'one_branch',
     lines: [{ id: 'C1', unit: 'clamp' }, { id: 'C2' }],
   })
   await works.approveContract(id)
   expect(works.view(id).contract?.lines.map((l) => l.unit)).toEqual(['clamp', undefined])
+  // 한 브랜치: 내보내기는 Work 브랜치 하나다(V22)
+  expect(works.record(id).exports.map((x) => [x.unit, x.branch])).toEqual([[null, branch]])
+  expect(works.view(id).exports).toEqual([])
 
   // Work 브랜치의 고침 커밋: 세션이 쉬면 재고 미리 리뷰(V23)까지 돈다
   await until(() => {

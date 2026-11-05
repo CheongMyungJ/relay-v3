@@ -23,7 +23,7 @@ import { parseQuality } from '../core/quality.ts'
 import type { DebtItem, QualityConfig } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import { EVENTS, type NewWorkInput } from '../shared/api.ts'
-import type { ProjectRecord, WorkRecord } from './store.ts'
+import { branchExport, type ProjectRecord, type WorkRecord } from './store.ts'
 import { message, type WorkCtx, type WorksDeps, workHead } from './works-types.ts'
 
 const BRANCH_NAME = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]+$/
@@ -198,14 +198,11 @@ export async function newWork(
     pending_contract: null,
     pending_change: null,
     groundings: null,
-    pr: null,
-    evidence_path: null,
-    gate: null,
-    exported_head: null,
+    exports: [branchExport(branch)],
+    integration_path: null,
     error: null,
     notice: null,
     end_pending: null,
-    prepared_reviews: 0,
     feedback: { rounds: 0, sent: [] },
     probe: null,
   }

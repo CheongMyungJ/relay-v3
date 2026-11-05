@@ -7,6 +7,7 @@
 // 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내므로 계약 판이 예시마다 기준 결과를 보인다(V28). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
 // 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의
 // 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다.
+// 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것.
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -104,6 +105,48 @@ const SCENARIO = {
     { do: 'bash', command: 'git push -u origin HEAD' },
     { do: 'bash', command: 'gh pr create --title "clamp 고침" --body b --base main' },
     { do: 'print', text: 'PR을 열었습니다.' },
+    { do: 'stop' },
+  ],
+}
+
+/** 단위 브랜치(V22)의 시나리오: Work 브랜치에 두 단위(clamp 고침, sub 새로)를 두고 clamp 단위 브랜치만 만든 채 쉰다 */
+const sub = (fn: string, from: string, id: string) => `import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { ${fn} } from '../src/${from}.js'
+const x = JSON.parse(readFileSync(new URL('../.relay/examples/{contractId}.json', import.meta.url), 'utf8'))['${id}']
+test('${fn} [{contractId}:${id}]', () => assert.equal(${fn}(...x.input), x.output))
+`
+const UNITS = {
+  start: [
+    {
+      do: 'mcp',
+      tool: 'submit_contract',
+      args: {
+        ...CONTRACT,
+        delivery: 'branch_per_unit',
+        lines: [
+          CONTRACT.lines[0],
+          { ...CONTRACT.lines[1], kind: 'new', text: 'sub(a, b)는 a - b', unit: 'sub' },
+        ],
+        examples: [CONTRACT.examples[0], { id: 'C2.1', input: [5, 3], output: 2 }],
+        non_goals: [],
+      },
+    },
+    {
+      do: 'commit',
+      message: 'clamp',
+      files: { 'src/calc.js': calc('hi'), 'test/c.test.js': sub('clamp', 'calc', 'C1.1') },
+    },
+    {
+      do: 'commit',
+      message: 'sub',
+      files: {
+        'src/sub.js': 'export const sub = (a, b) => a - b\n',
+        'test/s.test.js': sub('sub', 'sub', 'C2.1'),
+      },
+    },
+    { do: 'bash', command: 'git branch {branch}--clamp HEAD~1' },
     { do: 'stop' },
   ],
 }
@@ -510,4 +553,40 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   const width = await page.locator('.terminal-pane').evaluate((el) => el.clientWidth)
   expect(width).toBeGreaterThanOrEqual(560)
   await shot('narrow')
+})
+
+test('단위 브랜치(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 [끝내기] 상자의 열린 것', async () => {
+  // 가짜 claude는 뜰 때 시나리오를 읽는다
+  await writeFile(join(tmp, 'scenario.json'), JSON.stringify(UNITS))
+  await writeFile(join(tmp, 'review.json'), JSON.stringify({ findings: NOTES }))
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setContentSize(1400, 900)
+  })
+  await page.getByTestId('project').first().getByRole('button', { name: '+ 새 Work' }).click()
+  const dialog = page.getByRole('dialog', { name: '새 Work' })
+  await dialog
+    .getByLabel('요청', { exact: true })
+    .fill('clamp를 고치고 sub를 더해 주세요. 모듈마다 브랜치로.')
+  await dialog.getByRole('button', { name: '만들기' }).click()
+  const approve = page.getByTestId('approve-box')
+  await expect(approve).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('delivery')).toContainText('단위마다 브랜치: relay/')
+  await approve.getByRole('button', { name: '승인', exact: true }).click()
+  const evidence = page.getByTestId('evidence-panel')
+  await expect(evidence.getByTestId('integration-status')).toHaveText('통합 증거: 열린 것 없음', {
+    timeout: 60_000,
+  })
+  const units = evidence.getByTestId('export')
+  await expect(units).toHaveCount(2)
+  await expect(units.first().getByTestId('review-meta')).toHaveText(/^리뷰 끝\(이 head\)/, {
+    timeout: 60_000,
+  })
+  await expect(units.first()).toContainText('단위 clamp')
+  await expect(units.nth(1).getByTestId('export-missing')).toBeVisible()
+  await shot('units')
+  await page.locator('.work-head').getByRole('button', { name: '끝내기' }).click()
+  await expect(evidence.getByTestId('end-open')).toContainText(/단위 브랜치 없음: relay\/.*--sub/, {
+    timeout: 30_000,
+  })
+  await shot('units-end-box')
 })
