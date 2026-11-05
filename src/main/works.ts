@@ -30,7 +30,7 @@ import { toolCommand, type HookReply } from './hooks.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
 import { ContractDesk } from './works-contract.ts'
 import { dropEnd, EndDesk } from './works-end.ts'
-import { EvidenceRunner, exportable, headOf, isExportCommand } from './works-evidence.ts'
+import { EvidenceRunner, exportable, isExportCommand } from './works-evidence.ts'
 import { ProjectDesk } from './works-projects.ts'
 import { followReview } from './works-review.ts'
 import {
@@ -40,6 +40,7 @@ import {
   type Runtime,
   type WorkCtx,
   type WorksDeps,
+  workHead,
 } from './works-types.ts'
 import { launch, newWork, workDebt, workDiff } from './works-worktree.ts'
 
@@ -91,7 +92,7 @@ export class Works implements WorkCtx {
       const parsed = text === null ? null : parseContract(text)
       rt.contract = parsed?.ok ? parsed.value : null
       if (rec.evidence_path) rt.evidence = await readJson<EvidenceBundle>(rec.evidence_path)
-      await this.seeHead(id, await headOf(rec.worktree).catch(() => null))
+      await this.seeHead(id, await workHead(rec).catch(() => null))
       if (rec.pr?.state === 'OPEN' && isActive(rec.state)) this.evidence.startPoll(id)
       this.ending.resume(id)
     }
@@ -250,7 +251,7 @@ export class Works implements WorkCtx {
     const rec = await newWork(this.deps, project, o)
     this.refreshQuality(project.id)
     this.works.set(rec.id, rec)
-    this.runtime(rec.id).head = await headOf(rec.worktree).catch(() => null)
+    this.runtime(rec.id).head = await workHead(rec).catch(() => null)
     await this.save(rec)
     this.note(rec.id, { type: 'created', branch: rec.branch, base: rec.base_ref })
     await launch(this, rec, false)
@@ -379,7 +380,7 @@ export class Works implements WorkCtx {
    */
   private async checkForSession(rec: WorkRecord): Promise<unknown> {
     const rt = this.runtime(rec.id)
-    const head = await headOf(rec.worktree)
+    const head = await workHead(rec)
     if (!this.evidence.measured(rec.id, head)) {
       if (head === rt.measuring || rt.pending) await rt.chain
       if (!this.evidence.measured(rec.id, head)) await this.evidence.run(rec.id, {})
@@ -424,7 +425,7 @@ export class Works implements WorkCtx {
       dropEnd(this, rec)
       await this.save(rec)
     }
-    const head = await headOf(rec.worktree).catch(() => null)
+    const head = await workHead(rec).catch(() => null)
     if (!measures(rec.state) || head === null || rt.evidence === null) return
     if (this.evidence.measured(id, head)) return
     const exported = rec.exported_head === rt.evidence.head
@@ -470,7 +471,7 @@ export class Works implements WorkCtx {
   private async followHead(id: string): Promise<void> {
     const rec = this.works.get(id)
     if (!rec) return
-    await this.seeHead(id, await headOf(rec.worktree).catch(() => null))
+    await this.seeHead(id, await workHead(rec).catch(() => null))
   }
 
   async abandon(id: string): Promise<void> {

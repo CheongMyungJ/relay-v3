@@ -52,6 +52,12 @@ const CONTRACT_SCHEMA = {
           },
           examples: { ...strings, description: 'Example ids of this line: C1.1, C1.2, …' },
           check: { type: 'string', enum: ['test', 'observe', 'human'] },
+          unit: {
+            type: 'string',
+            pattern: '^[a-z][a-z0-9-]{0,20}$',
+            description:
+              'Optional: the part of the request this line belongs to (e.g. "csv"). Lines without a unit belong to every part.',
+          },
         },
         required: ['id', 'kind', 'text', 'grounds', 'examples', 'check'],
       },
@@ -74,6 +80,11 @@ const CONTRACT_SCHEMA = {
     human_rules: strings,
     hint: { type: 'string' },
     tidy: { ...strings, description: 'Debt item ids taken on as a tidy-up.' },
+    delivery: {
+      type: 'string',
+      enum: ['one_branch'],
+      description: 'Optional. All units go on the Work branch, each unit in its own commits.',
+    },
   },
   required: ['version', 'id', 'goal', 'lines', 'examples', 'non_goals', 'human_rules', 'tidy'],
 }

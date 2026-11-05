@@ -7,7 +7,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { parseQuality } from '../../src/core/quality.ts'
-import { headOf } from '../../src/main/works-evidence.ts'
+import { workHead } from '../../src/main/works-types.ts'
 import { EVENTS, type ProjectView } from '../../src/shared/api.ts'
 import { QUALITY_TEXT } from '../support/calc.ts'
 import { makeRepo, makeTempDir } from '../support/repo.ts'
@@ -204,10 +204,10 @@ test('상자 뒤 세션이 Stop 없이 커밋하면 [그래도 끝내기](상자
   const exported = await exportsOf(app, id)
   expect(await reviews()).toBe(1)
 
-  const worktree = works.find(id)?.worktree ?? ''
+  const rec = works.record(id)
   app.sessions.write(id, '지적을 고쳐 주세요\r')
-  await until(async () => (await headOf(worktree)) !== first, '세션의 차례 안 커밋')
-  const second = await headOf(worktree)
+  await until(async () => (await workHead(rec)) !== first, '세션의 차례 안 커밋')
+  const second = await workHead(rec)
   expect(works.view(id)).toMatchObject({ head: first, endPending: { head: first } })
   // [그래도 끝내기]가 넘긴 head는 지금 HEAD가 아니다: 새 커밋을 재지도 끝내지도 않고, 화면의 HEAD를 고쳐 상자를 지운다
   await expect(works.end(id, { head: first, force: true })).rejects.toThrow(
@@ -229,7 +229,7 @@ test('상자 뒤 세션이 Stop 없이 커밋하면 [그래도 끝내기](상자
   // 셸 명령(git commit)의 PostToolUse는 Stop을 기다리지 않고 화면의 HEAD를 고친다
   app.sessions.write(id, '하나 더\r')
   await until(() => works.view(id).head !== second, '셸 커밋의 HEAD')
-  const third = await headOf(worktree)
+  const third = await workHead(rec)
   expect(works.view(id)).toMatchObject({ head: third, session: 'running' })
   // 새 head의 [끝내기] → 걸림 → 상자 → [그래도 끝내기]는 다시 재지 않는다
   expect(await works.end(id, { head: third })).toMatchObject({ armed: true })
@@ -269,7 +269,7 @@ test('걸린 끝은 [취소]로 푼다(미리 리뷰는 끝까지 돌고 내보�
     // 미리 리뷰가 도는 동안 [끝내기]는 걸린다(V23·V25)
     const id = await startWork(app, { reviewing: true })
     const first = works.view(id).head ?? ''
-    const worktree = works.find(id)?.worktree ?? ''
+    const rec = works.record(id)
     expect(await works.end(id, { head: first })).toMatchObject({ armed: true })
     await works.cancelEnd(id)
     expect(works.view(id).endPending).toBeNull()
@@ -291,8 +291,8 @@ test('걸린 끝은 [취소]로 푼다(미리 리뷰는 끝까지 돌고 내보�
     const second = works.view(id).head ?? ''
     expect(await works.end(id, { head: second })).toMatchObject({ armed: true })
     app.sessions.write(id, '또 하나\r')
-    await until(async () => (await headOf(worktree)) !== second, '리뷰 중 커밋')
-    const third = await headOf(worktree)
+    await until(async () => (await workHead(rec)) !== second, '리뷰 중 커밋')
+    const third = await workHead(rec)
     await until(() => settled(works.view(id)), '둘째 리뷰 끝')
     await works.idle()
     // 리뷰가 끝난 뒤 HEAD가 바뀐 것을 보고 그 리뷰를 버린다(V23). 걸린 끝은 지우고 새 head를 재지 않는다

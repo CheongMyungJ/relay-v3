@@ -216,7 +216,8 @@
 
 /* ── 계약 ─────────────────────────────────────────────────────────────────── */
 
-.contract {
+.contract,
+.unit-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -243,6 +244,12 @@
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+/* 단위(V21): 계약 판이 줄을 단위마다 묶는다 */
+.unit-title {
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .line {

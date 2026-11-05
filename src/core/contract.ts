@@ -1,9 +1,10 @@
-// 계약: 모양 검사, 근거 확인, 예시 태그, 예시 자료(정규 파일과 견줌).
+// 계약: 모양 검사, 단위(V21), 근거 확인, 예시 태그, 예시 자료(정규 파일과 견줌).
 import { qualityHash } from './quality.ts'
 import { err, ok, type Result } from './result.ts'
 import type {
   Contract,
   ContractLine,
+  Delivery,
   Example,
   ExampleFileDiff,
   ExamplesFileCheck,
@@ -94,12 +95,18 @@ const KINDS: readonly LineKind[] = ['change', 'new', 'keep', 'remove', 'observe'
 const CHECKS = ['test', 'observe', 'human'] as const
 /** check가 test일 때 예시가 꼭 있어야 하는 종류. remove는 예시 없이도 된다 */
 const NEEDS_EXAMPLE: readonly LineKind[] = ['change', 'new', 'keep']
+/** 단위 이름(V21): 브랜치 이름(`<Work 브랜치>--<단위>`, V22)에도 쓸 수 있는 꼴 */
+const UNIT_NAME = /^[a-z][a-z0-9-]{0,20}$/
+const DELIVERIES: readonly Delivery[] = ['one_branch', 'branch_per_unit']
+/** branch_per_unit에서 단위가 꼭 있어야 하는 종류(V21). keep·observe·human은 모든 단위에 걸칠 수 있다 */
+const NEEDS_UNIT: readonly LineKind[] = ['change', 'new', 'remove']
 
 const contractId = pattern(
   /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
   '영문·숫자로 시작하고 영문·숫자·. _ -만 써야 함',
 )
 const lineId = pattern(LINE_ID, 'C<숫자> 모양이어야 함')
+const unitName = pattern(UNIT_NAME, '영문 소문자로 시작하고 영문 소문자·숫자·-만, 21자까지여야 함')
 const exampleId = pattern(EXAMPLE_ID, '<줄 id>.<숫자> 모양이어야 함')
 const relPath: Read<string> = (v, p, e) => {
   const s = str(v, p, e)
@@ -143,18 +150,19 @@ const readGround: Read<Grounding> = (v, p, e) => {
 }
 
 const readLine: Read<ContractLine> = (v, p, e) => {
-  const o = shape(v, p, e, ['id', 'kind', 'text', 'grounds', 'examples', 'check'])
+  const o = shape(v, p, e, ['id', 'kind', 'text', 'grounds', 'examples', 'check', 'unit'])
   // 대신 값은 교차 검사에서 덧붙는 오류를 내지 않는 것으로 고른다
   if (o === null)
     return { id: '', kind: 'observe', text: '', grounds: [], examples: [], check: 'human' }
-  return {
+  return prune({
     id: req(o, 'id', p, e, lineId, ''),
     kind: req(o, 'kind', p, e, oneOf(KINDS, 'observe'), 'observe'),
     text: req(o, 'text', p, e, str, ''),
     grounds: opt(o, 'grounds', p, e, list(readGround)) ?? [],
     examples: opt(o, 'examples', p, e, list(exampleId)) ?? [],
     check: req(o, 'check', p, e, oneOf(CHECKS, 'human'), 'human'),
-  }
+    unit: opt(o, 'unit', p, e, unitName),
+  })
 }
 
 const readExample: Read<Example> = (v, p, e) => {
@@ -183,6 +191,7 @@ const TOP_KEYS = [
   'approved_by',
   'approved_at',
   'change_requested',
+  'delivery',
 ]
 
 /** 줄과 예시 사이의 약속: id 겹침, 예시의 주인 줄, check와 종류 */
@@ -216,6 +225,17 @@ function crossCheck(c: Contract, e: string[]): void {
       e.push(`${p}.examples: 시험으로 확인하는 ${l.kind} 줄은 예시가 하나 이상 있어야 함`)
     if (l.kind === 'human' && l.check !== 'human') e.push(`${p}.check: human 줄은 'human'이어야 함`)
   })
+  if (c.delivery === 'branch_per_unit') unitsPerBranch(c, e)
+}
+
+/** branch_per_unit(V22)의 약속: 단위가 둘 이상이고, change·new·remove 줄마다 단위가 있다 */
+function unitsPerBranch(c: Contract, e: string[]): void {
+  const n = unitsOf(c).length
+  if (n < 2) e.push(`delivery: 'branch_per_unit'이면 단위가 둘 이상이어야 함 (지금 ${n}개)`)
+  c.lines.forEach((l, i) => {
+    if (NEEDS_UNIT.includes(l.kind) && l.unit === undefined)
+      e.push(`lines[${i}].unit: 'branch_per_unit'이면 ${l.kind} 줄은 단위가 있어야 함`)
+  })
 }
 
 export function parseContract(text: string): Result<Contract> {
@@ -245,12 +265,31 @@ export function parseContract(text: string): Result<Contract> {
     approved_by: opt(o, 'approved_by', '', e, oneOf(['human', 'caller'] as const)),
     approved_at: opt(o, 'approved_at', '', e, str),
     change_requested: opt(o, 'change_requested', '', e, str),
+    delivery: opt(o, 'delivery', '', e, oneOf(DELIVERIES)),
   })
   // 줄이 없는 계약은 '모든 줄 met'을 거저 채운다
   if (Object.hasOwn(o, 'lines') && Array.isArray(o['lines']) && c.lines.length === 0)
     e.push('lines: 줄이 하나 이상 있어야 함')
   crossCheck(c, e)
   return e.length > 0 ? err(...e) : ok(c)
+}
+
+// ── 단위 (V21) ──────────────────────────────────────────────────────────────
+// 한 요청은 한 Work와 한 계약이다. 단위는 계약 안의 줄 묶음이고, 단위가 없는 줄은 모든 단위에 걸친다.
+
+/** 계약의 단위 이름: 줄에 처음 나온 차례로, 겹침 없이 */
+export function unitsOf(c: Contract): string[] {
+  return [...new Set(c.lines.flatMap((l) => (l.unit === undefined ? [] : [l.unit])))]
+}
+
+/**
+ * 한 단위의 조각(V22가 단위 브랜치를 잴 때): 그 단위의 줄과 단위가 없는 줄, 그 줄들의 예시. 계약 id와 줄 밖의 칸은 그대로다
+ */
+export function sliceContract(c: Contract, unit: string): Contract {
+  const lines = c.lines.filter((l) => l.unit === undefined || l.unit === unit)
+  const ids = new Set(lines.map((l) => l.id))
+  const examples = c.examples.filter((x) => ids.has(EXAMPLE_ID.exec(x.id)?.[1] ?? ''))
+  return { ...c, lines, examples }
 }
 
 // ── 근거 확인 ───────────────────────────────────────────────────────────────

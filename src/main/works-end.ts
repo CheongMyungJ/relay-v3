@@ -10,8 +10,8 @@ import { openItems } from '../core/gate.ts'
 import { nextState } from '../core/work.ts'
 import type { EndInput, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
-import { headOf, type EvidenceRunner } from './works-evidence.ts'
-import { isActive, measures, type MeasureJob, type WorkCtx } from './works-types.ts'
+import type { EvidenceRunner } from './works-evidence.ts'
+import { isActive, measures, type MeasureJob, type WorkCtx, workHead } from './works-types.ts'
 
 /** 끝낸 방식(events.jsonl의 ended.how): 한 번에, 걸렸다가, 상자에서 [그래도 끝내기] */
 type How = 'once' | 'armed' | 'box'
@@ -44,7 +44,7 @@ export class EndDesk {
     const ok = nextState(rec.state, { type: 'ended' })
     if (!ok.ok) throw new Error(ok.errors.join('; '))
     if (o.force === true) return this.force(rec, o.head)
-    const head = o.head === undefined ? await headOf(rec.worktree) : await this.sameHead(id, o.head)
+    const head = o.head === undefined ? await workHead(rec) : await this.sameHead(id, o.head)
     this.ctx.runtime(id).endMoved = null
     // 미리 리뷰가 끝난 head: 결정론 증거와 리뷰를 다시 써서 바로 내보내기로 잰다(장부 한 줄). 그 사이 정책이 머지했으면
     // 끝났다. 그 사이 HEAD가 바뀌었으면 끝내지 않는다
@@ -86,7 +86,7 @@ export class EndDesk {
     if (!rec || !p?.armed || !isActive(rec.state)) return
     const rt = this.ctx.runtime(id)
     if (rt.abort.signal.aborted || rt.pending !== null) return
-    const head = await headOf(rec.worktree).catch(() => null)
+    const head = await workHead(rec).catch(() => null)
     if (head !== null && head !== p.head) return this.ctx.seeHead(id, head)
     if (head !== null && this.evidence.exported(id, head)) {
       await this.decide(rec, head, 'armed')
@@ -166,7 +166,7 @@ export class EndDesk {
 
   /** 지금 HEAD를 돌려준다. head가 아니면 화면의 HEAD를 고치고(상자를 지운다) 던진다. HEAD를 읽지 못하면 보지 않는다 */
   private async sameHead(id: string, head: string): Promise<string> {
-    const now = await headOf(this.ctx.record(id).worktree).catch(() => null)
+    const now = await workHead(this.ctx.record(id)).catch(() => null)
     if (now === null || now === head) return head
     await this.ctx.seeHead(id, now)
     throw new Error(
@@ -177,7 +177,7 @@ export class EndDesk {
   /** 지금 HEAD를 내보내기(리뷰 포함)로 재지 않았으면 잰다. 이미 도는 같은 HEAD의 내보내기에는 합친다 */
   private async exportHead(id: string): Promise<void> {
     const rec = this.ctx.record(id)
-    const head = await headOf(rec.worktree).catch(() => null)
+    const head = await workHead(rec).catch(() => null)
     if (!measures(rec.state) || head === null) return
     if (!this.evidence.exported(id, head)) await this.evidence.run(id, { export: 'end' })
   }

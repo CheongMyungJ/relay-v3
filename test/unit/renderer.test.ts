@@ -8,6 +8,7 @@ import {
   conclusionOf,
   contractDelta,
   decisiveText,
+  deliveryText,
   diffOpen,
   type DiffFile,
   draftPending,
@@ -29,6 +30,7 @@ import {
   openText,
   showEndBox,
   splitDiff,
+  unitGroups,
 } from '../../src/renderer/src/format.ts'
 import { evidence } from '../support/gate.ts'
 import { chunkOrder, sizeSender } from '../../src/renderer/src/termSize.ts'
@@ -236,6 +238,41 @@ describe('contractDelta: 계약 바꾸기 상자의 승인본과 제안 사이 �
     ])
     expect(d.other).toEqual(['목표', '비목표'])
     expect(contractDelta(approved, { ...approved })).toEqual({ lines: [], examples: [], other: [] })
+  })
+
+  test('단위(V21): 줄의 단위를 바꾸면 고친 칸 단위, 전달 방식을 적으면 그 밖의 전달 방식', () => {
+    const proposed: Contract = {
+      ...approved,
+      delivery: 'one_branch',
+      lines: [{ ...C1, unit: 'clamp' }, C2],
+    }
+    const d = contractDelta(approved, proposed)
+    expect(d.lines).toEqual([
+      { id: 'C1', how: 'changed', text: '바뀜 · hi보다 큰 값은 hi가 된다', fields: ['단위'] },
+    ])
+    expect(d.other).toEqual(['전달 방식'])
+  })
+
+  test('계약 판(V21): 줄을 단위로 묶고(처음 나온 차례, 단위 없는 줄은 한 묶음), 단위가 있으면 전달 방식을 보인다', () => {
+    const lines = [
+      { ...C1, unit: 'csv' },
+      C2,
+      { ...C1, id: 'C3', unit: 'money' },
+      { ...C2, id: 'C4', unit: 'csv' },
+    ]
+    const c: Contract = { ...approved, lines }
+    expect(unitGroups(c).map((g) => [g.unit, g.lines.map((l) => l.id)])).toEqual([
+      ['csv', ['C1', 'C4']],
+      [null, ['C2']],
+      ['money', ['C3']],
+    ])
+    expect(unitGroups(approved)).toEqual([{ unit: null, lines: [C1, C2] }])
+    // 전달 방식: 단위가 있으면 기본(한 브랜치)을 보이고, 단위도 전달 방식도 없으면 보이지 않는다
+    expect(deliveryText(c, 'relay/two-bugs-ab12')).toBe(
+      '한 브랜치: 모든 단위를 relay/two-bugs-ab12에 두고, 단위마다 커밋을 따로 합니다',
+    )
+    expect(deliveryText(approved, 'relay/x')).toBeNull()
+    expect(deliveryText({ ...approved, delivery: 'one_branch' }, 'relay/x')).toContain('한 브랜치')
   })
 })
 

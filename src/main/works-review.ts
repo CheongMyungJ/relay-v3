@@ -18,7 +18,14 @@ import {
 } from '../core/review.ts'
 import type { Contract, EvidenceBundle, Policy } from '../core/types.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
-import type { ExportTrigger, ReviewInput, ReviewResult, Runtime, WorkCtx } from './works-types.ts'
+import {
+  workHead,
+  type ExportTrigger,
+  type ReviewInput,
+  type ReviewResult,
+  type Runtime,
+  type WorkCtx,
+} from './works-types.ts'
 
 const REVIEW_TIMEOUT_MS = 15 * 60 * 1000
 /** 리뷰어가 쓰는 읽기 도구 */
@@ -211,8 +218,7 @@ export class ReviewDesk {
             evidenceSummary: evidenceFacts(bundle),
             signal,
           })
-      const head = await git(['rev-parse', 'HEAD'], rec.worktree).catch(() => null)
-      await this.ctx.seeHead(id, head?.trim() ?? null)
+      await this.ctx.seeHead(id, await workHead(rec).catch(() => null))
       if (signal.aborted) return this.aborted(id, trigger)
       this.ctx.note(id, {
         type: 'review',

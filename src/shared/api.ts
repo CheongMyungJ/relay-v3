@@ -119,7 +119,7 @@ export interface WorkView {
   hint: string | null
   /** 보이는 계약(pendingContract, 없으면 contract)의 근거 확인. 확인되지 않은 근거는 추정으로 보인다 */
   groundings: GroundingCheck[] | null
-  /** worktree의 지금 HEAD. 증거의 head와 다르면 증거가 낡았다(V6). 모르면 null */
+  /** 지금 HEAD: Work 브랜치의 끝(V21, worktree의 checkout이 아님). 증거의 head와 다르면 증거가 낡았다(V6). 모르면 null */
   head: string | null
   createdAt: string
   /** 마지막으로 실패한 일(세션 시작, 증거, 머지 등)의 까닭. 없으면 null */

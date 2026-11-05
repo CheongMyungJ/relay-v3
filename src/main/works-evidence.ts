@@ -7,7 +7,6 @@
 // exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). 엔진 check는 in-process로 부른다. 리뷰 결과는 세션에 넣지
 // 않는다(V4, V8).
 
-import { git } from '../adapters/exec.ts'
 import type { PrCheck } from '../adapters/gh.ts'
 import { showFile } from '../adapters/git.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
@@ -28,6 +27,7 @@ import {
   type ExportTrigger,
   type MeasureJob,
   type WorkCtx,
+  workHead,
 } from './works-types.ts'
 
 const DEBOUNCE_MS = 20_000
@@ -35,10 +35,6 @@ const PR_POLL_MS = 120_000
 
 /** 세션이 PR을 열거나 갱신했을 수 있는 Bash 명령 */
 const EXPORT_COMMAND = /\bgit\b[^;&|\n]*\bpush\b|\bgh\b[^;&|\n]*\bpr\b/
-
-export async function headOf(worktree: string): Promise<string> {
-  return (await git(['rev-parse', 'HEAD'], worktree)).trim()
-}
 
 export function isExportCommand(command: string): boolean {
   return EXPORT_COMMAND.test(command)
@@ -122,7 +118,7 @@ export class EvidenceRunner {
   async onStop(id: string): Promise<void> {
     const rec = this.ctx.record(id)
     const rt = this.ctx.runtime(id)
-    const head = await headOf(rec.worktree).catch(() => null)
+    const head = await workHead(rec).catch(() => null)
     await this.ctx.seeHead(id, head)
     if (!measures(rec.state) || head === null) return
     if (this.measured(id, head) && !this.reviews.preparable(rec, rt.evidence, head)) return
@@ -147,7 +143,7 @@ export class EvidenceRunner {
     const rec = this.ctx.record(id)
     const pr = await this.refreshPr(rec)
     if (!pr || pr.state !== 'OPEN' || !measures(rec.state)) return
-    const head = await headOf(rec.worktree).catch(() => null)
+    const head = await workHead(rec).catch(() => null)
     await this.ctx.seeHead(id, head)
     if (pr.baseRefName !== rec.base) return this.wrongBase(rec, pr)
     if (head === null || !exportable(pr, rec.base, head)) return
@@ -213,7 +209,7 @@ export class EvidenceRunner {
     const project = this.ctx.projectOf(rec)
     const trigger = job.export
     try {
-      const head = await headOf(rec.worktree)
+      const head = await workHead(rec)
       await this.ctx.seeHead(id, head)
       const known = !job.again && this.measured(id, head) ? rt.evidence : null
       if (known !== null) {
@@ -309,7 +305,7 @@ export class EvidenceRunner {
     return bundle
   }
 
-  /** 묶음과 그 관문을 Work에 두고 화면에 보인다. 관문의 head는 지금 worktree의 HEAD다(V6) */
+  /** 묶음과 그 관문을 Work에 두고 화면에 보인다. 관문의 head는 지금 Work 브랜치의 끝이다(V6, V21) */
   private async publishGate(
     rec: WorkRecord,
     bundle: EvidenceBundle,
@@ -318,7 +314,7 @@ export class EvidenceRunner {
   ): Promise<GateResult> {
     const { deps } = this.ctx
     const rt = this.ctx.runtime(rec.id)
-    const now = await headOf(rec.worktree).catch(() => null)
+    const now = await workHead(rec).catch(() => null)
     const result = gate(bundle, contract, policy, now)
     rt.evidence = bundle
     await this.ctx.seeHead(rec.id, now ?? bundle.head)
@@ -551,7 +547,7 @@ export class EvidenceRunner {
     const rt = this.ctx.runtime(rec.id)
     if (rec.state !== 'working' || rt.measuring !== null || rt.pending) return
     if (pr.baseRefName !== rec.base) return this.wrongBase(rec, pr)
-    const head = await headOf(rec.worktree).catch(() => null)
+    const head = await workHead(rec).catch(() => null)
     if (head === null || !exportable(pr, rec.base, head)) return
     if (!this.exported(rec.id, head)) return this.run(rec.id, { export: 'pr' })
     if (rec.gate?.conclusion === 'auto_merge_candidate') await this.autoMerge(rec.id)

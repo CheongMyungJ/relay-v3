@@ -1,6 +1,6 @@
 // [계약] 패널 (docs/m2-modules.md 4절): 목표, 줄 표(종류, 글, 근거와 확인됨/추정, 예시 입력→출력, 확인 방법), 비목표,
-// 사람만 아는 규칙, hint. 승인을 기다리면 [승인]과 늘 보이는 고칠 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과 제안의
-// 차이, [받아들이기]·[거절하기].
+// 사람만 아는 규칙, hint. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 승인을 기다리면 [승인]과 늘 보이는 고칠
+// 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과 제안의 차이, [받아들이기]·[거절하기].
 import { useState } from 'react'
 import type { Contract, ContractLine, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
@@ -8,10 +8,12 @@ import {
   CHECK_LABEL,
   KIND_LABEL,
   contractDelta,
+  deliveryText,
   exampleText,
   groundStatus,
   groundText,
   timeText,
+  unitGroups,
   type DeltaItem,
   type Tone,
 } from './format.ts'
@@ -35,6 +37,7 @@ export function ContractPanel({ view }: { view: WorkView }) {
       {shown ? (
         <ContractView
           contract={shown}
+          branch={view.branch}
           groundings={view.groundings}
           hint={view.hint}
           pending={view.pendingContract !== null}
@@ -208,12 +211,28 @@ function DeltaList({ title, items }: { title: string; items: DeltaItem[] }) {
 
 function ContractView(p: {
   contract: Contract
+  branch: string
   groundings: GroundingCheck[] | null
   hint: string | null
   pending: boolean
 }) {
   const c = p.contract
   const hint = c.hint ?? p.hint
+  const groups = unitGroups(c)
+  const units = groups.filter((g) => g.unit !== null).length
+  const delivery = deliveryText(c, p.branch)
+  const rows = (lines: ContractLine[]) => (
+    <ol className="lines">
+      {lines.map((l) => (
+        <LineRow
+          key={l.id}
+          line={l}
+          contract={c}
+          checks={p.groundings?.filter((g) => g.line === l.id) ?? null}
+        />
+      ))}
+    </ol>
+  )
   return (
     <article className="contract">
       <p className="eyebrow">
@@ -222,17 +241,31 @@ function ContractView(p: {
       <h2 className="goal">{c.goal}</h2>
       {hint ? <p className="muted">일의 성격 제안: {hint}</p> : null}
 
-      <h3 className="section-title">줄 {c.lines.length}개</h3>
-      <ol className="lines">
-        {c.lines.map((l) => (
-          <LineRow
-            key={l.id}
-            line={l}
-            contract={c}
-            checks={p.groundings?.filter((g) => g.line === l.id) ?? null}
-          />
-        ))}
-      </ol>
+      <h3 className="section-title">
+        줄 {c.lines.length}개{units > 0 ? ` · 단위 ${units}개` : ''}
+      </h3>
+      {delivery ? (
+        <p className="muted small" data-testid="delivery">
+          전달 방식 · {delivery}
+        </p>
+      ) : null}
+      {units === 0
+        ? rows(c.lines)
+        : groups.map((g) => (
+            <section key={g.unit ?? ''} className="unit-group" data-testid="unit-group">
+              <h4 className="unit-title">
+                {g.unit === null ? (
+                  '모든 단위에 걸친 줄'
+                ) : (
+                  <>
+                    단위 <code>{g.unit}</code>
+                  </>
+                )}
+                <span className="muted"> · 줄 {g.lines.length}개</span>
+              </h4>
+              {rows(g.lines)}
+            </section>
+          ))}
 
       <TextList title="비목표" items={c.non_goals} empty="없음" />
       <TextList title="사람만 아는 규칙" items={c.human_rules} empty="없음" />

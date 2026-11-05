@@ -6,6 +6,7 @@ import type {
   Conclusion,
   Contract,
   ContractLine,
+  Delivery,
   EvidenceBundle,
   Example,
   GateResult,
@@ -371,13 +372,43 @@ export function exampleText(e: Example): string {
   return `${valueText(e.input)} → ${out}`
 }
 
+/** 계약 판의 줄 묶음(V21). unit이 null이면 단위가 없는 줄(모든 단위에 걸침)이다 */
+export interface UnitGroup {
+  unit: string | null
+  lines: ContractLine[]
+}
+
+/**
+ * 계약 판(V21): 줄을 단위로 묶는다. 묶음은 줄에 처음 나온 차례이고, 단위가 없는 줄은 한 묶음(unit null)이다. 단위가 하나도
+ * 없으면 묶음 하나다
+ */
+export function unitGroups(c: Contract): UnitGroup[] {
+  const groups = new Map<string | null, ContractLine[]>()
+  for (const l of c.lines) {
+    const key = l.unit ?? null
+    groups.set(key, [...(groups.get(key) ?? []), l])
+  }
+  return [...groups].map(([unit, lines]) => ({ unit, lines }))
+}
+
+const DELIVERY_TEXT: Record<Delivery, (branch: string) => string> = {
+  one_branch: (b) => `한 브랜치: 모든 단위를 ${b}에 두고, 단위마다 커밋을 따로 합니다`,
+  branch_per_unit: (b) => `단위마다 브랜치: ${b}--<단위>`,
+}
+
+/** 계약 판의 전달 방식 한 줄(V21). 단위가 없고 전달 방식도 적지 않았으면 null(기본은 한 브랜치) */
+export function deliveryText(c: Contract, branch: string): string | null {
+  if (c.delivery === undefined && c.lines.every((l) => l.unit === undefined)) return null
+  return DELIVERY_TEXT[c.delivery ?? 'one_branch'](branch)
+}
+
 /** 계약 바꾸기 상자(M2.1 13절)의 차이 한 줄: 줄이나 예시 하나를 더함, 뺌, 고침 */
 export interface DeltaItem {
   id: string
   how: 'added' | 'removed' | 'changed'
   /** 화면 글: 줄이면 종류와 글, 예시면 입력 → 출력. 뺌이면 승인본의 것, 아니면 제안의 것 */
   text: string
-  /** 고침이면 고친 칸의 이름(줄: 종류, 글, 근거, 예시, 확인 방법. 예시: 입력, 출력, 오류, 메모) */
+  /** 고침이면 고친 칸의 이름(줄: 종류, 글, 근거, 예시, 확인 방법, 단위. 예시: 입력, 출력, 오류, 메모) */
   fields: string[]
   /** 고침이고 화면 글이 바뀌었으면 승인본의 화면 글 */
   before?: string
@@ -386,7 +417,7 @@ export interface DeltaItem {
 export interface ContractDelta {
   lines: DeltaItem[]
   examples: DeltaItem[]
-  /** 줄과 예시 밖에서 바뀐 것의 이름: 목표, 비목표, 사람만 아는 규칙, 곁들일 정리, 일의 성격 제안 */
+  /** 줄과 예시 밖에서 바뀐 것의 이름: 목표, 비목표, 사람만 아는 규칙, 곁들일 정리, 일의 성격 제안, 전달 방식 */
   other: string[]
 }
 
@@ -407,6 +438,7 @@ const LINE_FIELDS: [keyof ContractLine, string][] = [
   ['grounds', '근거'],
   ['examples', '예시'],
   ['check', '확인 방법'],
+  ['unit', '단위'],
 ]
 
 const EXAMPLE_FIELDS: [keyof Example, string][] = [
@@ -423,6 +455,7 @@ const OTHER_FIELDS: [keyof Contract, string][] = [
   ['human_rules', '사람만 아는 규칙'],
   ['tidy', '곁들일 정리'],
   ['hint', '일의 성격 제안'],
+  ['delivery', '전달 방식'],
 ]
 
 const lineText = (l: ContractLine): string => `${KIND_LABEL[l.kind]} · ${l.text}`

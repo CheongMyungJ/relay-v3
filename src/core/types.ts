@@ -96,6 +96,11 @@ export interface ContractLine {
   grounds: Grounding[]
   examples: string[]
   check: 'test' | 'observe' | 'human'
+  /**
+   * 단위(V21): 이 줄이 속한 요청 안의 한 부분(버그 하나, 모듈 하나). 꼴은 `^[a-z][a-z0-9-]{0,20}$`. 없으면 모든 단위에 걸친
+   * 줄이다. 한 요청은 한 Work와 한 계약이고, 단위는 그 안의 줄 묶음이다
+   */
+  unit?: string
 }
 
 export interface Example {
@@ -105,6 +110,12 @@ export interface Example {
   error?: unknown
   note?: string
 }
+
+/**
+ * 단위를 내보내는 방식(V21). one_branch: 모든 단위가 Work 브랜치 하나에 있고 단위마다 커밋을 따로 한다. branch_per_unit:
+ * 단위마다 브랜치(V22). 앱은 아직 branch_per_unit을 받지 않는다(사용자 결정을 기다림)
+ */
+export type Delivery = 'one_branch' | 'branch_per_unit'
 
 export interface Contract {
   version: 1
@@ -118,6 +129,8 @@ export interface Contract {
   hint?: string
   /** 곁들일 정리로 받은 빚 id */
   tidy: string[]
+  /** 단위의 전달 방식(V21). 없으면 one_branch */
+  delivery?: Delivery
   approved_by?: 'human' | 'caller'
   approved_at?: string
   /** 세션이 계약을 바꾸자고 요청했고 아직 풀리지 않음 */

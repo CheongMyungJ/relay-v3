@@ -24,8 +24,7 @@ import type { DebtItem, QualityConfig } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import { EVENTS, type NewWorkInput } from '../shared/api.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
-import { headOf } from './works-evidence.ts'
-import { message, type WorkCtx, type WorksDeps } from './works-types.ts'
+import { message, type WorkCtx, type WorksDeps, workHead } from './works-types.ts'
 
 const BRANCH_NAME = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]+$/
 
@@ -319,19 +318,20 @@ function wire(ctx: WorkCtx, id: string): void {
   })
 }
 
-/** [변경]: 기준과 HEAD의 공통 조상부터 `git diff --stat`, 빈 줄, 파일별 diff */
+/** [변경]: 기준과 Work 브랜치의 끝(V21: 증거가 재는 head)의 공통 조상부터 `git diff --stat`, 빈 줄, 파일별 diff */
 export async function workDiff(rec: WorkRecord): Promise<string> {
-  const base = await mergeBase(rec.worktree, rec.base_ref, 'HEAD')
+  const head = await workHead(rec)
+  const base = await mergeBase(rec.worktree, rec.base_ref, head)
   const [stat, patch] = await Promise.all([
-    git(['diff', '--stat', '--no-color', base, 'HEAD'], rec.worktree),
-    git(['diff', '--no-color', '--no-ext-diff', base, 'HEAD'], rec.worktree),
+    git(['diff', '--stat', '--no-color', base, head], rec.worktree),
+    git(['diff', '--no-color', '--no-ext-diff', base, head], rec.worktree),
   ])
   return `${stat.trimEnd()}\n\n${patch}`
 }
 
-/** [빚]: HEAD의 .relay/debt/*.md 가운데 이 Work가 바꾼 경로에 닿은 것 */
+/** [빚]: Work 브랜치 끝의 .relay/debt/*.md 가운데 이 Work가 바꾼 경로에 닿은 것 */
 export async function workDebt(rec: WorkRecord): Promise<DebtItem[]> {
-  const head = await headOf(rec.worktree)
+  const head = await workHead(rec)
   const base = await mergeBase(rec.worktree, rec.base_ref, head)
   const changed = (await git(['diff', '--name-only', '-z', base, head], rec.worktree))
     .split('\0')

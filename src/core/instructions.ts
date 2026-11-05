@@ -98,11 +98,14 @@ The contract is JSON:
   - \`grounds\`: why the line holds, one or more of \`{type: "code", path, line, name?}\` (a path:line at the head), \`{type: "request", quote}\` (words copied exactly from the request), \`{type: "knowledge", id}\`, \`{type: "guess"}\`. relay checks code and request grounds and shows a ground it cannot confirm as a guess.
   - \`examples\`: example ids (\`C1.1\`, \`C1.2\`, …).
   - \`check\`: \`test\`, \`observe\` or \`human\`. A \`human\` line has \`check: "human"\`. A \`test\` line of kind change, new or keep needs at least one example.
+  - \`unit\` (optional): the part of the request the line belongs to; see Units below.
 - \`examples\`: each \`{id, input, output?, error?, note?}\`, id \`C1.1\` for the first example of line C1: a concrete input and the output or the error it gives. JSON has no NaN, Infinity or undefined: write such a value as a string and say in \`note\` how the test turns it back.
 - \`non_goals\`: what this Work does not do.
 - \`human_rules\`: rules only the human knows (business rules, time zones, compatibility promises, who uses the behavior).
 - \`hint\`: the human's suggestion about the kind of work, if the request has one.
 - \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.
+
+Units: one request is one Work, with one contract and one Work branch, even when it covers several parts (two bugs, three modules). To group the lines of a part, give them the same \`unit\`, a short name such as \`csv\` or \`parse-money\` (a lowercase letter, then lowercase letters, digits or \`-\`, at most 21 characters). A line without a unit belongs to every part. The units are part of the scope: settle them with the scope, and the human approves them with the contract. All units are delivered on \`${o.workBranch}\`, each unit in its own commits.
 
 ## 2. Questions
 
@@ -118,7 +121,7 @@ How you do the work is up to you. relay writes the contract's examples to \`${ex
 
 ## 5. Evidence
 
-relay measures evidence on commits, not on uncommitted changes: it runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (every example of a \`change\` line must pass on the head and at least one must fail on the base; an example that also passes on the base counts as a guard), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
+relay measures evidence on the tip of the Work branch \`${o.workBranch}\`, whatever this worktree has checked out; uncommitted changes and commits on other branches are not evidence. It runs the commands in \`.relay/quality.json\` on the base and the head, judges contract lines from the tagged tests (every example of a \`change\` line must pass on the head and at least one must fail on the base; an example that also passes on the base counts as a guard), and checks ratchets and signals. Call \`${TOOL_CHECK}\` to get the evidence for the current head.
 
 ## 6. Changing the contract
 

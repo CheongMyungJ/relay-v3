@@ -4,6 +4,7 @@
 // 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
+// 계약의 줄은 단위마다 묶여 보인다(V21).
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -40,6 +41,8 @@ const CONTRACT = {
       ],
       examples: ['C1.1'],
       check: 'test',
+      // 단위(V21): 계약 판이 단위마다 줄을 묶는다. C2는 모든 단위에 걸친다
+      unit: 'clamp',
     },
     {
       id: 'C2',
@@ -228,6 +231,14 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(panel.getByTestId('contract-line')).toHaveCount(2)
   await expect(panel.getByTestId('contract-line').first()).toContainText('확인됨')
   await expect(panel.getByTestId('contract-line').nth(1)).toContainText('추정')
+  const groups = panel.getByTestId('unit-group')
+  await expect(groups).toHaveCount(2)
+  await expect(groups.first().getByRole('heading')).toHaveText('단위 clamp · 줄 1개')
+  await expect(groups.nth(1).getByRole('heading')).toHaveText('모든 단위에 걸친 줄 · 줄 1개')
+  await expect(panel.getByTestId('delivery')).toContainText('한 브랜치: 모든 단위를 relay/')
+  await groups.nth(1).scrollIntoViewIfNeeded()
+  await shot('contract-units')
+  await panel.evaluate((el) => el.scrollTo(0, 0))
   await shot('contract')
   // 고쳐 달라기(M2.1 13절): 여는 단추 없이 글 칸에 쓰고 [보내기]. 세션은 changes 답을 받고 계약을 다시 낸다(가짜 claude는
   // 답을 받은 호출만 기록한다)

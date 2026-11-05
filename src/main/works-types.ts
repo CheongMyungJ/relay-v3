@@ -1,7 +1,8 @@
 // Works의 의존과 안쪽 모양 (docs/m2-modules.md 3절 works.ts). works.ts가 600줄을 넘지 않게 계약 창구(works-contract.ts),
 // 증거·머지(works-evidence.ts), 리뷰(works-review.ts), [끝내기](works-end.ts)를 나눴다. 이 파일의 WorkCtx로 Works를 본다.
-// Electron을 모른다.
+// 모두가 읽는 Work의 head(Work 브랜치의 끝, V21)도 여기에 둔다. Electron을 모른다.
 
+import { revParse } from '../adapters/git.ts'
 import type { Contract, EvidenceBundle } from '../core/types.ts'
 import type { SessionState, WorkEvent } from '../core/work.ts'
 import type { HookEvent } from '../core/instructions.ts'
@@ -75,7 +76,7 @@ export interface Runtime {
   evidence: EvidenceBundle | null
   evidenceRunning: boolean
   reviewRunning: boolean
-  /** worktree의 HEAD(마지막으로 읽은 것) */
+  /** Work 브랜치의 끝(V21, 마지막으로 읽은 것). 화면과 기록은 HEAD라 부른다 */
   head: string | null
   /** 지금 재고 있는 head */
   measuring: string | null
@@ -161,6 +162,19 @@ export function isActive(state: string): boolean {
 /** 증거를 재는 상태: 승인된 계약이 있는 동안 */
 export function measures(state: string): boolean {
   return state === 'working' || state === 'recontract'
+}
+
+/**
+ * Work 브랜치의 끝(V21): worktree의 checkout(HEAD)이 아니라 `refs/heads/<branch>`를 읽는다. 세션이 worktree에서 다른 브랜치로
+ * 옮기거나 거기에 커밋해도 재는 대상(증거, 관문의 낡음, [끝내기]의 head)은 바뀌지 않는다. 브랜치가 없으면 던진다
+ */
+export function refHead(worktree: string, branch: string): Promise<string> {
+  return revParse(worktree, `refs/heads/${branch}`)
+}
+
+/** Work의 지금 head: Work 브랜치의 끝(refHead) */
+export function workHead(rec: Pick<WorkRecord, 'worktree' | 'branch'>): Promise<string> {
+  return refHead(rec.worktree, rec.branch)
 }
 
 export type { HookEvent }

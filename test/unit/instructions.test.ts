@@ -180,6 +180,25 @@ describe('instructionsText', () => {
     expect(t).toContain('JSON has no NaN, Infinity or undefined: write such a value as a string')
   })
 
+  test('단위(V21): 한 요청은 한 Work, 줄의 unit, 범위와 함께 정함, 모든 단위를 Work 브랜치에, 증거는 그 브랜치의 끝', () => {
+    const t = instructionsText({ ...base, questionMode: 'confirm_each' })
+    expect(t).toContain('`unit` (optional): the part of the request the line belongs to')
+    expect(t).toContain('one request is one Work, with one contract and one Work branch')
+    expect(t).toContain('lowercase letters, digits or `-`, at most 21 characters')
+    expect(t).toContain('A line without a unit belongs to every part.')
+    expect(t).toContain('settle them with the scope')
+    expect(t).toContain(
+      'All units are delivered on `relay/median-a1b2`, each unit in its own commits.',
+    )
+    // 세션이 다른 브랜치로 옮겨도 relay는 Work 브랜치의 끝을 잰다
+    expect(t).toContain(
+      'relay measures evidence on the tip of the Work branch `relay/median-a1b2`, whatever this worktree has checked out',
+    )
+    expect(t).toContain('commits on other branches are not evidence')
+    // 앱이 아직 받지 않는 전달 방식(branch_per_unit, V22)은 지침에 없다
+    expect(t).not.toContain('branch_per_unit')
+  })
+
   test('예시 폴더 끝의 / 는 하나로', () => {
     expect(
       instructionsText({ ...base, examplesDir: 'ex/', questionMode: 'draft_first' }),
