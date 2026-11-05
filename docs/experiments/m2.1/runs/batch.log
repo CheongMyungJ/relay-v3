@@ -10,3 +10,5 @@
 2026-11-05T21:22:32+00:00 배치 끝: sealed 39-three-modules 47-double-notify-digest-w2 09-stock-negative
 2026-11-05T21:23:11+00:00 시작: design-07-two-bugs
 2026-11-05T21:35:35+00:00 끝: design-07-two-bugs (exit 0)
+2026-11-05T21:35:37+00:00 시작: design-14-double-notify
+2026-11-05T21:50:34+00:00 끝: design-14-double-notify (exit 0)
