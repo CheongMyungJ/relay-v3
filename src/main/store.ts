@@ -18,7 +18,7 @@ import { readJson, relayHome } from '../adapters/store.ts'
 import { parseLedger, type LedgerEntry } from '../core/ledger.ts'
 import type { Contract, GateResult, GroundingCheck } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
-import type { PrInfo, ProjectSettings } from '../shared/api.ts'
+import type { EndPending, PrInfo, ProjectSettings } from '../shared/api.ts'
 
 export interface ProjectRecord {
   id: string
@@ -62,6 +62,8 @@ export interface WorkRecord {
   error: string | null
   /** 세션이 멈춘 사이 사람이 답한 것. 다음 재개의 프롬프트로 전한다 */
   notice: string | null
+  /** [끝내기]의 걸린 끝이나 상자(V25, works-end.ts). 옛 기록에는 없다(읽을 때 null) */
+  end_pending: EndPending | null
 }
 
 export type WorkFile =

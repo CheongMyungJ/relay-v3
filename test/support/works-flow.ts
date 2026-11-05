@@ -86,6 +86,16 @@ export const PUSH_AND_PR = [
 
 export type Entry = Record<string, unknown>
 
+/** 가짜 리뷰의 기본 지적: 올림이 없다(관문의 사실이 아니고 [끝내기]의 열린 것도 아니다, V25) */
+export const NOTE_FINDINGS = [
+  { severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 },
+]
+
+/** 올림(구조)이 있는 지적: [끝내기]의 열린 것이다 */
+export const RAISED_FINDINGS = [
+  { severity: 'medium', raise: 'structure', text: '중복 구현', file: 'src/calc.js', line: 5 },
+]
+
 export const settled = (v: WorkView) => !v.evidenceRunning && !v.reviewRunning
 
 export interface FlowKit {
@@ -108,6 +118,8 @@ export interface FlowKit {
   until(ok: () => boolean | Promise<boolean>, what: string): Promise<void>
   /** 가짜 gh 상태를 고친다 */
   gh(edit: (state: Entry & { prs?: Entry[] }) => void): Promise<void>
+  /** 이 시험에서 가짜 리뷰가 낼 지적. 시험이 끝나면 기본(NOTE_FINDINGS)으로 돌아간다 */
+  review(findings: Entry[]): Promise<void>
 }
 
 export function flowKit(): FlowKit {
@@ -137,19 +149,14 @@ export function flowKit(): FlowKit {
     await writeFile(kit.ghState, '{}')
     vi.stubEnv('FAKE_GH_STATE', kit.ghState)
     vi.stubEnv('FAKE_GH_LOG', kit.ghLog)
-    const review = join(tmp, 'review.json')
-    await writeFile(
-      review,
-      JSON.stringify({
-        findings: [{ severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 }],
-      }),
-    )
-    vi.stubEnv('FAKE_CLAUDE_REVIEW', review)
+    await writeFile(join(tmp, 'review.json'), JSON.stringify({ findings: NOTE_FINDINGS }))
+    vi.stubEnv('FAKE_CLAUDE_REVIEW', join(tmp, 'review.json'))
     vi.stubEnv('FAKE_CLAUDE_VERSION', CLAUDE_VERSION)
   })
 
   afterEach(async (ctx) => {
     for (const a of apps.splice(0)) await a.close()
+    vi.stubEnv('FAKE_CLAUDE_REVIEW', join(tmp, 'review.json'))
     if (ctx.task.result?.state === 'fail' && logs.length) console.error(logs.join('\n'))
     logs.length = 0
   })
@@ -212,6 +219,11 @@ export function flowKit(): FlowKit {
       const state = JSON.parse(await readFile(kit.ghState, 'utf8')) as Entry & { prs?: Entry[] }
       edit(state)
       await writeFile(kit.ghState, JSON.stringify(state))
+    },
+    async review(findings) {
+      const file = join(tmp, `review-${++scenarios}.json`)
+      await writeFile(file, JSON.stringify({ findings }))
+      vi.stubEnv('FAKE_CLAUDE_REVIEW', file)
     },
   }
   return kit

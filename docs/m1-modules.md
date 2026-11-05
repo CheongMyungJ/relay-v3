@@ -87,6 +87,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
   4. 없으면 policy.conditions에서 처음 채운 조건(diff에 대한 술어: max_changed_lines, paths, no_new_dependencies, no_new_modules, require_all_lines_tested)을 찾는다. `hasRealLimit`이 거짓인 조건은 채우지 못한다. max_changed_lines는 `diff.binary`가 비어 있어야 채운다(바이너리는 줄 수로 크기를 잴 수 없다). 없으면 human_merge('채운 자동 조건 없음').
   5. 채웠으면: auto_merge_enabled, server(branch_protected && required_checks && (merge_queue || up_to_date_required)), track_record_ok[id] 셋이 모두 참이면 auto_merge_candidate(shadow false). 하나라도 거짓이면 human_merge이고 shadow true, decisive는 막은 것('프로젝트에서 자동 머지가 꺼져 있음' 등), condition은 그 id.
   - 결론은 엄격한 쪽으로만: 리뷰가 없거나 실패면 자동으로 가지 않는다.
+- `openItems(evidence: EvidenceBundle, contract: Contract | null, head: string | null): string[]` — 열린 것(V25, 앱의 [끝내기]): 위 1의 계약 변경 요청(있으면 맨 앞)과 2의 사실 그대로다. gate와 같은 함수로 계산하고 새 판단은 없다. 4·5(자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적)와 올림 없는 리뷰 지적은 넣지 않는다. 비면 [끝내기]가 상자 없이 끝낸다.
 
 ### `src/core/debt.ts`
 - `parseDebt(text: string, id: string): Result<DebtItem>` / `formatDebt(item: DebtItem): string` — 머리글은 `---` 사이의 `key: value` 줄(anchor는 `anchor.path`, `anchor.name`, `anchor.metric`), 본문은 reason. 한 줄에 그대로 못 쓰는 값(앞뒤·연속 공백, 공백 아닌 빈칸, 제어 글자, 역슬래시, `"`로 시작)은 JSON 문자열로 감싸 쓰고 parseDebt가 푼다. 감싸지 않은 anchor.path의 역슬래시는 오류(사람이 쓴 Windows 경로). 둘은 서로 되돌아온다(까닭의 앞뒤 공백은 빼고).

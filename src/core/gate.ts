@@ -58,6 +58,19 @@ export function gate(
   return human([none, ...(misses.length > 0 ? misses : ['정책에 자동 조건이 없음'])], null, false)
 }
 
+/**
+ * 열린 것(V25, 앱의 [끝내기]): 관문이 계약 다시나 사람 머지로 보내는 사실 그대로다. gate와 같은 함수로 계산하고 새 판단은
+ * 없다. 자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적, 올림 없는 리뷰 지적은 넣지 않는다. 비면 [끝내기]가 상자 없이 끝낸다
+ */
+export function openItems(
+  evidence: EvidenceBundle,
+  contract: Contract | null,
+  head: string | null,
+): string[] {
+  const change = changeRequest(evidence, contract)
+  return [...(change === null ? [] : [change]), ...humanFacts(evidence, contract, head)]
+}
+
 function human(reasons: string[], condition: string | null, shadow: boolean): GateResult {
   return { conclusion: 'human_merge', decisive: reasons[0] ?? '', reasons, condition, shadow }
 }

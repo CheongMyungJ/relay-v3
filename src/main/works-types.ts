@@ -1,8 +1,8 @@
-// Works의 의존과 안쪽 모양 (docs/m2-modules.md 3절 works.ts). works.ts가 600줄을 넘지 않게 계약 창구(works-contract.ts)와
-// 증거·머지(works-evidence.ts)를 나눴다. 둘은 이 파일의 WorkCtx로 Works를 본다. Electron을 모른다.
+// Works의 의존과 안쪽 모양 (docs/m2-modules.md 3절 works.ts). works.ts가 600줄을 넘지 않게 계약 창구(works-contract.ts),
+// 증거·머지(works-evidence.ts), [끝내기](works-end.ts)를 나눴다. 셋은 이 파일의 WorkCtx로 Works를 본다. Electron을 모른다.
 
 import type { Contract, EvidenceBundle } from '../core/types.ts'
-import type { SessionState } from '../core/work.ts'
+import type { SessionState, WorkEvent } from '../core/work.ts'
 import type { HookEvent } from '../core/instructions.ts'
 import type { SessionHost } from './sessions.ts'
 import type { ProjectRecord, Store, WorkRecord } from './store.ts'
@@ -97,6 +97,8 @@ export interface Runtime {
   abort: AbortController
   /** 마지막으로 기록한 자동 머지의 기다림·실패 까닭(같은 까닭을 PR 확인마다 다시 적지 않게) */
   autoMergeNote: string | null
+  /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(V25, 화면의 한 줄). 다시 [끝내기]·[취소]하거나 Work가 끝나면 null */
+  endMoved: string | null
 }
 
 /** works-contract.ts와 works-evidence.ts가 보는 Works */
@@ -118,6 +120,15 @@ export interface WorkCtx {
   tell(id: string, text: string): Promise<void>
   /** Work가 끝났다(done, abandoned): 타이머를 멈추고 세션을 끝낸다 */
   finish(id: string): Promise<void>
+  /** 상태 기계의 사건을 받아 저장하고 기록한다(extra는 events.jsonl에 더할 칸). 끝났으면 finish */
+  transition(rec: WorkRecord, ev: WorkEvent, extra?: Record<string, unknown>): Promise<void>
+  /**
+   * 읽은 HEAD를 화면에 둔다. 걸린 끝이나 끝내기 상자의 head가 아니면 그것을 지우고 저장한다(V25). null이면 아무것도 하지
+   * 않는다
+   */
+  seeHead(id: string, head: string | null): Promise<void>
+  /** 증거 재기가 하나 끝났다(works-evidence.ts의 줄 안에서): 걸린 끝을 다시 본다(V25, works-end.ts) */
+  settleEnd(id: string): Promise<void>
   /** 프로젝트의 품질 기준 상태(V20)를 뒤에서 다시 잰다(실패는 삼킨다) */
   refreshQuality(projectId: string): void
   log(message: string, error?: unknown): void

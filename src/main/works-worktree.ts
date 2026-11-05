@@ -152,6 +152,7 @@ export async function newWork(
     exported_head: null,
     error: null,
     notice: null,
+    end_pending: null,
   }
   const text = hint ? `${request}\n\n## 일의 성격 제안\n\n${hint}\n` : `${request}\n`
   await store.writeText(id, 'request.md', text)

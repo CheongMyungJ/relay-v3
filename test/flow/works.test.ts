@@ -349,8 +349,17 @@ test('계약 바꾸기: 세션의 요청 → recontract(관문도 recontract) �
   expect(v.gate?.conclusion).toBe('recontract')
   // [머지]는 구현 중일 때만
   expect(await works.merge(id)).toEqual({ ok: false, error: '구현 중인 Work만 머지할 수 있음' })
+  // [끝내기](V25): 풀리지 않은 계약 변경 요청은 열린 것이라 상자가 뜬다
+  expect(await works.end(id)).toMatchObject({ armed: true })
+  await until(() => works.view(id).endPending?.armed === false, '끝내기 상자')
+  expect(works.view(id).endPending?.open[0]).toBe(`계약 변경 요청: ${reason}`)
 
   await works.answerChange(id, { approved: true, message: '좋아요' })
+  // 계약이 바뀌었으니 앞 계약의 증거로 정한 상자는 지운다
+  expect(works.view(id).endPending).toBeNull()
+  expect((await app.store.readEvents(id)).filter((e) => e.type === 'end_cancelled')).toMatchObject([
+    { armed: false, reason: 'contract' },
+  ])
   await until(async () => (await mcpResults('request_contract_change')).length === 4, '답')
   const answer = (await mcpResults('request_contract_change'))[3] as Entry
   expect(answer).toMatchObject({ status: 'approved', message: '좋아요' })

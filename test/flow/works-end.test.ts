@@ -1,6 +1,7 @@
-// [흐름] [끝내기]의 두 단계(V18: prepareEnd → 사람이 보고 [끝 확정] end), 상자 뒤 커밋과 [끝 확정]의 head, 실패하거나
-// 끊긴 리뷰의 다시 재기, 프로젝트의 품질 기준 상태와 [초안 만들기](V20), 평가용으로 끈 리뷰(RELAY_ABLATE=review의
-// reviewDisabled). 바탕은 test/support/works-flow.ts.
+// [흐름] [끝내기](V25): 열린 것이 없으면 한 번에 끝남(걸었다가 리뷰 뒤, 이미 잰 head면 바로), 올림이 있으면 상자(work.json)와
+// [더 고치기]·[그래도 끝내기](안전망), 상자 뒤 커밋과 낡은 화면의 head, 걸린 끝의 [취소]와 리뷰 중 커밋, 실패한 리뷰는 상자의
+// 열린 것(앱을 다시 켜도 남음)이고 다시 [끝내기]가 리뷰를 다시 부름, 앱을 닫아 끊긴 리뷰와 걸린 끝 이어 재기, 평가용으로 끈
+// 리뷰(reviewDisabled)는 늘 상자, 프로젝트의 품질 기준 상태와 [초안 만들기](V20). 바탕은 test/support/works-flow.ts.
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
@@ -9,10 +10,13 @@ import { headOf } from '../../src/main/works-evidence.ts'
 import { EVENTS, type ProjectView } from '../../src/shared/api.ts'
 import { QUALITY_TEXT } from '../support/calc.ts'
 import { makeRepo, makeTempDir } from '../support/repo.ts'
+import type { TestApp } from '../support/works-app.ts'
 import {
   CONTRACT,
   FIX_COMMIT,
   flowKit,
+  PUSH_AND_PR,
+  RAISED_FINDINGS,
   REQUEST,
   settled,
   type Entry,
@@ -21,98 +25,155 @@ import {
 const kit = flowKit()
 const { scenario, fake, until } = kit
 
-const exportsOf = async (
-  app: { store: { readEvents(id: string): Promise<Entry[]> } },
-  id: string,
-) => (await app.store.readEvents(id)).filter((e) => e.type === 'evidence').map((e) => e.export)
+const SUBMIT = { do: 'mcp', tool: 'submit_contract', args: CONTRACT }
+const RAISED = ['리뷰 올림(구조): 중복 구현 — src/calc.js:5']
+
+const exportsOf = async (app: TestApp, id: string) =>
+  (await app.store.readEvents(id)).filter((e) => e.type === 'evidence').map((e) => e.export)
 
 const reviews = async () => (await fake()).filter((e) => e.type === 'review').length
 
-test('[끝내기]는 내보내기 증거(리뷰 포함)만 재고 Work를 구현 중으로 둔다. 사람이 보고 세션이 더 고치면 다시 [끝내기], [끝 확정]은 다시 재지 않고 끝낸다', async () => {
+/** [끝내기]가 남긴 기록(ts를 뺀다) */
+const ends = async (app: TestApp, id: string) =>
+  (await app.store.readEvents(id))
+    .filter((e) => typeof e.type === 'string' && /^end/.test(e.type))
+    .map((e) => {
+      const { ts, ...rest } = e
+      return ts === undefined ? e : rest
+    })
+
+const workJson = async (app: TestApp, id: string) =>
+  JSON.parse((await app.store.readText(id, 'work.json')) ?? '') as Entry
+
+/** 프로젝트를 더하고 Work를 만들어 계약을 승인하고, 첫 Stop의 증거(내보내기 아님)를 기다린다 */
+async function startWork(app: TestApp): Promise<string> {
+  const { works } = app
+  const project = await works.addProject(kit.repo.dir)
+  const { id } = await works.createWork({ project: project.id, request: REQUEST })
+  await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
+  await works.approveContract(id)
+  await until(() => works.view(id).evidence !== null && settled(works.view(id)), 'Stop의 증거')
+  return id
+}
+
+const boxed = (app: TestApp, id: string) => () => app.works.view(id).endPending?.armed === false
+
+test('열린 것이 없으면 [끝내기] 한 번에 끝난다: 내보내기 증거가 없으면 걸어 두고 리뷰가 끝나면 끝낸다(상자 없음)', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app)
+  const head = works.view(id).head ?? ''
+  expect(works.view(id).evidence?.review).toBeNull()
+
+  const armed = { head, armed: true, open: [] }
+  expect(await works.end(id, { head })).toEqual({ ...armed, ended: false })
+  expect(works.view(id).endPending).toEqual(armed)
+  expect((await workJson(app, id)).end_pending).toEqual(armed)
+  await until(() => works.view(id).state === 'done', '리뷰 뒤 끝남')
+  // 끝내기는 증거 재기의 줄 안에서 일어난다: 그 줄이 끝나면 ended 기록도 남았다
+  await works.idle()
+  const v = works.view(id)
+  // 리뷰 지적(올림 없음)은 열린 것이 아니다. 관문은 사람 머지(그림자)여도 끝낸다
+  expect(v.evidence).toMatchObject({
+    head,
+    review: { status: 'done', findings: [{ text: '이름이 짧음' }] },
+  })
+  expect(v.gate?.conclusion).toBe('human_merge')
+  expect(v.endPending).toBeNull()
+  expect((await workJson(app, id)).end_pending).toBeNull()
+  expect(await exportsOf(app, id)).toEqual([false, true])
+  expect(await reviews()).toBe(1)
+  expect(await ends(app, id)).toEqual([
+    { type: 'end_armed', head },
+    { type: 'ended', how: 'armed', head },
+  ])
+  await until(() => !app.sessions.isRunning(id), '세션 끝')
+  // 리뷰 결과는 세션에 넣지 않는다(V4, V8)
+  expect((await fake()).filter((e) => e.type === 'input')).toEqual([])
+  await expect(works.end(id, { head })).rejects.toThrow()
+})
+
+test('PR 내보내기로 이미 잰 깨끗한 head는 [끝내기]가 다시 재지 않고 바로 끝낸다', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, ...PUSH_AND_PR, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app)
+  await until(
+    () => works.find(id)?.exported_head === works.view(id).head && settled(works.view(id)),
+    'PR의 내보내기 증거',
+  )
+  await works.idle()
+  const head = works.view(id).head ?? ''
+  const exported = await exportsOf(app, id)
+  expect(await reviews()).toBe(1)
+  expect(await works.end(id, { head })).toEqual({ head, ended: true, armed: false, open: [] })
+  expect(works.view(id).state).toBe('done')
+  expect(await exportsOf(app, id)).toEqual(exported)
+  expect(await reviews()).toBe(1)
+  expect(await ends(app, id)).toEqual([{ type: 'ended', how: 'once', head }])
+})
+
+test('올림이 있으면 상자(work.json에 남음): [더 고치기]로 닫고, 세션이 고친 head는 [그래도 끝내기]가 먼저 내보내기로 재고(안전망) 끝낸다', async () => {
+  await kit.review(RAISED_FINDINGS)
   await scenario([
-    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+    SUBMIT,
     FIX_COMMIT,
     { do: 'stop' },
     { do: 'waitInput' },
-    { do: 'commit', message: '리뷰 지적 고침', files: { 'NOTES.md': '이름을 고쳤다\n' } },
+    { do: 'commit', message: '리뷰 지적 고침', files: { 'NOTES.md': '중복을 없앴다\n' } },
     { do: 'stop' },
   ])
   const app = await kit.openApp(await makeTempDir('relay-home-'))
   const { works } = app
-  const project = await works.addProject(kit.repo.dir)
-  const { id } = await works.createWork({ project: project.id, request: REQUEST })
-  await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
-  await works.approveContract(id)
-  await until(() => works.view(id).evidence !== null && settled(works.view(id)), 'Stop의 증거')
-  const first = works.view(id).head
-  expect(works.view(id).evidence?.review).toBeNull()
+  const id = await startWork(app)
+  const first = works.view(id).head ?? ''
 
-  // [끝내기]: 내보내기 증거(리뷰 포함)를 재고 Work는 그대로
-  const prepared = await works.prepareEnd(id)
-  expect(prepared).toEqual({ head: first })
-  let v = works.view(id)
-  expect(v).toMatchObject({ state: 'working', reviewDisabled: false })
-  expect(v.evidence?.head).toBe(first)
-  expect(v.evidence?.review).toMatchObject({ status: 'done', findings: [{ text: '이름이 짧음' }] })
-  expect(await exportsOf(app, id)).toEqual([false, true])
-  expect(await reviews()).toBe(1)
+  expect(await works.end(id, { head: first })).toMatchObject({ armed: true })
+  await until(boxed(app, id), '상자')
+  const box = { head: first, armed: false, open: RAISED }
+  expect(works.view(id)).toMatchObject({ state: 'working', endPending: box })
+  expect((await workJson(app, id)).end_pending).toEqual(box)
   expect(app.sessions.isRunning(id)).toBe(true)
-  // 이미 잰 head면 다시 재지 않는다
-  expect(await works.prepareEnd(id)).toEqual({ head: first })
+  // 다시 [끝내기]: 이미 잰 head라 다시 재지 않고 같은 상자
+  expect(await works.end(id, { head: first })).toEqual({ ...box, ended: false })
   expect(await reviews()).toBe(1)
-  // 리뷰 결과는 세션에 넣지 않는다(V4, V8): 세션은 아무 입력도 받지 않았다
-  expect((await fake()).filter((e) => e.type === 'input')).toEqual([])
 
-  // 사람이 지적을 보고 터미널에서 말한다 → 세션이 더 커밋한다 → HEAD가 바뀌었으니 다시 [끝내기]
-  app.sessions.write(id, '이름을 고쳐 주세요\r')
-  await until(() => works.view(id).head !== first, '세션의 새 커밋')
-  const second = works.view(id).head
-  expect(await works.prepareEnd(id)).toEqual({ head: second })
-  expect(works.view(id).evidence).toMatchObject({ head: second, review: { status: 'done' } })
+  // [더 고치기]: 상자를 지운다(work.json에서도). 사람이 터미널에서 말하고 세션이 고친다
+  await works.cancelEnd(id)
+  expect(works.view(id).endPending).toBeNull()
+  expect((await workJson(app, id)).end_pending).toBeNull()
+  app.sessions.write(id, '중복을 없애 주세요\r')
+  await until(() => {
+    const v = works.view(id)
+    return v.head !== first && v.evidence?.head === v.head && settled(v)
+  }, '세션의 새 커밋과 그 증거')
+  const second = works.view(id).head ?? ''
+
+  // [그래도 끝내기](상자 없이 부름): 이 head를 내보내기로 재지 않았으니 먼저 잰다(안전망). 열린 것이 있어도 끝낸다
+  expect(await works.end(id, { head: second, force: true })).toEqual({
+    head: second,
+    ended: true,
+    armed: false,
+    open: RAISED,
+  })
+  expect(works.view(id).state).toBe('done')
+  expect(await exportsOf(app, id)).toEqual([false, true, false, true])
   expect(await reviews()).toBe(2)
-  const before = await exportsOf(app, id)
-  expect(before.at(-1)).toBe(true)
-
-  // [끝 확정]: 이 head는 이미 내보내기로 쟀다. 다시 재지 않고 끝낸다
-  await works.end(id, second ?? '')
-  v = works.view(id)
-  expect(v.state).toBe('done')
-  expect(await exportsOf(app, id)).toEqual(before)
-  expect(await reviews()).toBe(2)
-  await until(() => !app.sessions.isRunning(id), '세션 끝')
-  await expect(works.prepareEnd(id)).rejects.toThrow()
-})
-
-test('리뷰를 평가용으로 끄면(reviewDisabled) 리뷰를 부르지 않고 건너뜀으로 둔다. [끝 확정]만 눌러도 내보내기로 재고 끝낸다(안전망)', async () => {
-  await scenario([
-    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
-    FIX_COMMIT,
-    { do: 'stop' },
+  expect(await ends(app, id)).toEqual([
+    { type: 'end_armed', head: first },
+    { type: 'end_box', head: first, open: 1 },
+    { type: 'end_box', head: first, open: 1 },
+    { type: 'end_cancelled', head: first, armed: false, reason: 'human' },
+    { type: 'ended', how: 'box', head: second, open: 1 },
   ])
-  const app = await kit.openApp(await makeTempDir('relay-home-'), { reviewDisabled: true })
-  const { works } = app
-  const project = await works.addProject(kit.repo.dir)
-  const { id } = await works.createWork({ project: project.id, request: REQUEST })
-  expect(works.view(id).reviewDisabled).toBe(true)
-  await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
-  await works.approveContract(id)
-  await until(() => works.view(id).evidence !== null && settled(works.view(id)), 'Stop의 증거')
-  await works.end(id, works.view(id).head ?? '')
-  const v = works.view(id)
-  expect(v.state).toBe('done')
-  expect(v.evidence?.review).toEqual({ status: 'skipped', findings: [] })
-  expect(v.gate?.reasons).toContain('리뷰를 건너뜀')
-  expect(await exportsOf(app, id)).toEqual([false, true])
-  expect(await reviews()).toBe(0)
-  // 평가가 [끝내기]마다 센 건너뜀 기록은 남긴다
-  const skipped = (await app.store.readEvents(id)).filter((e) => e.type === 'review')
-  expect(skipped).toMatchObject([{ status: 'skipped', disabled: true }])
 })
 
-test('[끝내기] 상자 뒤 세션이 Stop 없이 커밋하면 [끝 확정](상자의 head)은 끝내지 않는다. 셸 명령의 커밋은 Stop 전에 화면의 HEAD를 고친다', async () => {
+test('상자 뒤 세션이 Stop 없이 커밋하면 [그래도 끝내기](상자의 head)도 낡은 화면의 [끝내기]도 끝내지 않는다. 셸 명령의 커밋은 Stop 전에 HEAD를 보인다', async () => {
+  await kit.review(RAISED_FINDINGS)
   const shellCommit = `git -c user.name=f -c user.email=f@relay.invalid commit -q --allow-empty -m 셋째`
   await scenario([
-    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+    SUBMIT,
     FIX_COMMIT,
     { do: 'stop' },
     { do: 'waitInput' },
@@ -124,13 +185,10 @@ test('[끝내기] 상자 뒤 세션이 Stop 없이 커밋하면 [끝 확정](상
   ])
   const app = await kit.openApp(await makeTempDir('relay-home-'))
   const { works } = app
-  const project = await works.addProject(kit.repo.dir)
-  const { id } = await works.createWork({ project: project.id, request: REQUEST })
-  await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
-  await works.approveContract(id)
-  await until(() => works.view(id).evidence !== null && settled(works.view(id)), 'Stop의 증거')
+  const id = await startWork(app)
   const first = works.view(id).head ?? ''
-  expect(await works.prepareEnd(id)).toEqual({ head: first })
+  await works.end(id, { head: first })
+  await until(boxed(app, id), '상자')
   const exported = await exportsOf(app, id)
   expect(await reviews()).toBe(1)
 
@@ -138,10 +196,20 @@ test('[끝내기] 상자 뒤 세션이 Stop 없이 커밋하면 [끝 확정](상
   app.sessions.write(id, '지적을 고쳐 주세요\r')
   await until(async () => (await headOf(worktree)) !== first, '세션의 차례 안 커밋')
   const second = await headOf(worktree)
-  expect(works.view(id).head).toBe(first)
-  // [끝 확정]이 넘긴 head는 지금 HEAD가 아니다: 새 커밋을 재지도 끝내지도 않고, 화면의 HEAD를 고쳐 상자를 거둔다
-  await expect(works.end(id, first)).rejects.toThrow(/HEAD가 바뀜.*끝내기를 다시 눌러/)
-  expect(works.view(id)).toMatchObject({ state: 'working', head: second })
+  expect(works.view(id)).toMatchObject({ head: first, endPending: { head: first } })
+  // [그래도 끝내기]가 넘긴 head는 지금 HEAD가 아니다: 새 커밋을 재지도 끝내지도 않고, 화면의 HEAD를 고쳐 상자를 지운다
+  await expect(works.end(id, { head: first, force: true })).rejects.toThrow(
+    /HEAD가 바뀜.*끝내기를 다시 눌러/,
+  )
+  expect(works.view(id)).toMatchObject({
+    state: 'working',
+    head: second,
+    endPending: null,
+    endMoved: first,
+  })
+  expect((await workJson(app, id)).end_pending).toBeNull()
+  // 화면이 앞 head를 보던 [끝내기]도 끝내지 않는다(사람이 보지 못한 커밋을 한 번에 끝내지 않게)
+  await expect(works.end(id, { head: first })).rejects.toThrow(/HEAD가 바뀜/)
   expect(await exportsOf(app, id)).toEqual(exported)
   expect(await reviews()).toBe(1)
   expect(app.sessions.isRunning(id)).toBe(true)
@@ -151,89 +219,169 @@ test('[끝내기] 상자 뒤 세션이 Stop 없이 커밋하면 [끝 확정](상
   await until(() => works.view(id).head !== second, '셸 커밋의 HEAD')
   const third = await headOf(worktree)
   expect(works.view(id)).toMatchObject({ head: third, session: 'running' })
-  // 다시 [끝내기] → 새 head의 리뷰 → [끝 확정]
-  expect(await works.prepareEnd(id)).toEqual({ head: third })
+  // 새 head의 [끝내기] → 걸림 → 상자 → [그래도 끝내기]는 다시 재지 않는다
+  expect(await works.end(id, { head: third })).toMatchObject({ armed: true })
+  expect(works.view(id).endMoved).toBeNull()
+  await until(boxed(app, id), '새 head의 상자')
+  const again = await exportsOf(app, id)
   expect(await reviews()).toBe(2)
-  await works.end(id, third)
+  await works.end(id, { head: third, force: true })
   expect(works.view(id).state).toBe('done')
+  expect(await exportsOf(app, id)).toEqual(again)
+  expect(await reviews()).toBe(2)
+  expect((await ends(app, id)).find((e) => e.type === 'end_moved')).toEqual({
+    type: 'end_moved',
+    from: first,
+    to: second,
+    armed: false,
+  })
 })
 
-test('리뷰가 실패한 head는 [끝내기]가 리뷰를 다시 부른다([증거 다시 재기]는 실패를 잇는다)', async () => {
+test('걸린 끝은 [취소]로 푼다(리뷰는 끝까지 돈다). 리뷰 중 세션이 커밋하면 끝내지 않고 지운다', async () => {
   await scenario([
-    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+    SUBMIT,
     FIX_COMMIT,
     { do: 'stop' },
+    { do: 'waitInput' },
+    { do: 'commit', message: '하나 더', files: { 'NOTES.md': '하나\n' } },
+    { do: 'stop' },
+    { do: 'waitInput' },
+    // 리뷰가 도는 동안의 차례 안 커밋(훅 없음)
+    { do: 'commit', message: '또 하나', files: { 'NOTES.md': '둘\n' } },
+    { do: 'waitInput' },
   ])
   const app = await kit.openApp(await makeTempDir('relay-home-'))
   const { works } = app
-  const project = await works.addProject(kit.repo.dir)
-  const { id } = await works.createWork({ project: project.id, request: REQUEST })
-  await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
-  await works.approveContract(id)
-  await until(() => works.view(id).evidence !== null && settled(works.view(id)), 'Stop의 증거')
-  const head = works.view(id).head
+  const id = await startWork(app)
+  const first = works.view(id).head ?? ''
+  const worktree = works.find(id)?.worktree ?? ''
+  try {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '1500')
+    await works.end(id, { head: first })
+    await until(() => works.view(id).reviewRunning, '리뷰 시작')
+    await works.cancelEnd(id)
+    expect(works.view(id).endPending).toBeNull()
+    await until(() => works.find(id)?.exported_head === first && settled(works.view(id)), '리뷰 끝')
+    await works.idle()
+    // 깨끗한 head였지만 [취소]했으니 끝내지 않는다
+    expect(works.view(id).state).toBe('working')
+
+    app.sessions.write(id, '하나 더\r')
+    await until(() => {
+      const v = works.view(id)
+      return v.head !== first && v.evidence?.head === v.head && settled(v)
+    }, '세션의 새 커밋과 그 증거')
+    const second = works.view(id).head ?? ''
+    await works.end(id, { head: second })
+    await until(() => works.view(id).reviewRunning, '둘째 리뷰 시작')
+    app.sessions.write(id, '또 하나\r')
+    await until(async () => (await headOf(worktree)) !== second, '리뷰 중 커밋')
+    const third = await headOf(worktree)
+    await until(() => settled(works.view(id)), '둘째 리뷰 끝')
+    await works.idle()
+    expect(works.view(id)).toMatchObject({
+      state: 'working',
+      head: third,
+      endPending: null,
+      endMoved: second,
+    })
+    expect(await reviews()).toBe(2)
+    expect(await ends(app, id)).toEqual([
+      { type: 'end_armed', head: first },
+      { type: 'end_cancelled', head: first, armed: true, reason: 'human' },
+      { type: 'end_armed', head: second },
+      { type: 'end_moved', from: second, to: third, armed: true },
+    ])
+  } finally {
+    vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
+  }
+})
+
+test('리뷰가 실패하면 상자의 열린 것이고 앱을 다시 켜도 상자가 남는다. 다시 [끝내기]는 리뷰를 다시 부른다([증거 다시 재기]는 실패를 잇는다)', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
+  const home = await makeTempDir('relay-home-')
+  const first = await kit.openApp(home)
+  const id = await startWork(first)
+  const head = first.works.view(id).head ?? ''
+  const box = { head, armed: false, open: ['리뷰 실패'] }
   try {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', 'exit')
-    expect(await works.prepareEnd(id)).toEqual({ head })
-    expect(works.view(id).evidence?.review).toEqual({ status: 'failed', findings: [] })
-    expect(await reviews()).toBe(1)
+    await first.works.end(id, { head })
+    await until(boxed(first, id), '상자')
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', '')
   }
-  // PR이 없으면 [증거 다시 재기]는 내보내기가 아니어서 같은 head의 실패한 리뷰를 잇는다
-  await works.runEvidence(id, { exportCandidate: false })
-  expect(works.view(id).evidence?.review?.status).toBe('failed')
+  expect(first.works.view(id).endPending).toEqual(box)
   expect(await reviews()).toBe(1)
-  // 다시 [끝내기]: 이미 잰 head라도 리뷰가 실패했으면 다시 잰다
-  expect(await works.prepareEnd(id)).toEqual({ head })
-  expect(works.view(id).evidence?.review).toMatchObject({
-    status: 'done',
-    findings: [{ text: '이름이 짧음' }],
-  })
+  // PR이 없으면 [증거 다시 재기]는 내보내기가 아니어서 같은 head의 실패한 리뷰를 잇는다
+  await first.works.runEvidence(id, { exportCandidate: false })
+  expect(first.works.view(id).evidence?.review?.status).toBe('failed')
+  expect(await reviews()).toBe(1)
+  await first.close()
+  kit.forget(first)
+
+  // 앱을 다시 켜도 상자가 남는다(다른 Work로 갔다 와도 남는 것과 같은 자리: work.json)
+  const second = await kit.openApp(home)
+  expect(second.works.view(id).endPending).toEqual(box)
+  // 다시 [끝내기]: 이미 잰 head라도 리뷰가 실패했으면 다시 잰다. 이번 리뷰에는 올림이 없어 끝난다
+  expect(await second.works.end(id, { head })).toMatchObject({ armed: true })
+  await until(() => second.works.view(id).state === 'done', '리뷰 뒤 끝남')
+  await second.works.idle()
+  expect(second.works.view(id).evidence?.review).toMatchObject({ status: 'done' })
   expect(await reviews()).toBe(2)
-  // 리뷰가 된 head는 다시 부르지 않는다
-  expect(await works.prepareEnd(id)).toEqual({ head })
-  expect(await reviews()).toBe(2)
+  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
 })
 
-test('앱을 닫아 끊긴 리뷰는 내보내기(exported_head, 장부, export 기록)로 남지 않는다. 다시 켜고 [끝내기]하면 다시 잰다', async () => {
-  await scenario([
-    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
-    FIX_COMMIT,
-    { do: 'stop' },
-  ])
+test('앱을 닫아 끊긴 리뷰는 내보내기(exported_head, 장부, export 기록)로 남지 않는다. 걸린 끝은 남아 다시 켜면 이어 재고 끝낸다', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
   const home = await makeTempDir('relay-home-')
   const first = await kit.openApp(home)
-  const project = await first.works.addProject(kit.repo.dir)
-  const { id } = await first.works.createWork({ project: project.id, request: REQUEST })
-  await until(() => first.works.view(id).state === 'awaiting_approval', '계약 제출')
-  await first.works.approveContract(id)
-  await until(
-    () => first.works.view(id).evidence !== null && settled(first.works.view(id)),
-    'Stop의 증거',
-  )
-  const head = first.works.view(id).head
+  const id = await startWork(first)
+  const head = first.works.view(id).head ?? ''
   const ledger = (await first.store.readLedger()).length
-  let ending: Promise<unknown>
   try {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', 'hang')
-    ending = first.works.prepareEnd(id).catch((e: unknown) => e)
+    await first.works.end(id, { head })
     await until(() => first.works.view(id).reviewRunning, '리뷰 시작')
     await first.close()
     kit.forget(first)
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_FAIL', '')
   }
-  expect(await ending).toBeInstanceOf(Error)
-  const rec = JSON.parse((await first.store.readText(id, 'work.json')) ?? '') as Entry
+  const rec = await workJson(first, id)
   expect(rec.exported_head ?? null).toBeNull()
+  expect(rec.end_pending).toEqual({ head, armed: true, open: [] })
   expect(await exportsOf(first, id)).toEqual([false])
   expect((await first.store.readLedger()).length).toBe(ledger)
 
   const second = await kit.openApp(home)
-  expect(await second.works.prepareEnd(id)).toEqual({ head })
+  await until(() => second.works.view(id).state === 'done', '이어 잰 뒤 끝남')
+  await second.works.idle()
   expect(second.works.view(id).evidence?.review).toMatchObject({ status: 'done' })
   expect(await exportsOf(second, id)).toEqual([false, true])
+  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
+})
+
+test('리뷰를 평가용으로 끄면(reviewDisabled) 리뷰를 부르지 않고 건너뜀으로 둔다. 건너뜀은 늘 열린 것이라 [끝내기]는 상자를 띄운다', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'), { reviewDisabled: true })
+  const { works } = app
+  const id = await startWork(app)
+  expect(works.view(id).reviewDisabled).toBe(true)
+  const head = works.view(id).head ?? ''
+  await works.end(id, { head })
+  await until(boxed(app, id), '상자')
+  expect(works.view(id).endPending?.open).toEqual(['리뷰를 건너뜀'])
+  await works.end(id, { head, force: true })
+  const v = works.view(id)
+  expect(v.state).toBe('done')
+  expect(v.evidence?.review).toEqual({ status: 'skipped', findings: [] })
+  expect(v.gate?.reasons).toContain('리뷰를 건너뜀')
+  expect(await exportsOf(app, id)).toEqual([false, true])
+  expect(await reviews()).toBe(0)
+  // 평가가 [끝내기]마다 센 건너뜀 기록은 남긴다
+  const skipped = (await app.store.readEvents(id)).filter((e) => e.type === 'review')
+  expect(skipped).toMatchObject([{ status: 'skipped', disabled: true }])
 })
 
 test('품질 기준 상태(V20): 기본 브랜치에 없으면 missing, [초안 만들기]는 작업 트리에 쓰고 덮지 않는다, 커밋하면 present, 깨지면 invalid', async () => {

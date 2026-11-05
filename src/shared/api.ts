@@ -124,6 +124,21 @@ export interface WorkView {
   createdAt: string
   /** 마지막으로 실패한 일(세션 시작, 증거, 머지 등)의 까닭. 없으면 null */
   error: string | null
+  /** 지금 HEAD의 걸린 끝이나 끝내기 상자(V25). 다른 Work로 갔다 오거나 앱을 다시 켜도 남는다. 없으면 null */
+  endPending: EndPending | null
+  /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(화면이 '[끝내기] 뒤 세션이 새로 커밋'을 보인다). 다시 누르면 null */
+  endMoved: string | null
+}
+
+/**
+ * [끝내기](V25)가 Work에 남긴 것. armed면 걸린 끝: 이 head의 내보내기 증거(리뷰 포함)가 끝나면 열린 것을 보고 끝내거나
+ * 상자로 바꾼다. 아니면 상자: open은 열린 것(core openItems, 관문이 사람 머지로 보내는 사실). head가 바뀌거나 계약이
+ * 바뀌거나 Work가 끝나면 지운다
+ */
+export interface EndPending {
+  head: string
+  armed: boolean
+  open: string[]
 }
 
 export interface WorkList {
@@ -154,11 +169,20 @@ export interface MergeResult {
 }
 
 /**
- * [끝내기]의 첫 단계(prepareEnd, V18)의 답: 내보내기 증거(리뷰 포함)를 잰 지금 HEAD. 화면은 HEAD가 이것인 동안만 확인
- * 상자를 보인다. 재는 사이 Work가 끝났으면(정책 머지) null
+ * [끝내기](V25)의 답: 끝남(ended), 걸림(armed: 내보내기 증거와 리뷰를 기다림), 상자(open: 열린 것) 가운데 하나. head는 본
+ * HEAD이고, [그래도 끝내기]가 재는 사이 정책이 머지해 끝났으면 null
  */
 export interface PreparedEnd {
   head: string | null
+  ended: boolean
+  armed: boolean
+  open: string[]
+}
+
+/** [끝내기]의 입력. force는 [그래도 끝내기]이고 head는 상자의 head다. 아니면 head는 화면의 HEAD(다르면 끝내지 않는다) */
+export interface EndInput {
+  head?: string
+  force?: boolean
 }
 
 /** terminal.attach의 답: 최근 출력(최대 200KB)과 그다음 조각의 번호. 이후 조각은 seq ≥ 이 값만 받는다 */
@@ -216,13 +240,13 @@ export interface RelayApi {
   askChanges(id: string, message: string): Promise<void>
   answerChange(id: string, o: ChangeAnswer): Promise<void>
   merge(id: string): Promise<MergeResult>
-  /** [끝내기](V18): 지금 HEAD의 내보내기 증거(리뷰 포함)가 없으면 잰다. Work는 끝내지 않는다 */
-  prepareEnd(id: string): Promise<PreparedEnd>
   /**
-   * [끝 확정]: head(확인 상자의 head, prepareEnd의 답)가 지금 HEAD일 때만 Work를 끝낸다. 다르면 던진다([끝내기]를 다시).
-   * 지금 HEAD의 내보내기 증거가 없으면 먼저 잰다(안전망)
+   * [끝내기](V25): 지금 HEAD의 내보내기 증거(리뷰 포함)에 열린 것이 없으면 끝낸다. 아직 재지 않았으면 걸어 두고 재며, 열린
+   * 것이 있으면 상자로 둔다. force([그래도 끝내기])는 head(상자의 head)가 지금 HEAD일 때만 끝낸다. 다르면 던진다
    */
-  end(id: string, head: string): Promise<void>
+  end(id: string, o: EndInput): Promise<PreparedEnd>
+  /** [취소]·[더 고치기]: 걸린 끝이나 상자를 지운다 */
+  cancelEnd(id: string): Promise<void>
   abandon(id: string): Promise<void>
   /** [증거 다시 재기]. 열린 PR이 있으면 내보내기 후보로(리뷰 포함) 잰다 */
   runEvidence(id: string): Promise<void>
@@ -252,8 +276,8 @@ export const IPC = {
   askChanges: 'relay:ask-changes',
   answerChange: 'relay:answer-change',
   merge: 'relay:merge',
-  prepareEnd: 'relay:prepare-end',
   end: 'relay:end',
+  cancelEnd: 'relay:cancel-end',
   abandon: 'relay:abandon',
   runEvidence: 'relay:run-evidence',
   terminalAttach: 'relay:terminal-attach',

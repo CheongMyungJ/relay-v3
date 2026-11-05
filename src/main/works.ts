@@ -1,7 +1,7 @@
 // Work 조율 (docs/m2-modules.md 3절 works.ts, docs/m2-app.md). Electron을 모른다: [흐름] 시험이 Node에서 조립해 돌린다.
 // 프로젝트와 Work를 저장소에 두고, Work마다 worktree·작업 브랜치·세션(PTY의 claude)을 만든다. 훅과 MCP 도구 호출을 받아
-// 상태 기계(core/work.ts)를 움직인다. 계약 창구는 works-contract.ts, 증거·관문·머지·PR은 works-evidence.ts,
-// worktree와 세션 띄우기는 works-worktree.ts, 프로젝트와 품질 기준 상태는 works-projects.ts.
+// 상태 기계(core/work.ts)를 움직인다. 계약 창구는 works-contract.ts, 증거·관문·머지·PR은 works-evidence.ts, [끝내기]는
+// works-end.ts, worktree와 세션 띄우기는 works-worktree.ts, 프로젝트와 품질 기준 상태는 works-projects.ts.
 
 import { killActive } from '../adapters/exec.ts'
 import { killRunFiles } from '../adapters/pty.ts'
@@ -16,6 +16,7 @@ import {
   EVENTS,
   type ChangeAnswer,
   type DraftQualityResult,
+  type EndInput,
   type MergeResult,
   type NewWorkInput,
   type PreparedEnd,
@@ -27,6 +28,7 @@ import {
 import { toolCommand, type HookReply } from './hooks.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
 import { ContractDesk } from './works-contract.ts'
+import { dropEnd, EndDesk } from './works-end.ts'
 import { EvidenceRunner, headOf, isExportCommand } from './works-evidence.ts'
 import { ProjectDesk } from './works-projects.ts'
 import { isActive, measures, type Runtime, type WorkCtx, type WorksDeps } from './works-types.ts'
@@ -46,6 +48,7 @@ export class Works implements WorkCtx {
   private readonly rts = new Map<string, Runtime>()
   private readonly desk: ContractDesk
   private readonly evidence: EvidenceRunner
+  private readonly ending: EndDesk
   private closing = false
 
   constructor(deps: WorksDeps) {
@@ -53,9 +56,13 @@ export class Works implements WorkCtx {
     this.projects = new ProjectDesk(deps)
     this.desk = new ContractDesk(this)
     this.evidence = new EvidenceRunner(this)
+    this.ending = new EndDesk(this, this.evidence)
   }
 
-  /** 저장소에서 프로젝트와 Work를 읽는다. 세션은 모두 멈춘 것으로 보이고 [다시 열기]로 --resume 한다 */
+  /**
+   * 저장소에서 프로젝트와 Work를 읽는다. 세션은 모두 멈춘 것으로 보이고 [다시 열기]로 --resume 한다. [끝내기]가 걸려
+   * 있던 Work는 이어 잰다(V25)
+   */
   async init(): Promise<void> {
     const { store } = this.deps
     await this.projects.load()
@@ -67,14 +74,16 @@ export class Works implements WorkCtx {
         ...rec,
         notice: rec.notice ?? null,
         session_started: rec.session_started ?? true,
+        end_pending: rec.end_pending ?? null,
       })
       const rt = this.runtime(id)
       const text = await store.readText(id, 'contract.json')
       const parsed = text === null ? null : parseContract(text)
       rt.contract = parsed?.ok ? parsed.value : null
       if (rec.evidence_path) rt.evidence = await readJson<EvidenceBundle>(rec.evidence_path)
-      rt.head = await headOf(rec.worktree).catch(() => null)
+      await this.seeHead(id, await headOf(rec.worktree).catch(() => null))
       if (rec.pr?.state === 'OPEN' && isActive(rec.state)) this.evidence.startPoll(id)
+      this.ending.resume(id)
     }
   }
 
@@ -112,6 +121,7 @@ export class Works implements WorkCtx {
         noticeSent: false,
         abort: new AbortController(),
         autoMergeNote: null,
+        endMoved: null,
       }
       this.rts.set(id, rt)
     }
@@ -125,6 +135,8 @@ export class Works implements WorkCtx {
   }
 
   async save(rec: WorkRecord): Promise<void> {
+    // 끝난 Work에는 걸린 끝도 끝내기 상자도 없다(V25)
+    if (!isActive(rec.state)) rec.end_pending = null
     rec.updated_at = this.deps.now()
     await this.deps.store.writeWork(rec)
     this.publish(rec.id)
@@ -161,8 +173,36 @@ export class Works implements WorkCtx {
     this.evidence.stopPoll(id)
     // 돌고 있는 리뷰(claude -p)를 그만둔다
     this.runtime(id).abort.abort()
+    this.runtime(id).endMoved = null
     this.desk.cancel(id, { status: 'cancelled', message: 'The Work has ended.' })
     await this.deps.sessions.kill(id)
+  }
+
+  async transition(
+    rec: WorkRecord,
+    ev: WorkEvent,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> {
+    const next = nextState(rec.state, ev)
+    if (!next.ok) throw new Error(next.errors.join('; '))
+    rec.state = next.value
+    await this.save(rec)
+    this.note(rec.id, { type: ev.type, ...extra })
+    await this.finish(rec.id)
+  }
+
+  async seeHead(id: string, head: string | null): Promise<void> {
+    const rec = this.works.get(id)
+    if (!rec || head === null) return
+    const rt = this.runtime(id)
+    const moved = rt.head !== head
+    rt.head = head
+    if (this.ending.follow(rec, head)) await this.save(rec)
+    else if (moved) this.publish(id)
+  }
+
+  async settleEnd(id: string): Promise<void> {
+    await this.ending.settle(id).catch((e) => this.log(`끝내기 실패 (${id})`, e))
   }
 
   refreshQuality(projectId: string): void {
@@ -279,7 +319,7 @@ export class Works implements WorkCtx {
       case 'PostToolUse':
       case 'PostToolUseFailure':
         rt.session = 'running'
-        // 셸 명령은 차례 안에서 커밋할 수 있다: 화면의 HEAD를 바로 고친다(낡은 head의 끝내기 확인 상자를 거둔다, V18)
+        // 셸 명령은 차례 안에서 커밋할 수 있다: 화면의 HEAD를 바로 고친다(낡은 head의 걸린 끝과 끝내기 상자를 지운다, V25)
         if (command !== null) void this.followHead(workId)
         if (event === 'PostToolUse' && command !== null && isExportCommand(command))
           void this.evidence.onPush(workId).catch((e) => this.log('PR 확인 실패', e))
@@ -367,6 +407,10 @@ export class Works implements WorkCtx {
     await this.desk.answerChange(id, o)
     const rec = this.record(id)
     const rt = this.runtime(id)
+    if (rec.end_pending !== null) {
+      dropEnd(this, rec)
+      await this.save(rec)
+    }
     const head = await headOf(rec.worktree).catch(() => null)
     if (!measures(rec.state) || head === null || rt.evidence === null) return
     if (this.evidence.measured(id, head)) return
@@ -388,85 +432,27 @@ export class Works implements WorkCtx {
   }
 
   /**
-   * [끝내기]의 첫 단계(V18): 지금 HEAD의 내보내기 증거(check → 리뷰 → 관문 → 장부)가 없거나 그 리뷰가 실패했으면 잰다.
-   * Work는 그대로(구현 중)다. 사람은 [증거]에서 리뷰 지적과 증거를 보고, 고칠 것이 있으면 터미널에서 세션에게 말하고,
-   * 없으면 [끝 확정](end) 한다. 리뷰 결과는 세션에 넣지 않는다(V4, V8). 재는 사이 정책이 머지해 끝났으면 head는 null.
-   * 내보내기 증거를 재지 못했거나 그사이 HEAD가 바뀌었으면 던진다(다시 누른다)
+   * [끝내기](V25, works-end.ts): 지금 HEAD의 내보내기 증거에 열린 것이 없으면 끝내고, 아직 재지 않았으면 걸어 두고 재며,
+   * 열린 것이 있으면 상자로 둔다. force는 [그래도 끝내기](head는 상자의 head)
    */
-  async prepareEnd(id: string): Promise<PreparedEnd> {
-    const rec = this.record(id)
-    const ok = nextState(rec.state, { type: 'ended' })
-    if (!ok.ok) throw new Error(ok.errors.join('; '))
-    await this.exportHead(id, { retryFailedReview: true })
-    if (!isActive(rec.state)) return { head: null }
-    const head = await headOf(rec.worktree)
-    if (this.evidence.exported(id, head)) return { head }
-    throw new Error(rec.error ?? '재는 사이 세션이 커밋해 HEAD가 바뀜: 끝내기를 다시 누르세요')
+  end(id: string, o: EndInput = {}): Promise<PreparedEnd> {
+    return this.ending.end(id, o)
   }
 
-  /**
-   * [끝 확정]: 확인 상자의 head(prepareEnd의 답)가 지금 HEAD일 때만 Work와 세션을 끝낸다. 상자 뒤 세션이 커밋했으면(Stop이
-   * 아직 오지 않아 상자가 남았어도) 끝내지 않고 던진다: 사람은 새 커밋의 증거와 리뷰를 본 적이 없다. 그 head를 내보내기로
-   * 재지 않았으면(계약이 바뀐 뒤 등) 먼저 잰다(안전망, 리뷰와 장부). 재는 사이 HEAD가 바뀌어도 끝내지 않는다
-   */
-  async end(id: string, head: string): Promise<void> {
-    const rec = this.record(id)
-    const ok = nextState(rec.state, { type: 'ended' })
-    if (!ok.ok) throw new Error(ok.errors.join('; '))
-    await this.sameHead(id, head)
-    await this.exportHead(id)
-    // 그 증거로 정책이 머지했으면 이미 끝났다
-    if (!isActive(rec.state)) return
-    await this.sameHead(id, head)
-    await this.transition(rec, { type: 'ended' })
+  /** [취소]·[더 고치기]: 걸린 끝이나 끝내기 상자를 지운다 */
+  cancelEnd(id: string): Promise<void> {
+    return this.ending.cancel(id)
   }
 
-  /** 지금 HEAD가 head가 아니면 화면의 HEAD를 고치고(확인 상자를 거둔다) 던진다. HEAD를 읽지 못하면 보지 않는다 */
-  private async sameHead(id: string, head: string): Promise<void> {
-    const now = await headOf(this.record(id).worktree).catch(() => null)
-    if (now === null || now === head) return
-    this.runtime(id).head = now
-    this.publish(id)
-    throw new Error(
-      `HEAD가 바뀜(${head.slice(0, 7)} → ${now.slice(0, 7)}): 끝내기를 다시 눌러 새 커밋의 증거와 리뷰를 보세요`,
-    )
-  }
-
-  /** 지금 HEAD를 화면에 보인다(Stop을 기다리지 않고) */
+  /** 지금 HEAD를 화면에 보인다(Stop을 기다리지 않고). 걸린 끝이나 상자의 head가 아니면 그것을 지운다 */
   private async followHead(id: string): Promise<void> {
     const rec = this.works.get(id)
     if (!rec) return
-    const head = await headOf(rec.worktree).catch(() => null)
-    const rt = this.runtime(id)
-    if (head === null || head === rt.head) return
-    rt.head = head
-    this.publish(id)
-  }
-
-  /**
-   * 지금 HEAD를 내보내기(리뷰 포함)로 재지 않았으면 잰다. 이미 도는 같은 HEAD의 내보내기에는 합친다. retryFailedReview면
-   * 잰 head라도 리뷰가 실패했으면 다시 잰다([끝내기]: PR이 없으면 그 head의 리뷰를 받을 길이 이것뿐이다)
-   */
-  private async exportHead(id: string, o: { retryFailedReview?: boolean } = {}): Promise<void> {
-    const rec = this.record(id)
-    const head = await headOf(rec.worktree).catch(() => null)
-    if (!measures(rec.state) || head === null) return
-    if (!this.evidence.exported(id, head)) return this.evidence.run(id, { exportCandidate: true })
-    if (o.retryFailedReview && this.runtime(id).evidence?.review?.status === 'failed')
-      await this.evidence.run(id, { exportCandidate: true, again: true })
+    await this.seeHead(id, await headOf(rec.worktree).catch(() => null))
   }
 
   async abandon(id: string): Promise<void> {
     await this.transition(this.record(id), { type: 'abandoned' })
-  }
-
-  private async transition(rec: WorkRecord, ev: WorkEvent): Promise<void> {
-    const next = nextState(rec.state, ev)
-    if (!next.ok) throw new Error(next.errors.join('; '))
-    rec.state = next.value
-    await this.save(rec)
-    this.note(rec.id, { type: ev.type })
-    await this.finish(rec.id)
   }
 
   diff(id: string): Promise<string> {
@@ -505,6 +491,18 @@ export class Works implements WorkCtx {
       head: rt.head,
       createdAt: rec.created_at,
       error: rec.error,
+      ...this.endView(rec),
+    }
+  }
+
+  /** 걸린 끝과 끝내기 상자(V25): 구현 중이고 지금 HEAD의 것만 보인다(HEAD를 모르면 보인다. [그래도 끝내기]가 다시 본다) */
+  private endView(rec: WorkRecord): Pick<WorkView, 'endPending' | 'endMoved'> {
+    const rt = this.runtime(rec.id)
+    const p = rec.end_pending
+    const live = isActive(rec.state)
+    return {
+      endPending: live && p !== null && (rt.head === null || p.head === rt.head) ? p : null,
+      endMoved: live ? rt.endMoved : null,
     }
   }
 

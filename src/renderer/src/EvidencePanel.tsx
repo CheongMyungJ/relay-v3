@@ -1,8 +1,8 @@
 // [증거] 패널 (docs/m2-modules.md 4절): 맨 위 결론 한 줄(그림자면 '자동이었으면 머지했을 것'), 그 아래 결론을 정한 사실.
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
 // 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적, 없는
-// 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 확인 상자(V18: 리뷰 한 줄과
-// 지적 목록을 상자 안에 둔다. 펼침은 패널 끝이라 상자만 보고 [끝 확정]을 누르지 않게).
+// 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린 끝·상자(V25: 상자는
+// 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다).
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ProjectView, WorkView } from '../../shared/api.ts'
@@ -15,14 +15,15 @@ import {
   canMergeView,
   conclusionOf,
   decisiveText,
+  endArmed,
   endMovedText,
-  endReviewText,
   endTexts,
   factText,
   isActive,
   isStale,
   missingOf,
   nextStep,
+  openText,
   outcomeOf,
   qualityNotice,
   reviewMeta,
@@ -34,29 +35,30 @@ import {
 import { QualityNotice } from './QualityNotice.tsx'
 import { Empty, ErrorLine, Spinner, Tag, useAction } from './ui.tsx'
 
-export function EvidencePanel(p: {
-  view: WorkView
-  project: ProjectView | null
-  /** [끝내기]가 내보내기 증거를 잰 head(V18). 지금 HEAD와 같으면 확인 상자를 보인다 */
-  endHead: string | null
-  onEndClose: () => void
-}) {
+export function EvidencePanel(p: { view: WorkView; project: ProjectView | null }) {
   const { view } = p
   const e = view.evidence
-  const ending = showEndBox(view, p.endHead)
-  const moved = endMovedText(view, p.endHead)
+  const box = showEndBox(view) ? view.endPending : null
+  const armed = endArmed(view)
+  const moved = endMovedText(view)
   const notice = p.project !== null && qualityNotice(p.project.quality) !== null
   return (
     <div className="panel-body" data-testid="evidence-panel">
       {p.project ? <QualityNotice project={p.project} /> : null}
-      {ending && p.endHead ? <EndBox view={view} head={p.endHead} onClose={p.onEndClose} /> : null}
+      {armed ? <EndArmed view={view} /> : null}
+      {box ? <EndBox view={view} head={box.head} open={box.open} /> : null}
       {moved ? (
         <p className="stale" role="note" data-testid="end-moved">
           {moved}
         </p>
       ) : null}
       {view.gate ? (
-        <Verdict gate={view.gate} view={view} qualityNotice={notice} ending={ending} />
+        <Verdict
+          gate={view.gate}
+          view={view}
+          qualityNotice={notice}
+          ending={armed || box !== null}
+        />
       ) : e === null ? (
         <Empty title="아직 증거가 없습니다">
           세션이 커밋하고 쉬면, 또는 PR을 열면 앱이 품질 기준의 명령을 돌려 증거를 잽니다.
@@ -72,30 +74,64 @@ export function EvidencePanel(p: {
   )
 }
 
-/**
- * [끝내기]의 확인 상자(V18): 사람이 증거와 리뷰 지적을 보고 [끝 확정]하거나, 세션에게 더 고치라고 말한다. [끝 확정]은
- * 상자의 head를 넘긴다: 그사이 세션이 커밋했으면 메인이 끝내지 않는다
- */
-function EndBox(p: { view: WorkView; head: string; onClose: () => void }) {
+/** 걸린 끝(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. [취소]로 푼다 */
+function EndArmed({ view }: { view: WorkView }) {
   const act = useAction()
-  const findings = p.view.evidence?.review?.findings ?? []
+  return (
+    <div
+      className="callout tone-info"
+      role="region"
+      aria-label="걸린 끝내기"
+      data-testid="end-armed"
+    >
+      <p className="callout-title">{endTexts(view).armed}</p>
+      <div className="row">
+        <button
+          type="button"
+          className="secondary"
+          disabled={act.busy}
+          onClick={() => void act.run(() => window.relay.cancelEnd(view.id))}
+        >
+          취소
+        </button>
+      </div>
+      <ErrorLine text={act.error} />
+    </div>
+  )
+}
+
+/**
+ * [끝내기]의 상자(V25): 열린 것(관문이 사람에게 보내는 사실)만 보인다. 사람이 보고 [그래도 끝내기]하거나, 세션에게 더
+ * 고치라고 말하고 [더 고치기]로 닫는다. [그래도 끝내기]는 상자의 head를 넘긴다: 그사이 세션이 커밋했으면 메인이 끝내지 않는다
+ */
+function EndBox(p: { view: WorkView; head: string; open: string[] }) {
+  const act = useAction()
+  const { view } = p
   return (
     <div className="callout tone-warn" role="region" aria-label="끝내기 확인" data-testid="end-box">
-      <p className="callout-title">{endTexts(p.view).box}</p>
-      <p className="end-review" data-testid="end-review">
-        {endReviewText(p.view)}
-      </p>
-      {findings.length > 0 ? <FindingList findings={findings} /> : null}
+      <p className="callout-title">{endTexts(view).box}</p>
+      <ul className="plain-list" data-testid="end-open">
+        {p.open.map((fact, i) => (
+          <li key={i}>{openText(fact, view)}</li>
+        ))}
+      </ul>
       <div className="row">
         <button
           type="button"
           className="primary"
           disabled={act.busy}
-          onClick={() => void act.run(() => window.relay.end(p.view.id, p.head))}
+          onClick={() =>
+            void act.run(() => window.relay.end(view.id, { head: p.head, force: true }))
+          }
         >
-          끝 확정
+          그래도 끝내기
         </button>
-        <button type="button" className="secondary" disabled={act.busy} onClick={p.onClose}>
+        <button
+          type="button"
+          className="secondary"
+          disabled={act.busy}
+          onClick={() => void act.run(() => window.relay.cancelEnd(view.id))}
+        >
           더 고치기
         </button>
       </div>

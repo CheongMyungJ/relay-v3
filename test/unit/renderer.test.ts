@@ -1,7 +1,7 @@
 // [단위] 렌더러의 순수 조각 (src/renderer/src/format.ts, termSize.ts). 화면을 띄우지 않고 본다.
 // 화면 전체는 [스모크] test/smoke/app.spec.ts가 이어지는지만 본다.
 import { describe, expect, test } from 'vitest'
-import type { EvidenceBundle, GateResult } from '../../src/core/types.ts'
+import type { GateResult } from '../../src/core/types.ts'
 import type { WorkView } from '../../src/shared/api.ts'
 import {
   canMergeView,
@@ -9,8 +9,8 @@ import {
   decisiveText,
   draftPending,
   draftResultText,
+  endArmed,
   endMovedText,
-  endReviewText,
   endTexts,
   exitText,
   factText,
@@ -23,6 +23,7 @@ import {
   REVIEW_DISABLED,
   reviewMeta,
   reviewNote,
+  openText,
   showEndBox,
   splitDiff,
 } from '../../src/renderer/src/format.ts'
@@ -249,7 +250,7 @@ describe('증거 패널의 글', () => {
       evidence: evidence({ quality: { hash: '', from: 'none' }, review: null }),
     }
     expect(nextStep(none, { qualityNotice: true })).toMatch(/^리뷰와 머지는 PR이 열리면/)
-    // [끝내기](V18)로 리뷰가 이미 돌았으면 머지만 PR을 기다린다. 확인 상자가 보이면 그 상자가 다음 할 일
+    // [끝내기]로 리뷰가 이미 돌았으면 머지만 PR을 기다린다. 걸린 끝이나 상자(V25)가 보이면 그것이 다음 할 일
     expect(nextStep({ ...base, evidence: evidence() })).toMatch(
       /^머지는 PR이 열리면 할 수 있습니다/,
     )
@@ -278,57 +279,55 @@ describe('증거 패널의 글', () => {
     expect(reviewMeta({ status: 'skipped', findings: [] })).toBe('리뷰 건너뜀')
     expect(reviewMeta(null)).toBe('리뷰 없음')
     expect(reviewMeta({ status: 'done', findings: [] }, true)).toBe('리뷰 지적 0개')
-    // 다음 할 일, [끝내기] 단추와 확인 상자도 리뷰를 말하지 않는다
+    // 다음 할 일, [끝내기] 단추와 걸린 끝도 리뷰를 말하지 않는다
     expect(nextStep(off)).toBe(
-      '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고 확인을 받습니다)',
+      '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고, 열린 것이 없으면 바로 끝냅니다)',
     )
     expect(nextStep(off)).not.toMatch(/리뷰/)
     expect(endTexts(off)).toEqual({
-      button: '내보내기 증거를 재고 [증거]에서 확인을 받습니다. Work는 [끝 확정]으로 끝납니다',
-      box: '내보내기 증거를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
+      button:
+        '내보내기 증거를 재고, 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 [증거]에 보입니다',
+      waiting: '재면 끝냄',
+      armed:
+        '끝내기가 걸려 있습니다: 내보내기 증거를 다 재고 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 여기에 보입니다.',
+      box: '열린 것이 있습니다. 보고 끝낼지 정하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
     })
-    expect(endReviewText(skipped)).toBe(REVIEW_DISABLED)
-    expect(endTexts(base).box).toBe(
-      '내보내기 증거와 리뷰를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
-    )
-    expect(endTexts(base).button).toMatch(/^내보내기 증거\(리뷰 포함\)를 재고/)
+    // 리뷰를 끈 쪽은 '리뷰를 건너뜀'이 늘 열린 것이다(특례 없음): 상자에는 그 뜻으로 보인다
+    expect(openText('리뷰를 건너뜀', off)).toBe(REVIEW_DISABLED)
+    expect(endTexts(base)).toMatchObject({
+      button: expect.stringMatching(/^내보내기 증거\(리뷰 포함\)를 재고, 열린 것이 없으면/),
+      waiting: '리뷰 끝나면 끝냄',
+      armed: expect.stringMatching(/^끝내기가 걸려 있습니다: 내보내기 증거와 리뷰가 끝나고/),
+    })
   })
 
-  test('endReviewText: 확인 상자(V18) 안의 리뷰 한 줄(지적 수, 없음, 실패면 다시 누르라고)', () => {
-    const finding = { id: 'R1', severity: 'low' as const, text: '이름이 짧음' }
-    const withReview = (review: EvidenceBundle['review']): WorkView => ({
-      ...base,
-      evidence: evidence({ review }),
-    })
-    expect(endReviewText(withReview({ status: 'done', findings: [finding, finding] }))).toBe(
-      '리뷰 지적 2개',
-    )
-    expect(endReviewText(withReview({ status: 'done', findings: [] }))).toBe('리뷰 지적 없음')
-    expect(endReviewText(withReview({ status: 'failed', findings: [] }))).toBe(
-      '리뷰 실패: 지적을 받지 못함. 끝내기를 다시 누르면 리뷰를 다시 돌립니다',
-    )
-    expect(endReviewText(withReview({ status: 'skipped', findings: [] }))).toMatch(/^리뷰를 건너뜀/)
+  test('openText: 상자(V25)의 열린 것은 관문 사실 그대로, 리뷰 실패면 다시 누르라고 붙인다', () => {
+    expect(openText('줄 C1 못 미침: x', base)).toBe('줄 C1 못 미침: x')
+    expect(openText('리뷰를 건너뜀', base)).toBe('리뷰를 건너뜀')
+    expect(openText('리뷰 실패', base)).toBe('리뷰 실패: 끝내기를 다시 누르면 리뷰를 다시 돌립니다')
   })
 
-  test('showEndBox: [끝내기]가 잰 head가 지금 HEAD인 구현 중 Work에만(V18)', () => {
+  test('showEndBox·endArmed: 메인이 둔 상자와 걸린 끝(V25)을 구현 중 Work에만 보인다', () => {
     const head = evidence().head
-    expect(showEndBox(base, head)).toBe(true)
-    expect(showEndBox({ ...base, state: 'recontract' }, head)).toBe(true)
-    expect(showEndBox(base, null)).toBe(false)
-    // 세션이 더 커밋해 HEAD가 바뀌면 거둔다
-    expect(showEndBox({ ...base, head: 'c'.repeat(40) }, head)).toBe(false)
-    expect(showEndBox({ ...base, state: 'done' }, head)).toBe(false)
-    // 거둔 까닭을 한 줄로: 상자의 head가 지금 HEAD가 아닌 구현 중 Work에만
-    const moved = { ...base, head: 'c'.repeat(40) }
-    expect(endMovedText(moved, head)).toBe(
+    const box = { ...base, endPending: { head, armed: false, open: ['리뷰 없음'] } }
+    const armed = { ...base, endPending: { head, armed: true, open: [] } }
+    expect(showEndBox(box)).toBe(true)
+    expect(showEndBox({ ...box, state: 'recontract' })).toBe(true)
+    expect(showEndBox({ ...box, state: 'done' })).toBe(false)
+    expect(showEndBox({ ...base, endPending: null })).toBe(false)
+    expect(showEndBox(armed)).toBe(false)
+    expect(endArmed(armed)).toBe(true)
+    expect(endArmed(box)).toBe(false)
+    expect(endArmed({ ...armed, state: 'abandoned' })).toBe(false)
+    // HEAD가 바뀌어 메인이 지운 상자: 까닭을 한 줄로(구현 중이고 지금 HEAD가 그 head가 아닐 때만)
+    const moved = { ...base, head: 'c'.repeat(40), endPending: null, endMoved: head }
+    expect(endMovedText(moved)).toBe(
       `[끝내기] 뒤 세션이 새로 커밋했습니다(${head.slice(0, 7)} → ccccccc). 새 커밋의 증거와 리뷰를 보려면 끝내기를 다시 누르세요`,
     )
-    expect(endMovedText({ ...moved, reviewDisabled: true }, head)).toMatch(
-      /새 커밋의 증거를 보려면/,
-    )
-    expect(endMovedText(base, head)).toBeNull()
-    expect(endMovedText(moved, null)).toBeNull()
-    expect(endMovedText({ ...moved, state: 'done' }, head)).toBeNull()
+    expect(endMovedText({ ...moved, reviewDisabled: true })).toMatch(/새 커밋의 증거를 보려면/)
+    expect(endMovedText({ ...moved, head })).toBeNull()
+    expect(endMovedText({ ...moved, endMoved: null })).toBeNull()
+    expect(endMovedText({ ...moved, state: 'done' })).toBeNull()
   })
 
   test('품질 기준 알림(V20)과 [초안 만들기]의 답', () => {

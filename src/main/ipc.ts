@@ -66,8 +66,15 @@ export function registerIpc(o: {
       })
     },
     [IPC.merge]: (id) => works.merge(str(id, 'id')),
-    [IPC.prepareEnd]: (id) => works.prepareEnd(str(id, 'id')),
-    [IPC.end]: (id, head) => works.end(str(id, 'id'), str(head, 'head')),
+    // [끝내기]와 [그래도 끝내기](V25): head는 화면의 HEAD나 상자의 head, force는 [그래도 끝내기]
+    [IPC.end]: (id, input) => {
+      const x = obj(input, '입력')
+      return works.end(str(id, 'id'), {
+        ...(x.head === undefined ? {} : { head: str(x.head, 'head') }),
+        ...(x.force === true ? { force: true } : {}),
+      })
+    },
+    [IPC.cancelEnd]: (id) => works.cancelEnd(str(id, 'id')),
     [IPC.abandon]: (id) => works.abandon(str(id, 'id')),
     // [증거 다시 재기]: 열린 PR이 지금 HEAD를 가리키고 Work의 기준으로 가면 내보내기 후보로(리뷰 포함). PR이 뒤처진
     // HEAD를 내보내기로 재지 않는다(PR head가 아니면 머지할 수 없다)

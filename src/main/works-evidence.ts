@@ -1,8 +1,9 @@
 // 증거 → (리뷰) → 관문 → 장부, 머지, PR 상태 (docs/m2-modules.md 3절 works.ts, docs/m2-app.md 1절 5~9).
 // 계기: Stop 뒤 지금 계약으로 재지 않은 head면 debounceMs 몰아서(내보내기 아님), 세션이 git push·gh pr 뒤(또는 PR 확인에서)
-// PR이 그 head를 가리키면 내보내기 후보(리뷰 포함), [끝내기]·[끝 확정](V18). '이미 잰 것'은 (head, 계약 hash)다. 한 Work의
-// 증거 재기는 한 번에 하나이고, 기다리는 요청은 하나로 합친다(시작할 때 이미 잰 head면 건너뛴다). 내보내기는 결정론적 증거와 관문을 먼저 보이고 리뷰가 끝나면 다시 정한다(리뷰는
-// 사람을 막지 않는다, V4). 엔진 check는 in-process로 부른다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
+// PR이 그 head를 가리키면 내보내기 후보(리뷰 포함), [끝내기]·[그래도 끝내기](V25, works-end.ts). '이미 잰 것'은 (head, 계약
+// hash)다. 한 Work의 증거 재기는 한 번에 하나이고, 기다리는 요청은 하나로 합친다(시작할 때 이미 잰 head면 건너뛴다). 재기가
+// 끝나면 다음 재기 전에 [끝내기]의 걸린 끝을 다시 본다. 내보내기는 결정론적 증거와 관문을 먼저 보이고 리뷰가 끝나면 다시
+// 정한다(리뷰는 사람을 막지 않는다, V4). 엔진 check는 in-process로 부른다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
 
 import { git } from '../adapters/exec.ts'
 import type { PrCheck } from '../adapters/gh.ts'
@@ -96,10 +97,7 @@ export class EvidenceRunner {
     const rec = this.ctx.record(id)
     const rt = this.ctx.runtime(id)
     const head = await headOf(rec.worktree).catch(() => null)
-    if (head !== null && head !== rt.head) {
-      rt.head = head
-      this.ctx.publish(id)
-    }
+    await this.ctx.seeHead(id, head)
     if (!measures(rec.state) || head === null) return
     // 이미 잰 head, 지금 재고 있는 head는 다시 재지 않는다
     if (this.measured(id, head) || head === rt.measuring) return
@@ -126,9 +124,8 @@ export class EvidenceRunner {
     const rec = this.ctx.record(id)
     const pr = await this.refreshPr(rec)
     if (!pr || pr.state !== 'OPEN' || !measures(rec.state)) return
-    const rt = this.ctx.runtime(id)
     const head = await headOf(rec.worktree).catch(() => null)
-    rt.head = head ?? rt.head
+    await this.ctx.seeHead(id, head)
     if (pr.baseRefName !== rec.base) return this.wrongBase(rec, pr)
     if (head === null || !exportable(pr, rec.base, head)) return
     if (this.exported(id, head)) return
@@ -164,9 +161,11 @@ export class EvidenceRunner {
       again: o.again === true,
       done: Promise.resolve(),
     }
-    pending.done = rt.chain.then(() => {
+    // 재기가 끝나면 다음 재기 전에 [끝내기]의 걸린 끝을 다시 본다(V25)
+    pending.done = rt.chain.then(async () => {
       rt.pending = null
-      return this.measure(id, pending)
+      await this.measure(id, pending)
+      await this.ctx.settleEnd(id)
     })
     rt.pending = pending
     rt.chain = pending.done.catch(() => {})
@@ -182,7 +181,7 @@ export class EvidenceRunner {
     const { exportCandidate } = job
     try {
       const head = await headOf(rec.worktree)
-      rt.head = head
+      await this.ctx.seeHead(id, head)
       if (!job.again && (exportCandidate ? this.exported(id, head) : this.measured(id, head)))
         return
       rt.measuring = head
@@ -251,7 +250,7 @@ export class EvidenceRunner {
     const now = await headOf(rec.worktree).catch(() => null)
     const result = gate(bundle, contract, policy, now)
     rt.evidence = bundle
-    rt.head = now ?? bundle.head
+    await this.ctx.seeHead(rec.id, now ?? bundle.head)
     rec.gate = result
     rec.evidence_path = evidencePath(deps.store.home, repoKey(bundle.repo), bundle.head)
     rec.error = null

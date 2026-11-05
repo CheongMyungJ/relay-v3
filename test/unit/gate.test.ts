@@ -1,11 +1,15 @@
-// [단위] 관문: 사람 머지로 보내는 사실과 계약 다시 (V5). 바탕은 test/support/gate.ts
+// [단위] 관문: 사람 머지로 보내는 사실과 계약 다시 (V5), 그 사실로 만든 열린 것(V25). 바탕은 test/support/gate.ts
 import { describe, expect, test } from 'vitest'
+import { contractHash } from '../../src/core/contract.ts'
+import { openItems } from '../../src/core/gate.ts'
 import type { Contract, EvidenceBundle, Policy } from '../../src/core/types.ts'
 import {
   C2,
   command,
   contract,
+  evidence,
   finding,
+  HEAD,
   met,
   run,
   SERVER,
@@ -356,5 +360,48 @@ describe('계약 다시', () => {
 
   test('계약이 없어도 증거의 변경 요청으로 recontract다', () => {
     expect(run({ contract_change_requested: true }, null).conclusion).toBe('recontract')
+  })
+})
+
+describe('열린 것(V25)은 관문이 사람에게 보내는 사실 그대로다', () => {
+  const open = (e: Partial<EvidenceBundle> = {}, c: Contract | null = contract(), head = HEAD) => {
+    const made = c === null ? null : { id: c.id, hash: contractHash(c) }
+    return openItems(evidence({ contract: made, ...e }), c, head)
+  }
+
+  test.each(FACTS)('%s', (_name, e, decisive, c = contract()) => {
+    expect(open(e, c)).toEqual([decisive])
+  })
+
+  test('깨끗한 묶음은 자동 조건·스위치·서버 보호·실적을 못 채워도 열린 것이 없다', () => {
+    expect(open()).toEqual([])
+    expect(run({}, contract(), { auto_merge_enabled: false, server: null }).shadow).toBe(true)
+    // 자동 조건을 못 채운 까닭(바뀐 줄이 많음, 새 의존성)도 열린 것이 아니다
+    const big = { ...evidence().diff, added: 500, new_dependencies: ['left-pad'] }
+    expect(run({ diff: big }).decisive).toBe('채운 자동 조건 없음')
+    expect(open({ diff: big })).toEqual([])
+    // 올림 없는 리뷰 지적(메모)도 아니다
+    expect(open({ review: { status: 'done', findings: [finding({ severity: 'high' })] } })).toEqual(
+      [],
+    )
+  })
+
+  test('사실을 관문과 같은 차례로 모두 모으고, 풀리지 않은 계약 변경을 맨 앞에 둔다', () => {
+    const e = { review: null, missing: ['ci'], contract_change_requested: true }
+    expect(open(e)).toEqual(['계약 변경 요청이 풀리지 않음', '리뷰 없음', '없는 증거: ci'])
+    const r = run({ review: null, missing: ['ci'] })
+    expect(open({ review: null, missing: ['ci'] })).toEqual(r.reasons)
+    expect(open({}, contract({ change_requested: 'C2를 빼자' }))).toEqual([
+      '계약 변경 요청: C2를 빼자',
+    ])
+  })
+
+  test('지금 head가 묶음의 head가 아니거나 모르면 열린 것이다', () => {
+    expect(open({}, contract(), 'c'.repeat(40))).toEqual([
+      `낡은 증거: 묶음은 ${HEAD.slice(0, 7)}, 지금 head는 ccccccc`,
+    ])
+    expect(openItems(evidence(), contract(), null)).toEqual([
+      '지금 head를 모름: 낡은 증거인지 확인하지 못함',
+    ])
   })
 })

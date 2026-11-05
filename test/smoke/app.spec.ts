@@ -1,6 +1,7 @@
 // [스모크] 빌드한 앱 (docs/m2-modules.md 5절). Playwright _electron으로 out/의 앱을 띄워 화면을 누른다.
 // 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 PR을 연다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin.
-// 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 확인 상자 → [끝 확정](V18).
+// 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
+// Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -149,6 +150,8 @@ test.beforeAll(async () => {
       FAKE_CLAUDE_SCENARIO: scenario,
       FAKE_CLAUDE_LOG: join(tmp, 'claude.jsonl'),
       FAKE_CLAUDE_REVIEW: review,
+      // [끝내기]의 걸린 끝(V25)이 보일 틈
+      FAKE_CLAUDE_REVIEW_MS: '1500',
       FAKE_GH_STATE: ghState,
       FAKE_GH_LOG: join(tmp, 'gh.jsonl'),
       RELAY_DEBOUNCE_MS: '300',
@@ -296,24 +299,37 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(tabNotice.getByRole('button', { name: '초안 만들기' })).toHaveCount(0)
   await expect(evidence.getByTestId('next-step')).not.toContainText('relay init')
 
-  // [끝내기](V18): 내보내기 증거(리뷰 포함)를 재고 확인 상자. Work는 구현 중 그대로, 상자 안에 리뷰 한 줄과 지적
+  // [끝내기](V25): 내보내기 증거(리뷰 포함)를 재는 동안은 걸린 끝. Work는 구현 중 그대로
   const head = page.locator('.work-head')
   await head.getByRole('button', { name: '끝내기' }).click()
+  const armed = evidence.getByTestId('end-armed')
+  await expect(armed).toBeVisible({ timeout: 60_000 })
+  await expect(armed).toContainText('끝내기가 걸려 있습니다: 내보내기 증거와 리뷰가 끝나고')
+  await expect(head.getByRole('button', { name: '리뷰 끝나면 끝냄' })).toBeDisabled()
+  await shot('end-armed')
+  // 열린 것(품질 기준 없음 등)이 있으니 상자. 올림 없는 리뷰 지적은 열린 것이 아니다
   const endBox = evidence.getByTestId('end-box')
   await expect(endBox).toBeVisible({ timeout: 60_000 })
-  await expect(endBox).toContainText('내보내기 증거와 리뷰를 확인하세요')
+  await expect(armed).toBeHidden()
+  await expect(endBox).toContainText('열린 것이 있습니다. 보고 끝낼지 정하세요.')
+  await expect(endBox.getByTestId('end-open')).toContainText('품질 기준 없음')
+  await expect(endBox.getByText('변수 이름이 짧음')).toHaveCount(0)
   await expect(head).toContainText('구현 중')
-  await expect(endBox.getByTestId('end-review')).toHaveText('리뷰 지적 1개')
-  await expect(endBox.getByText('변수 이름이 짧음')).toBeVisible()
   await shot('end-box')
+  // 다른 Work로 갔다 와도 상자가 남는다(메인이 Work에 둔다)
+  await page.getByTestId('project').first().locator('.work-item').first().click()
+  await expect(evidence.getByTestId('outcome')).toHaveText(/^머지됨/)
+  await expect(endBox).toBeHidden()
+  await second.locator('.work-item').first().click()
+  await expect(endBox).toBeVisible()
   // [더 고치기]: 상자를 닫고 Work는 그대로
   await endBox.getByRole('button', { name: '더 고치기' }).click()
   await expect(endBox).toBeHidden()
   await expect(head).toContainText('구현 중')
-  // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [끝 확정]
+  // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [그래도 끝내기]
   await head.getByRole('button', { name: '끝내기' }).click()
   await expect(endBox).toBeVisible({ timeout: 30_000 })
-  await endBox.getByRole('button', { name: '끝 확정' }).click()
+  await endBox.getByRole('button', { name: '그래도 끝내기' }).click()
   await expect(head).toContainText('끝남', { timeout: 30_000 })
   await expect(evidence.getByTestId('outcome')).toHaveText('머지 없이 끝남')
   await expect(endBox).toBeHidden()

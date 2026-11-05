@@ -127,6 +127,11 @@
   border-color: transparent;
 }
 
+.callout.tone-info {
+  background: var(--info-soft);
+  border-color: transparent;
+}
+
 .callout-title {
   font-weight: 650;
 }

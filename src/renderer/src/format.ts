@@ -204,7 +204,7 @@ export function outcomeOf(v: WorkView): string | null {
 
 /**
  * 구현 중 Work의 다음 할 일 한 줄: PR이 지금 HEAD를 가리키지 않음, PR이 없음, 품질 기준이 없음. 품질 기준 알림(V20)이
- * 위에 이미 보이면(qualityNotice) 품질 기준 줄은 되풀이하지 않고, [끝내기]의 확인 상자(V18)가 보이면(ending) 그 상자가
+ * 위에 이미 보이면(qualityNotice) 품질 기준 줄은 되풀이하지 않고, [끝내기]의 걸린 끝이나 상자(V25)가 보이면(ending) 그것이
  * 다음 할 일이다
  */
 export function nextStep(
@@ -219,54 +219,59 @@ export function nextStep(
     return '품질 기준(.relay/quality.json)이 없어 명령을 돌리지 않았습니다. 레포에서 relay init으로 초안을 만드세요'
   // [끝내기]로 이 head를 내보내기로 쟀으면 리뷰는 이미 돌았다. 리뷰를 끈 앱(평가 설정)은 리뷰를 말하지 않는다
   if (!pr && v.evidence?.review === null && !v.reviewDisabled)
-    return '리뷰와 머지는 PR이 열리면 시작합니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(리뷰를 돌리고 확인을 받습니다)'
+    return '리뷰와 머지는 PR이 열리면 시작합니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(리뷰를 돌리고, 열린 것이 없으면 바로 끝냅니다)'
   if (!pr && v.evidence?.review === null)
-    return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고 확인을 받습니다)'
+    return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요(증거를 재고, 열린 것이 없으면 바로 끝냅니다)'
   if (!pr && v.evidence)
     return '머지는 PR이 열리면 할 수 있습니다. 세션에게 PR을 열라고 하거나, PR 없이 끝내려면 끝내기를 누르세요'
   return null
 }
 
-/** [끝내기]의 확인 상자(V18)를 보일 때: 구현 중이고, 내보내기 증거를 잰 head가 지금 HEAD다(HEAD가 바뀌면 거둔다) */
-export function showEndBox(v: WorkView, preparedHead: string | null): boolean {
-  return (
-    preparedHead !== null &&
-    v.head === preparedHead &&
-    (v.state === 'working' || v.state === 'recontract')
-  )
+const ending = (v: Pick<WorkView, 'state'>) => v.state === 'working' || v.state === 'recontract'
+
+/** [끝내기]의 상자(V25)를 보일 때: 구현 중이고 지금 HEAD에 열린 것이 있는 상자가 있다(메인이 work.json에 둔다) */
+export function showEndBox(v: WorkView): boolean {
+  return ending(v) && v.endPending?.armed === false
+}
+
+/** [끝내기]가 걸려 있다(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다 */
+export function endArmed(v: WorkView): boolean {
+  return ending(v) && v.endPending?.armed === true
 }
 
 /**
- * [끝내기]의 확인 상자(V18)를 HEAD가 바뀌어 거뒀을 때의 한 줄(상자가 왜 사라졌는지). [끝 확정]이 HEAD가 바뀌었다고
- * 거절해도 이 줄이 보인다. 상자를 닫았거나 끝난 Work면 null
+ * 걸린 끝이나 상자(V25)를 HEAD가 바뀌어 메인이 지웠을 때의 한 줄(상자가 왜 사라졌는지). [그래도 끝내기]가 HEAD가 바뀌었다고
+ * 거절해도 이 줄이 보인다. 다시 [끝내기]·[더 고치기]했거나 끝난 Work면 null
  */
-export function endMovedText(v: WorkView, preparedHead: string | null): string | null {
-  if (preparedHead === null || v.head === null || v.head === preparedHead) return null
-  if (v.state !== 'working' && v.state !== 'recontract') return null
+export function endMovedText(v: WorkView): string | null {
+  const from = v.endMoved
+  if (!from || v.head === null || v.head === from || !ending(v)) return null
   const what = v.reviewDisabled ? '증거' : '증거와 리뷰'
-  return `[끝내기] 뒤 세션이 새로 커밋했습니다(${shortSha(preparedHead)} → ${shortSha(v.head)}). 새 커밋의 ${what}를 보려면 끝내기를 다시 누르세요`
+  return `[끝내기] 뒤 세션이 새로 커밋했습니다(${shortSha(from)} → ${shortSha(v.head)}). 새 커밋의 ${what}를 보려면 끝내기를 다시 누르세요`
 }
 
-/** [끝내기] 단추의 설명과 확인 상자(V18)의 첫 줄. 리뷰를 끈 앱(평가 설정)은 리뷰를 말하지 않는다 */
-export function endTexts(v: Pick<WorkView, 'reviewDisabled'>): { button: string; box: string } {
-  const what = v.reviewDisabled ? '내보내기 증거' : '내보내기 증거와 리뷰'
+/**
+ * [끝내기] 단추의 설명과 걸린 동안의 이름, 걸린 끝과 상자(V25)의 첫 줄. 리뷰를 끈 앱(평가 설정)은 리뷰를 말하지 않는다
+ */
+export function endTexts(v: Pick<WorkView, 'reviewDisabled'>): {
+  button: string
+  waiting: string
+  armed: string
+  box: string
+} {
+  const off = v.reviewDisabled
   return {
-    button: `${v.reviewDisabled ? '내보내기 증거' : '내보내기 증거(리뷰 포함)'}를 재고 [증거]에서 확인을 받습니다. Work는 [끝 확정]으로 끝납니다`,
-    box: `${what}를 확인하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.`,
+    button: `${off ? '내보내기 증거' : '내보내기 증거(리뷰 포함)'}를 재고, 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 [증거]에 보입니다`,
+    waiting: off ? '재면 끝냄' : '리뷰 끝나면 끝냄',
+    armed: `끝내기가 걸려 있습니다: ${off ? '내보내기 증거를 다 재고' : '내보내기 증거와 리뷰가 끝나고'} 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 여기에 보입니다.`,
+    box: '열린 것이 있습니다. 보고 끝낼지 정하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
   }
 }
 
-/**
- * 확인 상자(V18) 안의 리뷰 한 줄: 지적 수, 지적 없음, 실패(끝내기를 다시 누르면 다시 돈다), 건너뜀, 꺼짐. 지적 목록은
- * 상자가 이 줄 아래에 보인다
- */
-export function endReviewText(v: WorkView): string {
-  const r = v.evidence?.review ?? null
-  if (r?.status === 'failed')
-    return '리뷰 실패: 지적을 받지 못함. 끝내기를 다시 누르면 리뷰를 다시 돌립니다'
-  if (r?.status === 'done')
-    return r.findings.length === 0 ? '리뷰 지적 없음' : `리뷰 지적 ${r.findings.length}개`
-  return reviewNote(r, v.reviewRunning, v.reviewDisabled) ?? reviewMeta(r, v.reviewDisabled)
+/** 상자(V25)의 열린 것 한 줄: 관문 사실의 화면 글. 리뷰가 실패했으면 다시 누르면 다시 돈다고 붙인다 */
+export function openText(fact: string, v: Pick<WorkView, 'reviewDisabled'>): string {
+  const t = factText(fact, v)
+  return fact === '리뷰 실패' ? `${t}: 끝내기를 다시 누르면 리뷰를 다시 돌립니다` : t
 }
 
 const QUALITY_EFFECT = '앱이 명령을 돌리지 못해 증거가 비고, 결론은 늘 사람 머지입니다.'
