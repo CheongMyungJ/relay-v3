@@ -24,7 +24,7 @@ const kit = flowKit()
 const { scenario, fake, until } = kit
 
 const SUBMIT = { do: 'mcp', tool: 'submit_contract', args: CONTRACT }
-const RAISED = ['리뷰 올림(구조): 중복 구현 — src/calc.js:5']
+const RAISED = ['리뷰 올림(계약 밖 변경): 계약 밖에서 sub를 더함 — src/calc.js:5']
 
 const exportsOf = async (app: TestApp, id: string) =>
   (await app.store.readEvents(id)).filter((e) => e.type === 'evidence').map((e) => e.export)

@@ -1,8 +1,8 @@
 // Work 조율 (docs/m2-modules.md 3절 works.ts, docs/m2-app.md). Electron을 모른다: [흐름] 시험이 Node에서 조립해 돌린다.
 // 프로젝트와 Work를 저장소에 두고, Work마다 worktree·작업 브랜치·세션(PTY의 claude)을 만든다. 훅과 MCP 도구 호출을 받아
 // 상태 기계(core/work.ts)를 움직인다. 계약 창구는 works-contract.ts, 증거·관문·머지·PR은 works-evidence.ts, 리뷰(미리
-// 리뷰 포함)는 works-review.ts, [끝내기]는 works-end.ts, worktree와 세션 띄우기는 works-worktree.ts, 프로젝트와 품질 기준
-// 상태는 works-projects.ts.
+// 리뷰 포함)는 works-review.ts, [끝내기]는 works-end.ts, 쉬는 세션에 주는 되먹임(V24)은 works-feedback.ts, worktree와 세션
+// 띄우기는 works-worktree.ts, 프로젝트와 품질 기준 상태는 works-projects.ts.
 
 import { killActive } from '../adapters/exec.ts'
 import { killRunFiles } from '../adapters/pty.ts'
@@ -10,7 +10,6 @@ import { readJson } from '../adapters/store.ts'
 import { parseContract } from '../core/contract.ts'
 import { guardCommand } from '../core/git-guard.ts'
 import { TOOL_CHANGE, TOOL_CHECK, TOOL_SUBMIT, type HookEvent } from '../core/instructions.ts'
-import { evidenceFacts } from '../core/review.ts'
 import type { DebtItem, EvidenceBundle } from '../core/types.ts'
 import { nextState, type WorkEvent } from '../core/work.ts'
 import {
@@ -31,6 +30,7 @@ import type { ProjectRecord, WorkRecord } from './store.ts'
 import { ContractDesk } from './works-contract.ts'
 import { dropEnd, EndDesk } from './works-end.ts'
 import { EvidenceRunner, exportable, isExportCommand } from './works-evidence.ts'
+import { checkReply, FeedbackDesk } from './works-feedback.ts'
 import { ProjectDesk } from './works-projects.ts'
 import { followReview } from './works-review.ts'
 import {
@@ -59,6 +59,7 @@ export class Works implements WorkCtx {
   private readonly desk: ContractDesk
   private readonly evidence: EvidenceRunner
   private readonly ending: EndDesk
+  private readonly feedback: FeedbackDesk
   private closing = false
 
   constructor(deps: WorksDeps) {
@@ -67,6 +68,7 @@ export class Works implements WorkCtx {
     this.desk = new ContractDesk(this)
     this.evidence = new EvidenceRunner(this)
     this.ending = new EndDesk(this, this.evidence)
+    this.feedback = new FeedbackDesk(this)
   }
 
   /**
@@ -86,6 +88,7 @@ export class Works implements WorkCtx {
         session_started: rec.session_started ?? true,
         end_pending: rec.end_pending ?? null,
         prepared_reviews: rec.prepared_reviews ?? 0,
+        feedback: rec.feedback ?? { rounds: 0, sent: [] },
       })
       const rt = this.runtime(id)
       const text = await store.readText(id, 'contract.json')
@@ -134,6 +137,9 @@ export class Works implements WorkCtx {
         review: null,
         autoMergeNote: null,
         endMoved: null,
+        lastHumanInputAt: null,
+        feedbackHeld: null,
+        telling: Promise.resolve(),
       }
       this.rts.set(id, rt)
     }
@@ -169,11 +175,16 @@ export class Works implements WorkCtx {
 
   async tell(id: string, text: string): Promise<void> {
     if (this.deps.sessions.isRunning(id)) {
-      this.deps.sessions.write(id, text)
-      // 붙여 넣은 글과 Enter가 한 조각이면 TUI가 Enter를 줄바꿈으로 읽을 수 있다
-      await new Promise((r) => setTimeout(r, 150))
-      this.deps.sessions.write(id, '\r')
-      return
+      // 한 줄씩 차례로: 앞 줄의 Enter 전에 다음 글이 들어가면 두 줄이 하나로 붙는다(되먹임과 [세션에 넘기기], V24)
+      const rt = this.runtime(id)
+      const turn = rt.telling.then(async () => {
+        this.deps.sessions.write(id, text)
+        // 붙여 넣은 글과 Enter가 한 조각이면 TUI가 Enter를 줄바꿈으로 읽을 수 있다
+        await new Promise((r) => setTimeout(r, 150))
+        this.deps.sessions.write(id, '\r')
+      })
+      rt.telling = turn.catch(() => {})
+      return turn
     }
     const rec = this.record(id)
     rec.notice = rec.notice ? `${rec.notice}\n\n${text}` : text
@@ -217,6 +228,10 @@ export class Works implements WorkCtx {
 
   async settleEnd(id: string, job: MeasureJob): Promise<void> {
     await this.ending.settle(id, job).catch((e) => this.log(`끝내기 실패 (${id})`, e))
+  }
+
+  async offerFeedback(id: string): Promise<void> {
+    await this.feedback.offer(id).catch((e) => this.log(`되먹임 실패 (${id})`, e))
   }
 
   refreshQuality(projectId: string): void {
@@ -374,9 +389,9 @@ export class Works implements WorkCtx {
   }
 
   /**
-   * relay_check: 지금 head의 증거(결정론적 사실만, 영어). 지금 계약으로 재지 않았으면 잰다: 이 head를 재고 있거나 재기가
-   * 줄 서 있으면 그것을 기다리고 새로 줄 세우지 않는다(내보내기 증거의 리뷰를 덮지 않게). 리뷰 지적과 관문 결론은 주지
-   * 않는다(V4, V8)
+   * relay_check: 지금 head의 증거(영어, works-feedback.ts checkReply: 되먹임과 같은 세션 몫의 사실과 지적, V24). 지금 계약으로
+   * 재지 않았으면 잰다: 이 head를 재고 있거나 재기가 줄 서 있으면 그것을 기다리고 새로 줄 세우지 않는다(내보내기 증거의
+   * 리뷰를 덮지 않게). 관문 결론과 사람에게만 가는 지적은 주지 않는다
    */
   private async checkForSession(rec: WorkRecord): Promise<unknown> {
     const rt = this.runtime(rec.id)
@@ -387,19 +402,7 @@ export class Works implements WorkCtx {
     }
     const bundle = rt.evidence
     if (!bundle) return { status: 'error', error: rec.error ?? 'No evidence.' }
-    return {
-      status: 'ok',
-      head: bundle.head,
-      stale: bundle.head !== head,
-      summary: evidenceFacts(bundle),
-      commands: bundle.commands.map((c) => ({
-        id: c.id,
-        outcome: c.outcome,
-        stderr_tail: c.head[c.head.length - 1]?.stderr_tail.slice(-2_000) ?? '',
-      })),
-      lines: bundle.lines?.map((l) => ({ line: l.line, status: l.status, examples: l.examples })),
-      missing: bundle.missing,
-    }
+    return checkReply(bundle, head)
   }
 
   // ── 사람의 동작 ────────────────────────────────────────────────────────────
@@ -448,6 +451,16 @@ export class Works implements WorkCtx {
       id,
       o.exportCandidate ? { export: 'pr', again: true } : { prepare: true, again: true },
     )
+  }
+
+  /** [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적을 되먹임 파일로 세션에 보낸다 */
+  sendFindings(id: string, ids: string[]): Promise<void> {
+    return this.feedback.sendFindings(id, ids)
+  }
+
+  /** 사람이 화면에서 터미널에 친 글(ipc terminalWrite). 되먹임은 그 뒤 60초 동안 보내지 않는다(V24) */
+  typed(id: string, data: string): void {
+    if (this.works.has(id)) this.feedback.typed(id, data)
   }
 
   async merge(id: string): Promise<MergeResult> {
@@ -516,6 +529,7 @@ export class Works implements WorkCtx {
       createdAt: rec.created_at,
       error: rec.error,
       ...this.endView(rec),
+      feedback: this.feedback.view(rec),
     }
   }
 

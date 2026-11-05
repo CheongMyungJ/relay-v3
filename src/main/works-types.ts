@@ -1,5 +1,5 @@
 // Works의 의존과 안쪽 모양 (docs/m2-modules.md 3절 works.ts). works.ts가 600줄을 넘지 않게 계약 창구(works-contract.ts),
-// 증거·머지(works-evidence.ts), 리뷰(works-review.ts), [끝내기](works-end.ts)를 나눴다. 이 파일의 WorkCtx로 Works를 본다.
+// 증거·머지(works-evidence.ts), 리뷰(works-review.ts), [끝내기](works-end.ts), 되먹임(works-feedback.ts)을 나눴다. 이 파일의 WorkCtx로 Works를 본다.
 // 모두가 읽는 Work의 head(Work 브랜치의 끝, V21)도 여기에 둔다. Electron을 모른다.
 
 import { revParse } from '../adapters/git.ts'
@@ -48,6 +48,8 @@ export interface WorksDeps {
   relayVersion: string
   /** Stop 뒤 증거를 재기까지 몰아서 기다리는 시간. 기본 20,000ms */
   debounceMs?: number
+  /** 사람이 터미널에 입력한 뒤 되먹임(V24)을 보내지 않는 시간. 기본 60,000ms */
+  humanQuietMs?: number
   // ── m2-modules 3절의 목록에 더한 것 ──
   /** 열린 PR을 다시 읽는 간격. 기본 120,000ms */
   prPollMs?: number
@@ -107,6 +109,15 @@ export interface Runtime {
   autoMergeNote: string | null
   /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(V25, 화면의 한 줄). 다시 [끝내기]·[취소]하거나 Work가 끝나면 null */
   endMoved: string | null
+  /** 사람이 화면에서 터미널에 마지막으로 입력한 때(ms, ipc terminalWrite. 앱의 tell은 세지 않는다, V24) */
+  lastHumanInputAt: number | null
+  /**
+   * 보내지 않고 둔 되먹임(V24): 그 head와 까닭(사람이 최근 입력함, 라운드 상한). 같은 까닭을 쉴 때마다 다시 적지 않게. 사람이
+   * 입력해 둔 것은 다음에 쉴 때 다시 본다
+   */
+  feedbackHeld: { head: string; reason: 'human_input' | 'cap' } | null
+  /** 터미널에 넣는 마지막 줄(tell)이 끝나는 때. 줄이 서로 섞이지 않게 차례로 넣는다 */
+  telling: Promise<void>
 }
 
 /** 내보내기 계기(V23의 review 기록 trigger): PR 열기·갱신과 그 확인, [끝내기]·[그래도 끝내기] */
@@ -152,6 +163,8 @@ export interface WorkCtx {
   seeHead(id: string, head: string | null): Promise<void>
   /** 증거 재기 job이 하나 끝났다(works-evidence.ts의 줄 안에서): 걸린 끝을 다시 본다(V25, works-end.ts) */
   settleEnd(id: string, job: MeasureJob): Promise<void>
+  /** 세션이 쉰다(Stop 뒤 몰아 두기, 미리 리뷰를 허락한 재기 뒤): 세션 몫의 사실이 있으면 되먹임을 보낸다(V24) */
+  offerFeedback(id: string): Promise<void>
   /** 프로젝트의 품질 기준 상태(V20)를 뒤에서 다시 잰다(실패는 삼킨다) */
   refreshQuality(projectId: string): void
   log(message: string, error?: unknown): void

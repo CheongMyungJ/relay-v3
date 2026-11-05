@@ -41,6 +41,8 @@ export interface OpenAppOptions {
   reviewDisabled?: boolean
   /** 엔진 check. 기본 그대로. 시험이 감싸서 재기를 붙잡아 둔다(재기가 도는 사이의 일) */
   check?: typeof check
+  /** 사람이 터미널에 입력한 뒤 되먹임을 보내지 않는 시간(V24). 기본 앱 그대로(60초) */
+  humanQuietMs?: number
   log?: (message: string, error?: unknown) => void
 }
 
@@ -80,6 +82,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     debounceMs: o.debounceMs ?? 200,
     prPollMs: o.prPollMs ?? 60_000,
     ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
+    ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
     log,
   })
   await works.init()

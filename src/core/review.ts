@@ -1,17 +1,24 @@
 // 독립 리뷰 (V4, docs/m2-modules.md 1절 review.ts). 새 맥락의 읽기 전용 claude -p가 이 프롬프트와 스키마로 돈다.
 // 리뷰는 막지 않고 올리기만 한다: 올림(raises, V26)인 지적만 관문에 들어간다. 나머지는 [증거]의 메모다.
-// 프롬프트는 모델이 읽으므로 영어다. 리뷰·시험을 고치라는 지시를 세션에 넣지 않는다(V4, V8).
-// 앱은 리뷰 준비(reviewReady)인 head에 리뷰를 미리 돌리고, 리뷰는 (head, 계약 hash, 프롬프트 판)에 붙는다(V23).
+// 프롬프트는 모델이 읽으므로 영어다. 앱은 리뷰 준비(reviewReady)인 head에 리뷰를 미리 돌리고, 리뷰는 (head, 계약 hash,
+// 프롬프트 판)에 붙는다(V23). 쉬는 세션에는 세션 몫의 사실만 간다(V24): 결정론 사실(feedbackFacts)과 코드 안에서 고칠 올림
+// (routeFindings). 바닥 신호, 사람·관찰 줄, 계약의 몫인 지적은 사람에게만 보인다.
 
-import { contractHash, exampleValueText } from './contract.ts'
+import { contractHash, exampleValueText, findExampleTags } from './contract.ts'
 import { err, ok, type Result } from './result.ts'
 import type {
+  CommandEvidence,
   Contract,
   EvidenceBundle,
+  ExampleFileDiff,
   ExamplesFileCheck,
+  FeedbackFact,
   LineStatus,
+  LineVerdict,
   RaiseReason,
+  RatchetResult,
   ReviewFinding,
+  TestCase,
 } from './types.ts'
 
 const SEVERITIES = ['high', 'medium', 'low'] as const
@@ -30,6 +37,28 @@ const RAISES: readonly RaiseReason[] = [
 export function raises(f: Pick<ReviewFinding, 'raise' | 'severity'>): boolean {
   if (f.raise === undefined) return false
   return f.raise !== 'structure' || f.severity !== 'low'
+}
+
+/** 쉬는 세션에 저절로 가는 올림의 갈래(V24): 코드 안에서 고칠 것. 계약 밖 변경과 request_gap(V30)은 계약의 몫이다 */
+const TO_SESSION: readonly string[] = ['example_test_mismatch', 'security', 'structure']
+
+/**
+ * 리뷰 지적의 갈래(V24). session은 쉬는 세션에 저절로 보내는 올림(예시와 시험 불일치, 보안, 구조 medium 이상)이다. human은
+ * 사람에게만 보이는 것이다: 계약 밖 변경과 request_gap(계약의 몫이라 사람이 받는다), 모르는 갈래, 메모. 사람은 [세션에
+ * 넘기기]로 human도 보낼 수 있다. 각자 리뷰어가 낸 차례 그대로
+ */
+export function routeFindings(findings: ReviewFinding[]): {
+  session: ReviewFinding[]
+  human: ReviewFinding[]
+} {
+  const toSession = (f: ReviewFinding) =>
+    f.raise !== undefined && TO_SESSION.includes(f.raise) && raises(f)
+  return { session: findings.filter(toSession), human: findings.filter((f) => !toSession(f)) }
+}
+
+/** 같은 head에 같은 지적을 다시 보내지 않으려고 견주는 이름. 내용으로 짓는다: 다시 돈 리뷰는 id가 같아도 다른 지적이다 */
+export function findingKey(f: ReviewFinding): string {
+  return `review:${JSON.stringify([f.raise ?? null, f.severity, f.file ?? null, f.line ?? null, f.text])}`
 }
 
 /** 프롬프트에 넣는 diff의 상한(글자 수). 넘으면 앞쪽만 넣고 알린다 */
@@ -195,17 +224,109 @@ function examplesFileFact(f: ExamplesFileCheck): string {
   if (f.status === 'same') return `${at}: same as the approved examples`
   if (f.status === 'absent') return `${at}: not committed`
   if (f.status !== 'differs') return `${at}: unreadable`
-  const value = (v: unknown) => (v === undefined ? 'nothing' : exampleValueText(v))
-  const items = f.diffs.slice(0, 3).map((d) => {
-    if (d.field !== undefined)
-      return `${d.id} ${d.field} (expected ${value(d.expected)}, found ${value(d.found)})`
-    if (d.found === undefined) return `${d.id} missing`
-    if (d.expected === undefined) return `${d.id} not in the approved examples`
-    return `${d.id} (expected ${value(d.expected)}, found ${value(d.found)})`
-  })
+  const items = f.diffs.slice(0, 3).map((d) => exampleDiffText(d))
   const more = f.diffs.length > 3 ? ` and ${f.diffs.length - 3} more` : ''
   return `${at}: differs from the approved examples: ${items.join('; ')}${more}`
 }
+
+/** 예시 자료의 차이 하나(영어). 값은 앞쪽 max자 */
+function exampleDiffText(d: ExampleFileDiff, max = 40): string {
+  const value = (v: unknown) => (v === undefined ? 'nothing' : exampleValueText(v, max))
+  if (d.field !== undefined)
+    return `${d.id} ${d.field} (expected ${value(d.expected)}, found ${value(d.found)})`
+  if (d.found === undefined) return `${d.id} missing`
+  if (d.expected === undefined) return `${d.id} not in the approved examples`
+  return `${d.id} (expected ${value(d.expected)}, found ${value(d.found)})`
+}
+
+// ── 되먹임의 결정론 사실 (V24) ────────────────────────────────────────────────
+
+/**
+ * 쉬는 세션에 보낼 결정론 사실(V24, 영어 마크다운): 못 미침·증거 없음 줄(예시마다 head·base 결과, 실패한 시험의 메시지),
+ * 실패했거나 돌지 못한 명령(끝 출력), 나빠진 래칫, 커밋된 예시 자료가 없거나 다르거나 읽지 못함(차이를 칸마다 모두). 나머지는
+ * 사람에게만 간다: 바닥 신호, human·observe 줄, 원래 실패·불안정한 명령, 재지 못한 래칫, 없는 증거. 품질 기준이 없거나 수용
+ * 시험 명령이 없으면(없는 증거 acceptance) 줄 사실을 보내지 않는다: 사람이 가진 품질 기준의 일이다
+ */
+export function feedbackFacts(e: Omit<EvidenceBundle, 'review'>): FeedbackFact[] {
+  if (e.quality.from === 'none') return []
+  const id = e.contract?.id
+  const cases = e.commands.flatMap((c) => c.head.flatMap((r) => r.tests ?? []))
+  const lines = id === undefined || e.missing.includes('acceptance') ? [] : (e.lines ?? [])
+  const f = e.examples_file
+  return [
+    ...lines
+      .filter((v) => v.status === 'not_met' || v.status === 'missing_evidence')
+      .map((v) => lineFact(v, id ?? '', cases)),
+    ...e.commands.filter((c) => c.outcome === 'fail' || c.outcome === 'not_run').map(commandFact),
+    ...e.ratchets.filter((r) => r.status === 'worse').map(ratchetFact),
+    ...(f && f.status !== 'same' ? [examplesFeedback(f)] : []),
+  ]
+}
+
+function lineFact(v: LineVerdict, contractId: string, cases: TestCase[]): FeedbackFact {
+  const ex = v.examples
+  const out = [`**Contract line ${v.line} (${v.kind}): ${v.status.replace('_', ' ')}.**`]
+  for (const x of ex) out.push(`- ${x.id}: head ${x.head}, base ${x.base ?? 'not_run'}`)
+  if (
+    v.kind === 'change' &&
+    ex.length > 0 &&
+    ex.every((x) => x.head === 'passed' && x.base === 'passed')
+  )
+    out.push('Every example passes on the base too: a change line needs one that fails there.')
+  if (v.kind === 'keep' && ex.some((x) => x.base === 'failed'))
+    out.push('An example fails on the base: the examples of a keep line must pass there.')
+  if (ex.some((x) => x.head === 'missing'))
+    out.push(
+      `missing: no test has the example's tag, such as \`[${contractId}:${ex[0]?.id}]\`, in its name.`,
+    )
+  for (const x of ex) {
+    const tagged = (c: TestCase) =>
+      findExampleTags(c.suite === undefined ? c.name : `${c.suite} > ${c.name}`, contractId)
+    const m = cases.find((c) => c.status !== 'passed' && c.message && tagged(c).includes(x.id))
+    if (m?.message) out.push(`Test message for ${x.id}:`, block('text', m.message.slice(0, 800)))
+  }
+  return { key: `line:${v.line}:${v.status}`, text: out.join('\n') }
+}
+
+function commandFact(c: CommandEvidence): FeedbackFact {
+  const last = c.head.at(-1)
+  const what = c.outcome === 'fail' ? 'fails on the head, passes on the base' : 'could not run'
+  const exit = last === undefined ? '' : last.timed_out ? ' (timed out)' : ` (exit ${last.exit})`
+  const out = [`**Command \`${c.id}\`: ${what}${exit}.**`]
+  const failed = (last?.tests ?? []).filter((t) => t.status === 'failed' || t.status === 'error')
+  if (failed.length > 0)
+    out.push(
+      `Failed tests: ${listOf(
+        failed.map((t) => t.name),
+        10,
+      )}.`,
+    )
+  const tail = last?.stderr_tail.trim() || last?.stdout_tail.trim()
+  if (tail) out.push('Last output:', block('text', tail.slice(-1_500)))
+  return { key: `command:${c.id}:${c.outcome}`, text: out.join('\n') }
+}
+
+function ratchetFact(r: RatchetResult): FeedbackFact {
+  const nums = r.base === undefined ? '' : ` (base ${r.base}, head ${r.head})`
+  const out = [`**Ratchet \`${r.id}\`: worse${nums}.**`]
+  for (const o of (r.offenders ?? []).slice(0, 10))
+    out.push(
+      `- \`${o.path}\`: ${o.base === undefined ? `${o.head} (new)` : `${o.base} -> ${o.head}`}`,
+    )
+  return { key: `ratchet:${r.id}:worse`, text: out.join('\n') }
+}
+
+function examplesFeedback(f: ExamplesFileCheck): FeedbackFact {
+  const what = { absent: 'not committed', differs: 'differs from the approved examples' }
+  const out = [
+    `**Examples file \`${f.path}\`: ${what[f.status as keyof typeof what] ?? 'unreadable'}.**`,
+  ]
+  for (const d of f.diffs) out.push(`- ${exampleDiffText(d, 200)}`)
+  return { key: `examples:${f.status}`, text: out.join('\n') }
+}
+
+const listOf = (items: string[], max: number): string =>
+  items.slice(0, max).join('; ') + (items.length > max ? ` and ${items.length - max} more` : '')
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)

@@ -391,7 +391,7 @@ test('계약 바꾸기 요청이 오면 도는 미리 리뷰를 멈춘다(앞 �
   }
 })
 
-test('리뷰 준비가 아니면(시험 실패) 미리 리뷰하지 않는다. 미리 리뷰는 Work마다 4번까지이고, 그 뒤 head는 [끝내기]가 리뷰한다', async () => {
+test('리뷰 준비가 아니면(시험 실패) 미리 리뷰하지 않는다(그 사실은 되먹임으로 간다, V24). 미리 리뷰는 Work마다 4번까지이고, 그 뒤 head는 [끝내기]가 리뷰한다', async () => {
   const failing = {
     ...FIX_COMMIT,
     message: '시험 먼저',
@@ -419,8 +419,16 @@ test('리뷰 준비가 아니면(시험 실패) 미리 리뷰하지 않는다. �
   expect(works.view(id).evidence?.review).toBeNull()
   expect(await reviewCalls()).toBe(0)
 
+  // 실패한 사실은 쉬는 세션에 되먹임으로 간다(V24): 세션이 터미널의 한 줄을 받고 고친다
   let head = works.view(id).head ?? ''
-  for (const text of ['고쳐 주세요', '1', '2', '3', '4']) head = await nextHead(app, id, head, text)
+  await until(() => {
+    const v = works.view(id)
+    return v.head !== head && v.evidence?.head === v.head && settled(v)
+  }, '되먹임 뒤 고친 head')
+  const inputs = (await fake()).filter((e) => e.type === 'input').map((e) => e.text)
+  expect(inputs).toEqual([expect.stringMatching(/^relay feedback 1 for head /)])
+  head = works.view(id).head ?? ''
+  for (const text of ['1', '2', '3', '4']) head = await nextHead(app, id, head, text)
   // 고친 head와 메모 셋까지 넷은 미리 리뷰했다. 다섯째 head에는 리뷰가 없다
   expect(await reviewCalls()).toBe(4)
   expect(works.view(id).evidence?.review).toBeNull()

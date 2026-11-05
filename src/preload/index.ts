@@ -33,6 +33,7 @@ const api: RelayApi = {
   cancelEnd: (id) => call(IPC.cancelEnd, id),
   abandon: (id) => call(IPC.abandon, id),
   runEvidence: (id) => call(IPC.runEvidence, id),
+  sendFindings: (id, ids) => call(IPC.sendFindings, id, ids),
   terminal: {
     attach: (id) => call(IPC.terminalAttach, id),
     write: (id, data) => ipcRenderer.send(IPC.terminalWrite, id, data),

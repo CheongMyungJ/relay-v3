@@ -413,6 +413,22 @@
   margin-top: 8px;
 }
 
+.feedback-status {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--info-soft);
+  color: var(--info);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.secondary.mini {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .stale {
   margin-top: 12px;
   padding: 8px 12px;

@@ -6,7 +6,7 @@
 // 다시 본다. 리뷰는 결정론적 증거와 관문을 먼저 보인 뒤 돌고 끝나면 다시 정한다(리뷰는 사람을 막지 않는다, V4). 장부 줄,
 // exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). exported_head는 지금 묶음이 내보내기로 잰 묶음일 때만 그
 // head다: 다른 재기가 묶음을 바꾸면 비운다(같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게). 엔진 check는
-// in-process로 부른다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
+// in-process로 부른다. 세션이 쉬는 때(Stop 뒤 몰아 두기, 미리 리뷰를 허락한 재기 뒤)에 되먹임(V24, works-feedback.ts)을 본다.
 
 import type { PrCheck } from '../adapters/gh.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
@@ -119,7 +119,8 @@ export class EvidenceRunner {
 
   /**
    * Stop: 지금 계약으로 재지 않은 head, 또는 잰 묶음에 미리 리뷰(V23)를 돌릴 head면 debounceMs 뒤 미리 리뷰를 허락한
-   * 재기를 줄 세운다(그사이 Stop이 또 오면 다시 기다린다). 그때 이미 쟀고 미리 리뷰할 것도 없으면 재기가 바로 그만둔다
+   * 재기를 줄 세운다(그사이 Stop이 또 오면 다시 기다린다). 그때 이미 쟀고 미리 리뷰할 것도 없으면 재기가 바로 그만둔다. 잴
+   * 것이 없으면 debounceMs 뒤 되먹임만 본다(V24: 세션이 그때도 쉬고 있어야 보낸다)
    */
   async onStop(id: string): Promise<void> {
     const rec = this.ctx.record(id)
@@ -127,11 +128,12 @@ export class EvidenceRunner {
     const head = await workHead(rec).catch(() => null)
     await this.ctx.seeHead(id, head)
     if (!measures(rec.state) || head === null) return
-    if (this.measured(id, head) && !this.reviews.preparable(rec, rt.evidence, head)) return
+    const idle = this.measured(id, head) && !this.reviews.preparable(rec, rt.evidence, head)
     this.cancelDebounce(id)
     rt.debounce = setTimeout(() => {
       rt.debounce = null
-      void this.run(id, { prepare: true }).catch((e) => this.ctx.log('증거 실패', e))
+      const next = idle ? this.ctx.offerFeedback(id) : this.run(id, { prepare: true })
+      void next.catch((e) => this.ctx.log('증거 실패', e))
     }, this.debounceMs)
   }
 
@@ -172,7 +174,8 @@ export class EvidenceRunner {
    * check → (리뷰) → gate → (내보내기면 장부와 정책 머지). 돌고 있으면 그 뒤에 한 번 더 잰다(기다리는 요청은 합친다). 차례가
    * 와서 시작할 때 앞 재기가 이 head를 이미 쟀으면(내보내기면 다시 쓸 리뷰까지) 재지 않는다: 세션의 git push와 gh pr이
    * 잇달아 와도, 내보내기 리뷰가 도는 동안 gh pr이 또 와도 같은 head의 리뷰는 한 번이다. again([증거 다시 재기])이면 그래도
-   * 잰다. 내보내기 결론이 자동 머지 후보이고 PR이 있으면 바로 머지해 본다(by 'policy')
+   * 잰다. 내보내기 결론이 자동 머지 후보이고 PR이 있으면 바로 머지해 본다(by 'policy'). 미리 리뷰를 허락한 재기(세션이
+   * 쉴 때)가 끝나면 되먹임을 본다(V24)
    */
   run(
     id: string,
@@ -197,6 +200,7 @@ export class EvidenceRunner {
       rt.pending = null
       await this.measure(id, pending)
       await this.ctx.settleEnd(id, pending)
+      if (pending.prepare) await this.ctx.offerFeedback(id)
     })
     rt.pending = pending
     rt.chain = pending.done.catch(() => {})

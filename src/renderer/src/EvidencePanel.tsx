@@ -2,7 +2,8 @@
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
 // 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(올림과
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
-// 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다).
+// 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다). 결론 아래 되먹임 상태 한
+// 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시나 [세션에 넘기기](사람 몫), 상자에도 [세션에 넘기기].
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ProjectView, WorkView } from '../../shared/api.ts'
@@ -32,7 +33,13 @@ import {
   showEndBox,
   timeText,
 } from './format.ts'
-import { findingGroups, raiseLabel } from './findings.ts'
+import {
+  feedbackStatus,
+  findingGroups,
+  findingRoute,
+  passableFindings,
+  raiseLabel,
+} from './findings.ts'
 import { QualityNotice } from './QualityNotice.tsx'
 import { Empty, ErrorLine, Spinner, Tag, useAction } from './ui.tsx'
 
@@ -67,6 +74,7 @@ export function EvidencePanel(p: { view: WorkView; project: ProjectView | null }
       ) : (
         <Empty title="관문의 결론이 아직 없습니다">증거를 다시 재면 관문을 다시 계산합니다.</Empty>
       )}
+      <FeedbackLine view={view} />
       {view.evidenceRunning ? <Spinner label="증거를 재는 중…" /> : null}
       {view.reviewRunning ? <Spinner label="리뷰 도는 중…" /> : null}
       <Actions view={view} />
@@ -108,6 +116,8 @@ function EndArmed({ view }: { view: WorkView }) {
 function EndBox(p: { view: WorkView; head: string; open: string[] }) {
   const act = useAction()
   const { view } = p
+  // 사람에게만 보인 올림(계약 밖 변경 등)을 세션에 보내고 상자를 닫는다(V24)
+  const pass = view.state === 'working' ? passableFindings(view) : []
   return (
     <div className="callout tone-warn" role="region" aria-label="끝내기 확인" data-testid="end-box">
       <p className="callout-title">{endTexts(view).box}</p>
@@ -135,9 +145,40 @@ function EndBox(p: { view: WorkView; head: string; open: string[] }) {
         >
           더 고치기
         </button>
+        {pass.length > 0 ? (
+          <button
+            type="button"
+            className="secondary"
+            disabled={act.busy}
+            title="사람에게만 보인 리뷰 올림을 세션에 보내고 상자를 닫습니다"
+            onClick={() =>
+              void act.run(async () => {
+                await window.relay.sendFindings(view.id, pass)
+                await window.relay.cancelEnd(view.id)
+              })
+            }
+          >
+            세션에 넘기기
+          </button>
+        ) : null}
       </div>
       <ErrorLine text={act.error} />
     </div>
+  )
+}
+
+/** 되먹임(V24) 상태 한 줄: 세션에 보낸 것, 보내지 않은 까닭. 마지막 파일의 경로는 풍선 글로 */
+function FeedbackLine({ view }: { view: WorkView }) {
+  const text = feedbackStatus(view)
+  if (text === null) return null
+  return (
+    <p
+      className="feedback-status"
+      data-testid="feedback-status"
+      title={view.feedback.sent.at(-1)?.path}
+    >
+      {text}
+    </p>
   )
 }
 
@@ -276,24 +317,48 @@ function Fold(p: { title: string; count?: number; open?: boolean; children: Reac
   )
 }
 
-/** 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄 */
-function FindingList({ findings }: { findings: ReviewFinding[] }) {
+/**
+ * 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄, 되먹임(V24: 세션에 보냄, 세션 몫이면 쉬면 저절로 감, 사람 몫이면 [세션에
+ * 넘기기])
+ */
+function FindingList({ findings, view }: { findings: ReviewFinding[]; view: WorkView }) {
+  const act = useAction()
+  const send = (id: string) => void act.run(() => window.relay.sendFindings(view.id, [id]))
   return (
-    <ul className="fact-list">
-      {findings.map((f) => (
-        <li key={f.id}>
-          <Tag tone={SEVERITY[f.severity].tone}>{SEVERITY[f.severity].label}</Tag>
-          {f.raise === undefined ? null : <Tag>{raiseLabel(f)}</Tag>}
-          <span>{f.text}</span>
-          {f.file ? (
-            <code>
-              {f.file}
-              {f.line === undefined ? '' : `:${f.line}`}
-            </code>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="fact-list">
+        {findings.map((f) => {
+          const route = findingRoute(view, f)
+          return (
+            <li key={f.id} data-testid="finding">
+              <Tag tone={SEVERITY[f.severity].tone}>{SEVERITY[f.severity].label}</Tag>
+              {f.raise === undefined ? null : <Tag>{raiseLabel(f)}</Tag>}
+              <span>{f.text}</span>
+              {f.file ? (
+                <code>
+                  {f.file}
+                  {f.line === undefined ? '' : `:${f.line}`}
+                </code>
+              ) : null}
+              {route === 'sent' ? <Tag tone="info">세션에 보냄</Tag> : null}
+              {route === 'session' ? <Tag tone="info">세션 몫</Tag> : null}
+              {route === 'human' && view.state === 'working' ? (
+                <button
+                  type="button"
+                  className="secondary mini"
+                  disabled={act.busy}
+                  title="이 지적을 되먹임 파일로 세션에 보냅니다"
+                  onClick={() => send(f.id)}
+                >
+                  세션에 넘기기
+                </button>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
+      <ErrorLine text={act.error} />
+    </>
   )
 }
 
@@ -301,13 +366,13 @@ function FindingList({ findings }: { findings: ReviewFinding[] }) {
  * 올림과 메모(V26): 올림은 관문이 사람에게 보내는 사실이고(위 '사람에게 보낸 까닭'에도 있다), 메모(구조/낮음, 갈래가 없는
  * 지적)는 관문 사실이 아니다. 빈 묶음은 보이지 않는다
  */
-function FindingGroups({ findings }: { findings: ReviewFinding[] }) {
+function FindingGroups({ findings, view }: { findings: ReviewFinding[]; view: WorkView }) {
   const { raised, notes } = findingGroups(findings)
   const group = (id: string, title: string, of: ReviewFinding[]) =>
     of.length === 0 ? null : (
       <section data-testid={id}>
         <p className="muted small">{title}</p>
-        <FindingList findings={of} />
+        <FindingList findings={of} view={view} />
       </section>
     )
   return (
@@ -403,7 +468,7 @@ function Details(p: { view: WorkView; e: EvidenceBundle }) {
             {review}
           </p>
         ) : null}
-        <FindingGroups findings={findings} />
+        <FindingGroups findings={findings} view={view} />
       </Fold>
       <Fold title="없는 증거" count={missing.length}>
         {missing.length === 0 ? <p className="muted">없음</p> : null}

@@ -128,6 +128,37 @@ export interface WorkView {
   endPending: EndPending | null
   /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(화면이 '[끝내기] 뒤 세션이 새로 커밋'을 보인다). 다시 누르면 null */
   endMoved: string | null
+  /** 쉬는 세션에 준 되먹임(V24) */
+  feedback: FeedbackView
+}
+
+/** 세션에 보낸 되먹임 파일 하나(V24, works/<id>/feedback/<n>.md) */
+export interface FeedbackRound {
+  n: number
+  head: string
+  at: string
+  /** relay: 쉬는 세션에 저절로(라운드로 센다). human: 사람이 [세션에 넘기기](세지 않는다) */
+  by: 'relay' | 'human'
+  /** 보낸 사실의 이름(core FeedbackFact.key, 지적은 findingKey). 같은 head에 다시 보내지 않는다 */
+  keys: string[]
+  /** 결정론 사실과 리뷰 지적의 수 */
+  facts: number
+  findings: number
+}
+
+/**
+ * [증거]의 되먹임 상태(V24). rounds는 relay가 저절로 보낸 라운드(Work마다 max까지, 두 종류를 합쳐). sent는 지금 HEAD에 보낸
+ * 파일(path는 그 파일). findings는 지금 HEAD의 묶음에 있는 리뷰 지적마다 갈래(session: 쉬는 세션에 저절로 감, human: 사람에게만,
+ * [세션에 넘기기])와 이 head에 보냈는지. pending은 지금 HEAD의 세션 몫 사실 가운데 아직 보내지 않은 수, held는 그 까닭(사람이
+ * 최근 터미널에 입력함, 상한에 닿음. 세션이 일하는 중이면 null: 쉬면 보낸다)
+ */
+export interface FeedbackView {
+  rounds: number
+  max: number
+  sent: (FeedbackRound & { path: string })[]
+  findings: Record<string, { route: 'session' | 'human'; sent: boolean }>
+  pending: number
+  held: 'human_input' | 'cap' | null
 }
 
 /**
@@ -250,6 +281,11 @@ export interface RelayApi {
   abandon(id: string): Promise<void>
   /** [증거 다시 재기]. 열린 PR이 있으면 내보내기 후보로(리뷰 포함) 잰다 */
   runEvidence(id: string): Promise<void>
+  /**
+   * [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적(id)을 되먹임 파일로 세션에 보낸다. 사람에게만 보이는 지적(계약 밖 변경, 메모
+   * 등)도 보낸다. 라운드 상한에 세지 않는다
+   */
+  sendFindings(id: string, ids: string[]): Promise<void>
   terminal: {
     attach(id: string): Promise<TerminalBacklog>
     write(id: string, data: string): void
@@ -280,6 +316,7 @@ export const IPC = {
   cancelEnd: 'relay:cancel-end',
   abandon: 'relay:abandon',
   runEvidence: 'relay:run-evidence',
+  sendFindings: 'relay:send-findings',
   terminalAttach: 'relay:terminal-attach',
   terminalWrite: 'relay:terminal-write',
   terminalResize: 'relay:terminal-resize',

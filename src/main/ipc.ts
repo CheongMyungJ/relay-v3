@@ -84,6 +84,12 @@ export function registerIpc(o: {
         exportCandidate: exportable(view.pr, view.base, view.head),
       })
     },
+    // [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적 id들
+    [IPC.sendFindings]: (id, ids) => {
+      if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string'))
+        throw new Error('지적 id 목록이 아님')
+      return works.sendFindings(str(id, 'id'), ids)
+    },
     [IPC.terminalAttach]: (id) => {
       works.view(str(id, 'id'))
       return sessions.backlog(id as string)
@@ -101,8 +107,11 @@ export function registerIpc(o: {
       }
     })
   }
+  // 사람이 화면에서 터미널에 친 글: 되먹임(V24)은 그 뒤 60초 동안 보내지 않는다. 앱의 tell은 이 길을 지나지 않는다
   const write = (_e: unknown, id: unknown, data: unknown) => {
-    if (typeof id === 'string' && typeof data === 'string') sessions.write(id, data)
+    if (typeof id !== 'string' || typeof data !== 'string') return
+    works.typed(id, data)
+    sessions.write(id, data)
   }
   const resize = (_e: unknown, id: unknown, cols: unknown, rows: unknown) => {
     if (typeof id === 'string' && typeof cols === 'number' && typeof rows === 'number')

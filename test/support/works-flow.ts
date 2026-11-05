@@ -97,8 +97,22 @@ export const NOTE_FINDINGS = [
   { severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 },
 ]
 
-/** 올림(구조)이 있는 지적: [끝내기]의 열린 것이다 */
+/**
+ * 올림(계약 밖 변경)이 있는 지적: [끝내기]의 열린 것이다. 계약의 몫이라 쉬는 세션에 저절로 가지 않는다(V24): 이 지적을 쓰는
+ * 시험은 세션이 사람의 말로만 움직인다
+ */
 export const RAISED_FINDINGS = [
+  {
+    severity: 'medium',
+    raise: 'out_of_contract',
+    text: '계약 밖에서 sub를 더함',
+    file: 'src/calc.js',
+    line: 5,
+  },
+]
+
+/** 세션 몫의 올림(구조 medium): 쉬는 세션에 되먹임으로 간다(V24) */
+export const SESSION_FINDINGS = [
   { severity: 'medium', raise: 'structure', text: '중복 구현', file: 'src/calc.js', line: 5 },
 ]
 
@@ -117,7 +131,10 @@ export interface FlowKit {
   mcpResults(tool: string): Promise<Entry[]>
   openApp(
     home: string,
-    o?: Pick<OpenAppOptions, 'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check'>,
+    o?: Pick<
+      OpenAppOptions,
+      'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check' | 'humanQuietMs'
+    >,
   ): Promise<TestApp>
   /** 시험이 열고 스스로 닫은 앱을 목록에서 뺀다 */
   forget(app: TestApp): void
@@ -210,6 +227,7 @@ export function flowKit(): FlowKit {
         ...(o.claudeBin ? { claudeBin: o.claudeBin } : {}),
         ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
         ...(o.check ? { check: o.check } : {}),
+        ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
       })
       apps.push(app)
       return app

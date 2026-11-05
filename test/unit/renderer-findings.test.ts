@@ -1,15 +1,20 @@
 // [단위] 렌더러의 리뷰 올림과 메모(V26, src/renderer/src/findings.ts). 렌더러는 core를 가져오지 않으므로 같은 규칙을 다시
-// 쓴다: core review.ts `raises`, gate의 '리뷰 올림(…)' 이름과 견준다. 화면은 [스모크]가 이어지는지만 본다.
+// 쓴다: core review.ts `raises`, gate의 '리뷰 올림(…)' 이름과 견준다. 되먹임(V24)의 상태 한 줄과 지적마다의 표시, 상자의
+// [세션에 넘기기]가 보낼 지적. 화면은 [스모크]가 이어지는지만 본다.
 import { describe, expect, test } from 'vitest'
 import { raises } from '../../src/core/review.ts'
 import type { RaiseReason, ReviewFinding } from '../../src/core/types.ts'
 import {
+  feedbackStatus,
   findingGroups,
+  findingRoute,
+  passableFindings,
   RAISE_LABEL,
   raiseLabel,
   raisesFinding,
 } from '../../src/renderer/src/findings.ts'
-import { finding, run } from '../support/gate.ts'
+import type { FeedbackView, WorkView } from '../../src/shared/api.ts'
+import { evidence, finding, HEAD, run } from '../support/gate.ts'
 
 const KINDS = Object.keys(RAISE_LABEL) as RaiseReason[]
 const SEVERITIES: ReviewFinding['severity'][] = ['high', 'medium', 'low']
@@ -49,5 +54,78 @@ describe('findingGroups', () => {
       r.startsWith('리뷰 올림'),
     )
     expect(up).toHaveLength(findingGroups([r1, r2, r3, r4]).raised.length)
+  })
+})
+
+describe('되먹임(V24)', () => {
+  const fb = (over: Partial<FeedbackView> = {}): FeedbackView => ({
+    rounds: 0,
+    max: 3,
+    sent: [],
+    findings: {},
+    pending: 0,
+    held: null,
+    ...over,
+  })
+  const view = (feedback: FeedbackView, over: Partial<WorkView> = {}) =>
+    ({ state: 'working', endPending: null, evidence: null, feedback, ...over }) as WorkView
+  const round = (n: number, by: 'relay' | 'human', facts: number, findings: number) => ({
+    n,
+    head: HEAD,
+    at: '2026-11-05T00:00:00Z',
+    by,
+    keys: [],
+    facts,
+    findings,
+    path: `/h/works/w/feedback/${n}.md`,
+  })
+
+  test('feedbackStatus: 상한, 사람이 최근 입력함, 쉬면 보냄, 이 head에 보낸 것, 앞 head의 라운드 수, 없음', () => {
+    expect(feedbackStatus(view(fb()))).toBeNull()
+    expect(feedbackStatus(view(fb({ rounds: 3, pending: 1, held: 'cap' })))).toBe(
+      '되먹임 상한(3/3)에 닿아 세션 몫 사실 1개를 보내지 않았습니다. 끝내기의 상자에서 보입니다',
+    )
+    expect(feedbackStatus(view(fb({ rounds: 1, pending: 2, held: 'human_input' })))).toBe(
+      '세션 몫 사실 2개를 보내지 않았습니다: 최근 터미널에 입력했으니 세션이 다음에 쉴 때 보냅니다 (세션에 보낸 되먹임 1/3)',
+    )
+    expect(feedbackStatus(view(fb({ pending: 1 })))).toBe(
+      '세션 몫 사실 1개: 세션이 쉬면 보냅니다 (세션에 보낸 되먹임 0/3)',
+    )
+    // 끝내기가 걸렸거나 상자가 떠 있으면 보내지 않으니 그렇게 말하지 않는다
+    const pending = { head: HEAD, armed: false, open: ['x'] }
+    expect(feedbackStatus(view(fb({ pending: 1 }), { endPending: pending }))).toBeNull()
+    expect(feedbackStatus(view(fb({ rounds: 2, sent: [round(2, 'relay', 3, 1)] })))).toBe(
+      '세션에 보냄(2/3) · 되먹임 2: 사실 3개, 리뷰 지적 1개',
+    )
+    expect(feedbackStatus(view(fb({ rounds: 2, sent: [round(3, 'human', 0, 2)] })))).toBe(
+      '사람이 세션에 넘김 · 되먹임 3: 리뷰 지적 2개',
+    )
+    expect(feedbackStatus(view(fb({ rounds: 2 })))).toBe('세션에 보낸 되먹임 2/3')
+  })
+
+  test('findingRoute와 passableFindings: 상자의 [세션에 넘기기]는 사람 몫의 올림 가운데 보내지 않은 것만', () => {
+    const outside = finding({ id: 'R1', raise: 'out_of_contract', severity: 'low' })
+    const memo = finding({ id: 'R2', severity: 'low' })
+    const structure = finding({ id: 'R3', raise: 'structure', severity: 'medium' })
+    const sent = finding({ id: 'R4', raise: 'out_of_contract', severity: 'high' })
+    const v = view(
+      fb({
+        findings: {
+          R1: { route: 'human', sent: false },
+          R2: { route: 'human', sent: false },
+          R3: { route: 'session', sent: false },
+          R4: { route: 'human', sent: true },
+        },
+      }),
+      {
+        evidence: evidence({
+          review: { status: 'done', findings: [outside, memo, structure, sent] },
+        }),
+      },
+    )
+    expect(
+      [outside, memo, structure, sent, finding({ id: 'R9' })].map((f) => findingRoute(v, f)),
+    ).toEqual(['human', 'human', 'session', 'sent', null])
+    expect(passableFindings(v)).toEqual(['R1'])
   })
 })

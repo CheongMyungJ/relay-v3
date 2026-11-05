@@ -273,6 +273,15 @@ export interface ReviewFinding {
   text: string
 }
 
+/**
+ * 쉬는 세션에 보낼 결정론 사실 하나(V24, core/review.ts feedbackFacts). text는 영어 마크다운이고 시험 메시지·명령 출력은
+ * 울타리로 감싼 자료다. key는 같은 head에 같은 사실을 다시 보내지 않으려고 견주는 이름이다(예: `line:C1:not_met`)
+ */
+export interface FeedbackFact {
+  key: string
+  text: string
+}
+
 // ── 증거 묶음 ────────────────────────────────────────────────────────────────
 
 export interface EvidenceBundle {

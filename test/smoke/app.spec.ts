@@ -5,6 +5,7 @@
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
 // 계약의 줄은 단위마다 묶여 보인다(V21). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
+// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 계약 밖 변경을 넘기는 단추가 있다.
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -186,6 +187,17 @@ async function pickFolder(dir: string): Promise<void> {
   }, dir)
 }
 
+/** 가짜 claude가 터미널에서 받은 줄(차례대로) */
+async function inputs(): Promise<string[]> {
+  const text = await readFile(join(tmp, 'claude.jsonl'), 'utf8').catch(() => '')
+  return text
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { type: string; text?: string })
+    .filter((e) => e.type === 'input')
+    .map((e) => e.text ?? '')
+}
+
 /** 가짜 claude가 받은 submit_contract의 답(차례대로) */
 async function submitted(): Promise<unknown[]> {
   const text = await readFile(join(tmp, 'claude.jsonl'), 'utf8').catch(() => '')
@@ -296,7 +308,23 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('review-raised')).toHaveCount(0)
   const merge = evidence.getByRole('button', { name: '머지', exact: true })
   await expect(merge).toBeEnabled()
+  // 메모는 사람 몫이다(V24): 저절로 보내지 않았고 지적마다 [세션에 넘기기]
+  await expect(notes.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(2)
+  await expect(evidence.getByTestId('feedback-status')).toHaveCount(0)
   await shot('shadow')
+  // [세션에 넘기기]: 되먹임 파일을 쓰고 터미널에 한 줄. 상태 줄과 지적의 표시가 바뀐다(라운드로 세지 않음)
+  const short = notes.getByTestId('finding').filter({ hasText: '변수 이름이 짧음' })
+  await short.getByRole('button', { name: '세션에 넘기기' }).click()
+  await expect(evidence.getByTestId('feedback-status')).toHaveText(
+    '사람이 세션에 넘김 · 되먹임 1: 리뷰 지적 1개',
+  )
+  await expect(short).toContainText('세션에 보냄')
+  await expect(short.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(0)
+  await expect.poll(async () => (await inputs()).length, { timeout: 30_000 }).toBe(2)
+  expect((await inputs())[1]).toMatch(
+    /^relay feedback 1 for head [0-9a-f]{7} is in .*feedback\/1\.md: 1 review finding that the human passed to you\./,
+  )
+  await shot('feedback-sent')
 
   // [변경]: 모두 몇 줄, 파일별 diff. 5파일·400줄 이하라 펼친 채로 열린다(M2.1 13절). 누르면 접힌다
   await page.getByRole('tab', { name: '변경' }).click()
@@ -383,6 +411,8 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   )
   await expect(endBox.getByText('변수 이름이 짧음')).toHaveCount(0)
   await expect(endBox.getByText('빈 입력 시험이 없음')).toHaveCount(0)
+  // 계약 밖 변경은 사람 몫이라 저절로 가지 않았다. 상자에서 세션에 넘길 수 있다(V24)
+  await expect(endBox.getByRole('button', { name: '세션에 넘기기' })).toBeVisible()
   await expect(head).toContainText('구현 중')
   await shot('end-box')
   // [리뷰 지적]은 올림 하나와 메모 둘로 나뉜다(V26)

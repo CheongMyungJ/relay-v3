@@ -1,8 +1,9 @@
 // 독립 리뷰 (V4, V23, docs/m2-modules.md 3절 works.ts의 review와 미리 리뷰). 언제 재는지는 works-evidence.ts가 정하고, 이
 // 파일은 리뷰를 부르고 묶음에 붙인다: 기본 구현(claudeReview: 새 맥락의 읽기 전용 claude -p), 내보내기의 리뷰(같은 head·
-// 계약의 끝난 리뷰를 다시 씀, 건너뜀), 미리 리뷰(세션이 쉬고 증거가 리뷰 준비인 head, Work마다 4번까지). 리뷰는 (head, 계약
-// hash, 프롬프트 판)에 붙는다. 리뷰마다 AbortController를 따로 두고, 읽은 HEAD나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는
-// Runtime.abort가 끊는다. 리뷰 결과는 세션에 넣지 않는다(V4, V8).
+// 계약의 끝난 리뷰를 다시 씀, 건너뜀), 미리 리뷰(세션이 쉬고 증거가 리뷰 준비인 head. Work마다 4번까지: 처음 1번과 되먹임
+// 라운드 상한 3, works-feedback.ts PREPARED_MAX). 리뷰는 (head, 계약 hash, 프롬프트 판)에 붙는다. 리뷰마다
+// AbortController를 따로 두고, 읽은 HEAD나 계약이 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰 결과 가운데
+// 세션 몫은 works-feedback.ts가 쉬는 세션에 보낸다(V24).
 
 import { claudeJson } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
@@ -21,6 +22,7 @@ import {
 import type { Contract, EvidenceBundle, Policy } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
+import { PREPARED_MAX } from './works-feedback.ts'
 import {
   workHead,
   type ExportTrigger,
@@ -33,9 +35,6 @@ import {
 const REVIEW_TIMEOUT_MS = 15 * 60 * 1000
 /** 리뷰어가 쓰는 읽기 도구 */
 export const REVIEW_TOOLS = ['Read', 'Grep', 'Glob']
-
-/** 미리 리뷰의 상한(V23): 처음 1번과 V24의 되먹임 3번. 그 뒤에는 PR과 [끝내기] 때만 돈다 */
-export const PREPARED_MAX = 4
 
 /** events.jsonl의 review 기록이 적는 계기 */
 type Trigger = ExportTrigger | 'prepared'
@@ -109,7 +108,7 @@ export class ReviewDesk {
 
   /**
    * 미리 리뷰할 때인가(V23): 구현 중이고, 세션이 쉬고(idle, 또는 세션이 끝남), 평가에서 리뷰를 빼지 않았고, 묶음에 리뷰가
-   * 없고, Work의 미리 리뷰가 상한 아래이고, 묶음이 지금 HEAD와 계약으로 리뷰 준비다
+   * 없고, Work의 미리 리뷰가 상한(처음 1번과 되먹임 라운드 상한 3) 아래이고, 묶음이 지금 HEAD와 계약으로 리뷰 준비다
    */
   preparable(rec: WorkRecord, bundle: EvidenceBundle | null, head: string): boolean {
     const rt = this.ctx.runtime(rec.id)

@@ -5,6 +5,7 @@
 //   works/<id>/contract.json              승인된 계약
 //   works/<id>/events.jsonl               훅과 사람의 동작 기록(한 줄에 하나)
 //   works/<id>/settings.json, instructions.md, mcp.json   세션에 주는 파일
+//   works/<id>/feedback/<n>.md            쉬는 세션에 준 되먹임(V24, 자료)
 //   ledger.jsonl                          실적 장부(그림자)
 //   worktrees/<id>                        Work의 git worktree
 // 파일을 통째로 쓸 때는 임시 파일에 쓴 뒤 rename한다(반쯤 쓴 파일이 남지 않게). 줄 기록은 끝에 덧붙인다.
@@ -18,7 +19,7 @@ import { readJson, relayHome } from '../adapters/store.ts'
 import { parseLedger, type LedgerEntry } from '../core/ledger.ts'
 import type { Contract, GateResult, GroundingCheck } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
-import type { EndPending, PrInfo, ProjectSettings } from '../shared/api.ts'
+import type { EndPending, FeedbackRound, PrInfo, ProjectSettings } from '../shared/api.ts'
 
 export interface ProjectRecord {
   id: string
@@ -67,8 +68,16 @@ export interface WorkRecord {
   notice: string | null
   /** [끝내기]의 걸린 끝이나 상자(V25, works-end.ts). 옛 기록에는 없다(읽을 때 null) */
   end_pending: EndPending | null
-  /** 미리 리뷰(V23, works-review.ts)를 부른 수. 4번까지다. 옛 기록에는 없다(읽을 때 0) */
+  /**
+   * 미리 리뷰(V23, works-review.ts)를 부른 수. 4번까지다(처음 1번과 되먹임 라운드 상한 3, works-feedback.ts PREPARED_MAX). 옛
+   * 기록에는 없다(읽을 때 0)
+   */
   prepared_reviews: number
+  /**
+   * 쉬는 세션에 준 되먹임(V24, works-feedback.ts). rounds는 relay가 저절로 보낸 라운드(두 종류를 합쳐 Work마다 3까지), sent는
+   * 보낸 파일마다 한 줄(사람의 [세션에 넘기기]도). 옛 기록에는 없다(읽을 때 빈 것)
+   */
+  feedback: { rounds: number; sent: FeedbackRound[] }
 }
 
 export type WorkFile =
@@ -136,6 +145,11 @@ export class Store {
 
   workPath(id: string, name: WorkFile): string {
     return join(this.workDir(id), name)
+  }
+
+  /** 되먹임 파일(V24): works/<id>/feedback/<n>.md */
+  feedbackPath(id: string, n: number): string {
+    return join(this.workDir(id), 'feedback', `${n}.md`)
   }
 
   /** Work의 git worktree 자리 */
