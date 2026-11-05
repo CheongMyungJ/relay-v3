@@ -1,5 +1,5 @@
 // 독립 리뷰 (V4, docs/m2-modules.md 1절 review.ts). 새 맥락의 읽기 전용 claude -p가 이 프롬프트와 스키마로 돈다.
-// 리뷰는 막지 않고 올리기만 한다: 지적의 raise(예시와 시험 불일치, 보안, 계약 밖 변경, 구조)만 관문에 들어간다.
+// 리뷰는 막지 않고 올리기만 한다: 올림(raises, V26)인 지적만 관문에 들어간다. 나머지는 [증거]의 메모다.
 // 프롬프트는 모델이 읽으므로 영어다. 리뷰·시험을 고치라는 지시를 세션에 넣지 않는다(V4, V8).
 // 앱은 리뷰 준비(reviewReady)인 head에 리뷰를 미리 돌리고, 리뷰는 (head, 계약 hash, 프롬프트 판)에 붙는다(V23).
 
@@ -22,14 +22,24 @@ const RAISES: readonly RaiseReason[] = [
   'structure',
 ]
 
+/**
+ * 올림인가(V26): 관문에 사실로 들어가는 지적. 보안, 예시와 시험 불일치, 계약 밖 변경(그리고 V30의 request_gap)은 심각도와
+ * 상관없이 올림이고, 구조는 medium과 high만이다. 구조/low와 raise가 없는 지적은 메모다: [증거]에 남지만 관문 사실이 아니다.
+ * 모르는 갈래나 심각도는 올림으로 본다(엄격한 쪽). 설정 손잡이는 두지 않는다(원칙 5)
+ */
+export function raises(f: Pick<ReviewFinding, 'raise' | 'severity'>): boolean {
+  if (f.raise === undefined) return false
+  return f.raise !== 'structure' || f.severity !== 'low'
+}
+
 /** 프롬프트에 넣는 diff의 상한(글자 수). 넘으면 앞쪽만 넣고 알린다 */
 export const REVIEW_DIFF_MAX = 60_000
 
 /**
  * 리뷰 프롬프트·스키마의 판. 바꾸면 올린다. 리뷰는 (head, 계약 hash, 이 판)에 붙는다: 앞 판의 리뷰는 내보내기에 다시 쓰지
- * 않는다(V23)
+ * 않는다(V23). 1: V23의 첫 판. 2: 심각도 기준표(V26)
  */
-export const REVIEW_PROMPT_VERSION = 1
+export const REVIEW_PROMPT_VERSION = 2
 
 /**
  * 리뷰 준비(V23): 이 head의 결정론 증거가 통과해 리뷰만 남았다. 계약이 있고, 묶음이 이 계약과 이 head로 만든 것이고(낡지
@@ -59,7 +69,11 @@ export const REVIEW_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          severity: { type: 'string', enum: [...SEVERITIES] },
+          severity: {
+            type: 'string',
+            enum: [...SEVERITIES],
+            description: 'By the severity rubric in the prompt.',
+          },
           raise: {
             type: 'string',
             enum: [...RAISES],
@@ -111,7 +125,15 @@ The change was made under the approved contract below. relay has already run the
 3. \`out_of_contract\`: behavior changed outside the contract's lines, or work listed in its non-goals.
 4. \`security\`: injection, path traversal, leaked secrets, unsafe shell or eval, weakened checks.
 
-Set \`raise\` only for findings of these four kinds. Other findings (naming, style, small suggestions) have no \`raise\`. Give \`file\` and \`line\` when you can point to one. Return an empty list if you find nothing. Keep each \`text\` short and concrete, and write it in Korean: a person reads the findings in relay's Korean screen.
+Set \`raise\` only for findings of these four kinds. Other findings (naming, style, small suggestions) have no \`raise\`.
+
+Give each finding a \`severity\` by this rubric:
+
+- \`high\`: an approved example, or a behavior the contract names (its goal, a line, or the request it quotes), is wrong on real input. Or a security hole.
+- \`medium\`: the code handles a specific input wrongly and no test catches it (name the input in \`text\`). Or the behavior of a contract line has no test.
+- \`low\`: you believe the code is right but no test pins it down. Or it is about naming or shape.
+
+Give \`file\` and \`line\` when you can point to one. Return an empty list if you find nothing. Keep each \`text\` short and concrete, and write it in Korean: a person reads the findings in relay's Korean screen.
 
 ## Contract
 

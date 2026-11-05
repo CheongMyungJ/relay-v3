@@ -146,15 +146,16 @@ describe('요약', () => {
     )
   })
 
-  test('리뷰가 있으면 상태와 지적·올림 수를 쓴다', () => {
+  test('리뷰가 있으면 상태와 지적·올림 수를 쓴다(구조/low는 올림이 아니다, V26)', () => {
     const review = {
       status: 'done' as const,
       findings: [
         { id: 'f1', severity: 'high' as const, text: 'a', raise: 'security' as const },
         { id: 'f2', severity: 'low' as const, text: 'b' },
+        { id: 'f3', severity: 'low' as const, text: 'c', raise: 'structure' as const },
       ],
     }
-    expect(summarize(evidence({ review }))).toContain('리뷰: 마침, 지적 2(올림 1)')
+    expect(summarize(evidence({ review }))).toContain('리뷰: 마침, 지적 3(올림 1)')
     expect(summarize(evidence({ review: { status: 'failed', findings: [] } }))).toContain(
       '리뷰: 실패, 지적 0(올림 0)',
     )

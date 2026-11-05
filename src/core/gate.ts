@@ -8,6 +8,7 @@ import { isStale } from './evidence.ts'
 import { matchAny } from './glob.ts'
 import { allLinesTestedAndMet } from './lines.ts'
 import { hasRealLimit } from './quality.ts'
+import { raises } from './review.ts'
 import type {
   AutoCondition,
   CommandOutcome,
@@ -60,7 +61,8 @@ export function gate(
 
 /**
  * 열린 것(V25, 앱의 [끝내기]): 관문이 계약 다시나 사람 머지로 보내는 사실 그대로다. gate와 같은 함수로 계산하고 새 판단은
- * 없다. 자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적, 올림 없는 리뷰 지적은 넣지 않는다. 비면 [끝내기]가 상자 없이 끝낸다
+ * 없다. 자동 조건을 못 채운 까닭, 스위치, 서버 보호, 실적, 리뷰 메모(올림이 아닌 지적, V26)는 넣지 않는다. 비면 [끝내기]가
+ * 상자 없이 끝낸다
  */
 export function openItems(
   evidence: EvidenceBundle,
@@ -257,13 +259,14 @@ const RAISE_LABEL: Record<RaiseReason, string> = {
   structure: '구조',
 }
 
+/** 리뷰 상태와 올림(V26 raises). 메모(구조/low, raise가 없는 지적)는 관문 사실이 아니다 */
 function reviewFacts(review: EvidenceBundle['review']): string[] {
   if (review === null) return ['리뷰 없음']
   const out: string[] = []
   if (review.status === 'failed') out.push('리뷰 실패')
   else if (review.status !== 'done') out.push('리뷰를 건너뜀')
   for (const f of review.findings) {
-    if (f.raise === undefined) continue
+    if (f.raise === undefined || !raises(f)) continue
     const label = Object.hasOwn(RAISE_LABEL, f.raise) ? RAISE_LABEL[f.raise] : f.raise
     const where =
       f.file === undefined ? '' : ` — ${f.file}${f.line === undefined ? '' : `:${f.line}`}`

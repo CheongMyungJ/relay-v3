@@ -1,8 +1,8 @@
 // [증거] 패널 (docs/m2-modules.md 4절): 맨 위 결론 한 줄(그림자면 '자동이었으면 머지했을 것'), 그 아래 결론을 정한 사실.
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
-// 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적, 없는
-// 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린 끝·상자(V25: 상자는
-// 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다).
+// 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(올림과
+// 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
+// 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다).
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ProjectView, WorkView } from '../../shared/api.ts'
@@ -32,6 +32,7 @@ import {
   showEndBox,
   timeText,
 } from './format.ts'
+import { findingGroups, raiseLabel } from './findings.ts'
 import { QualityNotice } from './QualityNotice.tsx'
 import { Empty, ErrorLine, Spinner, Tag, useAction } from './ui.tsx'
 
@@ -275,13 +276,14 @@ function Fold(p: { title: string; count?: number; open?: boolean; children: Reac
   )
 }
 
-/** 리뷰 지적 목록: 심각도, 글, 파일:줄 */
+/** 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄 */
 function FindingList({ findings }: { findings: ReviewFinding[] }) {
   return (
     <ul className="fact-list">
       {findings.map((f) => (
         <li key={f.id}>
           <Tag tone={SEVERITY[f.severity].tone}>{SEVERITY[f.severity].label}</Tag>
+          {f.raise === undefined ? null : <Tag>{raiseLabel(f)}</Tag>}
           <span>{f.text}</span>
           {f.file ? (
             <code>
@@ -292,6 +294,27 @@ function FindingList({ findings }: { findings: ReviewFinding[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * 올림과 메모(V26): 올림은 관문이 사람에게 보내는 사실이고(위 '사람에게 보낸 까닭'에도 있다), 메모(구조/낮음, 갈래가 없는
+ * 지적)는 관문 사실이 아니다. 빈 묶음은 보이지 않는다
+ */
+function FindingGroups({ findings }: { findings: ReviewFinding[] }) {
+  const { raised, notes } = findingGroups(findings)
+  const group = (id: string, title: string, of: ReviewFinding[]) =>
+    of.length === 0 ? null : (
+      <section data-testid={id}>
+        <p className="muted small">{title}</p>
+        <FindingList findings={of} />
+      </section>
+    )
+  return (
+    <>
+      {group('review-raised', `올림 ${raised.length} · 관문이 사람에게 보냅니다`, raised)}
+      {group('review-notes', `메모 ${notes.length} · 관문에 들어가지 않습니다`, notes)}
+    </>
   )
 }
 
@@ -380,7 +403,7 @@ function Details(p: { view: WorkView; e: EvidenceBundle }) {
             {review}
           </p>
         ) : null}
-        <FindingList findings={findings} />
+        <FindingGroups findings={findings} />
       </Fold>
       <Fold title="없는 증거" count={missing.length}>
         {missing.length === 0 ? <p className="muted">없음</p> : null}

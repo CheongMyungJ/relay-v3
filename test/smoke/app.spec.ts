@@ -4,7 +4,7 @@
 // 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
-// 계약의 줄은 단위마다 묶여 보인다(V21).
+// 계약의 줄은 단위마다 묶여 보인다(V21). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -104,6 +104,12 @@ const SCENARIO = {
   ],
 }
 
+/** 가짜 리뷰어의 지적: 둘 다 메모다(V26: 갈래가 없는 지적, 구조/low). 관문 사실이 아니라 그림자를 막지 않는다 */
+const NOTES = [
+  { severity: 'low', text: '변수 이름이 짧음', file: 'src/calc.js', line: 5 },
+  { severity: 'low', raise: 'structure', text: '빈 입력 시험이 없음', file: 'src/calc.js' },
+]
+
 let tmp: string
 let repo: TestRepo
 /** 품질 기준이 없는 레포(origin 없음) */
@@ -138,12 +144,7 @@ test.beforeAll(async () => {
   const scenario = join(tmp, 'scenario.json')
   await writeFile(scenario, JSON.stringify(SCENARIO))
   const review = join(tmp, 'review.json')
-  await writeFile(
-    review,
-    JSON.stringify({
-      findings: [{ severity: 'low', text: '변수 이름이 짧음', file: 'src/calc.js', line: 5 }],
-    }),
-  )
+  await writeFile(review, JSON.stringify({ findings: NOTES }))
   const ghState = join(tmp, 'gh-state.json')
   await writeFile(ghState, '{}')
 
@@ -268,7 +269,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('decisive')).toHaveText(/^리뷰 도는 중: 리뷰가 끝나면/)
   await shot('prepared-review')
   // 미리 리뷰가 끝나면 이 head의 리뷰로 결론을 다시 정한다: 자동 머지가 꺼져 있어 그림자. 장부에는 쓰지 않는다(내보내기 아님)
-  await expect(evidence.getByTestId('review-meta')).toHaveText('리뷰 끝(이 head): 지적 1개', {
+  await expect(evidence.getByTestId('review-meta')).toHaveText('리뷰 끝(이 head): 지적 2개', {
     timeout: 60_000,
   })
   await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible()
@@ -286,8 +287,13 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible()
   await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
   await expect(evidence.getByTestId('next-step')).toBeHidden()
+  // 리뷰 지적은 올림과 메모로 나뉜다(V26): 둘 다 메모라 올림 묶음이 없고, 구조/low에는 갈래를 붙인다
   await evidence.locator('summary', { hasText: '리뷰 지적' }).click()
-  await expect(evidence.getByText('변수 이름이 짧음')).toBeVisible()
+  const notes = evidence.getByTestId('review-notes')
+  await expect(notes).toContainText('메모 2 · 관문에 들어가지 않습니다')
+  await expect(notes.getByText('변수 이름이 짧음')).toBeVisible()
+  await expect(notes.locator('li', { hasText: '빈 입력 시험이 없음' })).toContainText('구조')
+  await expect(evidence.getByTestId('review-raised')).toHaveCount(0)
   const merge = evidence.getByRole('button', { name: '머지', exact: true })
   await expect(merge).toBeEnabled()
   await shot('shadow')
@@ -350,6 +356,14 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(tabNotice.getByRole('button', { name: '초안 만들기' })).toHaveCount(0)
   await expect(evidence.getByTestId('next-step')).not.toContainText('relay init')
 
+  // 이 Work의 리뷰는 계약 밖 변경 하나를 low로 올린다(V26: 계약 밖 변경은 low도 올림). 가짜 리뷰어는 부를 때마다 읽는다
+  const outside = {
+    severity: 'low',
+    raise: 'out_of_contract',
+    text: '계약 밖에서 .gitignore를 바꿈',
+  }
+  await writeFile(join(tmp, 'review.json'), JSON.stringify({ findings: [outside, ...NOTES] }))
+
   // [끝내기](V25): 내보내기 증거(리뷰 포함)를 재는 동안은 걸린 끝. Work는 구현 중 그대로
   const head = page.locator('.work-head')
   await head.getByRole('button', { name: '끝내기' }).click()
@@ -358,15 +372,30 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(armed).toContainText('끝내기가 걸려 있습니다: 내보내기 증거와 리뷰가 끝나고')
   await expect(head.getByRole('button', { name: '리뷰 끝나면 끝냄' })).toBeDisabled()
   await shot('end-armed')
-  // 열린 것(품질 기준 없음 등)이 있으니 상자. 올림 없는 리뷰 지적은 열린 것이 아니다
+  // 열린 것(품질 기준 없음 등)이 있으니 상자. 리뷰 메모(올림 없는 지적, 구조/low)는 열린 것이 아니다
   const endBox = evidence.getByTestId('end-box')
   await expect(endBox).toBeVisible({ timeout: 60_000 })
   await expect(armed).toBeHidden()
   await expect(endBox).toContainText('열린 것이 있습니다. 보고 끝낼지 정하세요.')
   await expect(endBox.getByTestId('end-open')).toContainText('품질 기준 없음')
+  await expect(endBox.getByTestId('end-open')).toContainText(
+    '리뷰 올림(계약 밖 변경): 계약 밖에서 .gitignore를 바꿈',
+  )
   await expect(endBox.getByText('변수 이름이 짧음')).toHaveCount(0)
+  await expect(endBox.getByText('빈 입력 시험이 없음')).toHaveCount(0)
   await expect(head).toContainText('구현 중')
   await shot('end-box')
+  // [리뷰 지적]은 올림 하나와 메모 둘로 나뉜다(V26)
+  const fold = evidence.locator('details.fold', {
+    has: page.locator('summary', { hasText: '리뷰 지적' }),
+  })
+  if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
+  const raisedGroup = evidence.getByTestId('review-raised')
+  await expect(raisedGroup).toContainText('올림 1 · 관문이 사람에게 보냅니다')
+  await expect(raisedGroup.locator('li')).toHaveText([/낮음\s*계약 밖 변경\s*계약 밖에서/])
+  await expect(evidence.getByTestId('review-notes')).toContainText('메모 2')
+  await fold.scrollIntoViewIfNeeded()
+  await shot('review-groups')
   // 다른 Work로 갔다 와도 상자가 남는다(메인이 Work에 둔다)
   await page.getByTestId('project').first().locator('.work-item').first().click()
   await expect(evidence.getByTestId('outcome')).toHaveText(/^머지됨/)

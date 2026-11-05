@@ -1,15 +1,17 @@
-// [단위] 독립 리뷰(V4): 출력 스키마, 지적 파싱, 프롬프트와 diff 자르기, 리뷰 준비(V23)
+// [단위] 독립 리뷰(V4): 출력 스키마, 지적 파싱, 프롬프트와 diff 자르기, 리뷰 준비(V23), 올림 기준과 심각도 기준표(V26)
 import { describe, expect, test } from 'vitest'
 import { contractHash } from '../../src/core/contract.ts'
 import {
   evidenceFacts,
   parseReview,
+  raises,
   REVIEW_DIFF_MAX,
+  REVIEW_PROMPT_VERSION,
   REVIEW_SCHEMA,
   reviewPrompt,
   reviewReady,
 } from '../../src/core/review.ts'
-import type { Contract, EvidenceBundle } from '../../src/core/types.ts'
+import type { Contract, EvidenceBundle, ReviewFinding } from '../../src/core/types.ts'
 import {
   command,
   contract as gateContract,
@@ -53,6 +55,35 @@ describe('REVIEW_SCHEMA', () => {
       'structure',
     ])
     expect(item.additionalProperties).toBe(false)
+  })
+})
+
+describe('raises (V26)', () => {
+  type Case = [raise: ReviewFinding['raise'], severity: ReviewFinding['severity'], up: boolean]
+  test.each<Case>([
+    ['security', 'low', true],
+    ['security', 'medium', true],
+    ['security', 'high', true],
+    ['example_test_mismatch', 'low', true],
+    ['example_test_mismatch', 'high', true],
+    ['out_of_contract', 'low', true],
+    ['out_of_contract', 'medium', true],
+    ['structure', 'high', true],
+    ['structure', 'medium', true],
+    // 구조/low는 메모다: '코드는 맞는데 시험이 없음'이 M2 올림의 58%였다
+    ['structure', 'low', false],
+    // raise가 없는 지적(이름, 꼴)은 심각도와 상관없이 메모다
+    [undefined, 'high', false],
+    [undefined, 'low', false],
+  ])('%s/%s → %s', (raise, severity, up) => {
+    const f: ReviewFinding = { id: 'R1', severity, text: 't', ...(raise ? { raise } : {}) }
+    expect(raises(f)).toBe(up)
+  })
+
+  test('모르는 갈래(V30의 request_gap 같은 뒤 판의 갈래)나 심각도는 올림이다(엄격한 쪽)', () => {
+    const later = 'request_gap' as ReviewFinding['raise']
+    expect(raises({ raise: later, severity: 'low' })).toBe(true)
+    expect(raises({ raise: 'structure', severity: 'urgent' as never })).toBe(true)
   })
 })
 
@@ -142,6 +173,20 @@ describe('reviewPrompt', () => {
     const p = reviewPrompt(o)
     expect(p).toContain('relay writes the approved examples to the examples file')
     expect(p).toContain('hard-codes example values instead of reading them from the file')
+  })
+
+  test('심각도 기준표(V26): high는 예시·계약이 이름 붙인 동작이 틀림이나 보안, medium은 이름 댄 입력이나 시험 없는 줄, low는 맞지만 고정되지 않음', () => {
+    const p = reviewPrompt(o)
+    expect(p).toContain('Give each finding a `severity` by this rubric')
+    expect(p).toMatch(/- `high`: an approved example, or a behavior the contract names .* is wrong/)
+    expect(p).toMatch(
+      /- `medium`: the code handles a specific input wrongly and no test catches it/,
+    )
+    expect(p).toMatch(/- `low`: you believe the code is right but no test pins it down/)
+    // 올림 규칙은 리뷰어에게 알리지 않는다: 심각도를 올림에 맞춰 매기지 않게
+    expect(p.replace(JSON.stringify(contract, null, 2), '')).not.toMatch(/\bnotes?\b|memo/i)
+    // 기준표를 넣은 판이다. 앞 판(1)의 미리 리뷰는 내보내기에 다시 쓰지 않는다(V23)
+    expect(REVIEW_PROMPT_VERSION).toBe(2)
   })
 
   test('증거 요약이 비면 (none)', () => {

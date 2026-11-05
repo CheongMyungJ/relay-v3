@@ -1,6 +1,7 @@
 // 증거 묶음을 사람이 읽는 몇 줄로 (docs/m1-modules.md evidence.ts).
 // 증거는 SHA에 붙는다(V6). head가 바뀌면 낡은 증거다.
 
+import { raises } from './review.ts'
 import type {
   CommandOutcome,
   EvidenceBundle,
@@ -121,6 +122,6 @@ function signalsText(signals: Signal[]): string[] {
 
 function reviewText(review: NonNullable<EvidenceBundle['review']>): string {
   const status = review.status === 'done' ? '마침' : review.status === 'failed' ? '실패' : '건너뜀'
-  const raised = review.findings.filter((f) => f.raise !== undefined).length
+  const raised = review.findings.filter(raises).length
   return `리뷰: ${status}, 지적 ${review.findings.length}(올림 ${raised})`
 }

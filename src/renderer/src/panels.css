@@ -434,7 +434,8 @@
   gap: 8px;
 }
 
-.details {
+.details,
+.fold-body {
   display: flex;
   flex-direction: column;
   gap: 8px;

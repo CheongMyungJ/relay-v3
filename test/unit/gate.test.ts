@@ -50,6 +50,16 @@ describe('모든 조건을 채웠을 때만 자동 후보', () => {
       { review: { status: 'done', findings: [finding({ severity: 'high' })] } },
       {},
     ],
+    [
+      '구조/low 지적(메모, V26)',
+      {
+        review: {
+          status: 'done',
+          findings: [finding({ raise: 'structure', severity: 'low', text: '경계값 시험 없음' })],
+        },
+      },
+      {},
+    ],
     ['명령이 없는 레포', { commands: [] }, {}],
   ])('%s → 후보', (_name, e, p) => {
     expect(run(e, contract(), p).conclusion).toBe('auto_merge_candidate')
@@ -309,6 +319,22 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
     expect(r.reasons).toEqual(['리뷰 실패', '리뷰 올림(구조): 중복 구현'])
   })
 
+  test('올림 기준(V26): 구조는 medium 이상만, 보안·예시와 시험 불일치·계약 밖 변경은 low도 올린다', () => {
+    const findings = [
+      finding({ id: 'R1', raise: 'structure', severity: 'low', text: '구조 낮음' }),
+      finding({ id: 'R2', raise: 'structure', severity: 'medium', text: '구조 중간' }),
+      finding({ id: 'R3', raise: 'out_of_contract', severity: 'low', text: '계약 밖 낮음' }),
+      finding({ id: 'R4', raise: 'example_test_mismatch', severity: 'low', text: '불일치 낮음' }),
+      finding({ id: 'R5', raise: 'security', severity: 'low', text: '보안 낮음' }),
+    ]
+    expect(run({ review: { status: 'done', findings } }).reasons).toEqual([
+      '리뷰 올림(구조): 구조 중간',
+      '리뷰 올림(계약 밖 변경): 계약 밖 낮음',
+      '리뷰 올림(예시와 시험 불일치): 불일치 낮음',
+      '리뷰 올림(보안): 보안 낮음',
+    ])
+  })
+
   test('없는 증거는 이름마다 한 줄이다', () => {
     const r = run({ missing: ['acceptance', 'ci'] })
     expect(r.reasons).toEqual(['없는 증거: acceptance', '없는 증거: ci'])
@@ -380,10 +406,12 @@ describe('열린 것(V25)은 관문이 사람에게 보내는 사실 그대로�
     const big = { ...evidence().diff, added: 500, new_dependencies: ['left-pad'] }
     expect(run({ diff: big }).decisive).toBe('채운 자동 조건 없음')
     expect(open({ diff: big })).toEqual([])
-    // 올림 없는 리뷰 지적(메모)도 아니다
+    // 리뷰 메모(올림 사유가 없는 지적, 구조/low. V26)도 아니다
     expect(open({ review: { status: 'done', findings: [finding({ severity: 'high' })] } })).toEqual(
       [],
     )
+    const low = finding({ raise: 'structure', severity: 'low' })
+    expect(open({ review: { status: 'done', findings: [low] } })).toEqual([])
   })
 
   test('사실을 관문과 같은 차례로 모두 모으고, 풀리지 않은 계약 변경을 맨 앞에 둔다', () => {
