@@ -1,7 +1,7 @@
 # M2.1 평가 규약
 
 - 상태: **고정 (2026-11-05)**. 고정한 뒤에는 바꾸지 않는다. 바꿀 일이 생기면 사람에게 묻고 까닭을 `log.md`에 적는다.
-- 고정: 2026-11-05. 빌드: relay3-m21 = relay-v3 `df8f71c`(브랜치 `ccr-19f35f13-cr75ji`. `out/`은 이 커밋에서 만든 것이고, 고정 커밋은 문서만 더한다), relay3-m2p = relay-v3 `8526e0c`, 평가 도구 = relay-v2 `7866fa8`(`5f7bf2e` 위의 M2.1 도구). O2가 기준을 넘지 못하면 relay3-m21은 V30을 메모로 내린 커밋(`v30-memo.patch`를 얹은 것) `<SHA, 그때 채움>`으로 돌고, 평가 도구는 그 규칙을 따르는 커밋 `<SHA, 그때 채움>`으로 돈다(6절).
+- 고정: 2026-11-05. 빌드: relay3-m21 = relay-v3 `df8f71c`(브랜치 `ccr-19f35f13-cr75ji`. `out/`은 이 커밋에서 만든 것이고, 고정 커밋은 문서만 더한다), relay3-m2p = relay-v3 `8526e0c`, 평가 도구 = relay-v2 `7866fa8`(`5f7bf2e` 위의 M2.1 도구). O2가 기준을 넘지 못하면 relay3-m21은 V30을 메모로 내린 커밋(`v30-memo.patch`를 얹은 것)으로 돌고, 평가 도구는 그 규칙을 따르는 커밋으로 돈다(6절). **O2는 넘지 못했다(2026-11-05): relay3-m21 = relay-v3 `5144aca`(메모 빌드, `out/`을 이 커밋에서 다시 만듦), 평가 도구 = relay-v2 `7866fa8`을 `RELAY3_RAISE_RULE=memo`로 돌린다.**
 - 근거: [m2.1-design.md](../../m2.1-design.md) 14절(이 규약의 모양)과 2~13절의 '만든 것', [M2 규약](../m2/protocol.md)(지표의 정의), [M2 보고](../m2/report.md).
 - 결정: V14 ✅(실제 Claude 평가 n≥5, 배치마다 규모를 먼저 알림). 이번 규모(실제 실행 65회, O2 리뷰 재생 54번)는 사용자가 승인했다(2026-11-05, 설계 15절 1). 철학 원칙 5('하나씩'), [devices.md](../../devices.md)의 끄는 조건과 최소 n.
 - 도구: relay-v2 평가 도구(`relay-v2/app/eval`)에 M2.1 쪽(`relay3-m21`, `relay3-m2p`), M2.1 화면의 운전, 장치 지표(`lib/relay3-devices.mjs`), 집계 `m21-primary.mjs`를 더해 쓴다. 시나리오·숨긴 시험·판정은 v2 것을 쓴다. 0단계는 relay-v3 쪽 도구다(O1 `npm run test:replay`, O2 `npm run replay:review`).
