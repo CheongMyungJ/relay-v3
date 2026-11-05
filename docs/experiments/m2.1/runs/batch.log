@@ -1,2 +1,7 @@
 2026-11-05T14:40:48+00:00 시작: sealed-39-three-modules
 2026-11-05T15:15:06+00:00 끝: sealed-39-three-modules (exit 0)
+2026-11-05T15:15:11+00:00 시작: sealed-47-double-notify-digest-w2
+2026-11-05T19:56:20+00:00 건너뜀(이미 있음): sealed-39-three-modules
+2026-11-05T19:56:20+00:00 끊긴 결과 폴더를 옮김: /home/user/relay-v3/../relay-v2/app/eval/results/m21-sealed-47-double-notify-digest-w2 → /home/user/relay-v3/../relay-v2/app/eval/results/m21-aborted/m21-sealed-47-double-notify-digest-w2-20261105T195620
+2026-11-05T19:56:20+00:00 시작: sealed-47-double-notify-digest-w2
+2026-11-05T20:49:38+00:00 끝: sealed-47-double-notify-digest-w2 (exit 0)
