@@ -32,12 +32,13 @@ const RAISES: readonly RaiseReason[] = [
 ]
 
 /**
- * 올림인가(V26): 관문에 사실로 들어가는 지적. 보안, 예시와 시험 불일치, 계약 밖 변경, 요청과 어긋남(V30)은 심각도와
- * 상관없이 올림이고, 구조는 medium과 high만이다. 구조/low와 raise가 없는 지적은 메모다: [증거]에 남지만 관문 사실이 아니다.
- * 모르는 갈래나 심각도는 올림으로 본다(엄격한 쪽). 설정 손잡이는 두지 않는다(원칙 5)
+ * 올림인가(V26): 관문에 사실로 들어가는 지적. 보안, 예시와 시험 불일치, 계약 밖 변경은 심각도와 상관없이 올림이고, 구조는
+ * medium과 high만이다. 구조/low, 요청과 어긋남(V30), raise가 없는 지적은 메모다: [증거]에 남지만 관문 사실이 아니다. V30은
+ * M2.1 0단계의 리뷰 재생(O2)이 기준을 넘지 못해 메모로 내렸다(devices.md V30의 1단계). 모르는 갈래나 심각도는 올림으로
+ * 본다(엄격한 쪽). 설정 손잡이는 두지 않는다(원칙 5)
  */
 export function raises(f: Pick<ReviewFinding, 'raise' | 'severity'>): boolean {
-  if (f.raise === undefined) return false
+  if (f.raise === undefined || f.raise === 'request_gap') return false
   return f.raise !== 'structure' || f.severity !== 'low'
 }
 

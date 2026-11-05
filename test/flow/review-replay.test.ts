@@ -258,8 +258,8 @@ describe('리뷰 재생', () => {
         prompt_version: 3,
         request: true,
         request_gap: true,
-        raises: { 'request_gap/low': 1, 'structure/medium': 1 },
-        memos: 2,
+        raises: { 'structure/medium': 1 },
+        memos: 3,
       })
     const at = (key: string) => lines.find((l) => l['key'] === key)?.['checkout']
     expect(at(A)).toEqual({ overlay: 'same', same_as_evidence: true, contract_same: true })
@@ -327,8 +327,9 @@ describe('리뷰 재생', () => {
       expect(l).toMatchObject({
         status: 'done',
         dry: false,
-        raises: { 'request_gap/high': 1 },
-        memos: 1,
+        request_gap: true,
+        raises: {},
+        memos: 2,
         usage: { input_tokens: 1000, output_tokens: 50 },
       })
     expect(rest.stdout).toContain('토큰: 입력(캐시 포함) 6000, 출력 300')

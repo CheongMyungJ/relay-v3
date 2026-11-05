@@ -165,8 +165,9 @@ describe('리뷰 결과의 칸', () => {
       usage: { input_tokens: 10, output_tokens: 2, service_tier: 'standard', cache: { a: 1 } },
     })
     expect(r.status).toBe('done')
-    expect(r.raises).toEqual({ 'request_gap/low': 1, 'structure/medium': 2 })
-    expect(r.memos).toBe(2)
+    // 요청과 어긋남(V30)은 메모다(M2.1 O2). request_gap은 리뷰어가 낸 것을 그대로 센다
+    expect(r.raises).toEqual({ 'structure/medium': 2 })
+    expect(r.memos).toBe(3)
     expect(r.request_gap).toBe(true)
     expect(r.findings.map((f) => f.id)).toEqual(['R1', 'R2', 'R3', 'R4', 'R5'])
     expect(r.usage).toEqual({ input_tokens: 10, output_tokens: 2 })
@@ -331,7 +332,8 @@ describe('보고만 하는 값', () => {
     const s = summarize(ls, CALLS)
     expect(s.structure).toEqual({ A: { all: 7, up: 4 }, B: { all: 1, up: 0 } })
     expect(s.flips).toEqual({ bundles: 2, request_gap: 1, any_raise: 1, structure_up: 1 })
-    expect(s.raises.A).toEqual({ 'request_gap/low': 2, 'structure/medium': 4 })
+    // 요청과 어긋남(V30)은 메모라 올림에 들지 않는다(M2.1 O2)
+    expect(s.raises.A).toEqual({ 'structure/medium': 4 })
     expect(s.usage).toEqual({ input: 21, output: 0 })
     const text = summaryText(s)
     expect(text).toContain('medium 이상 A 4/7, B 0/1, 모두 4/8 (50%)')

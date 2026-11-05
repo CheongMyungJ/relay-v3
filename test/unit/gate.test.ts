@@ -323,7 +323,7 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
     expect(r.reasons).toEqual(['리뷰 실패', '리뷰 올림(구조): 중복 구현'])
   })
 
-  test('올림 기준(V26): 구조는 medium 이상만, 보안·예시와 시험 불일치·계약 밖 변경·요청과 어긋남(V30)은 low도 올린다', () => {
+  test('올림 기준(V26): 구조는 medium 이상만, 보안·예시와 시험 불일치·계약 밖 변경은 low도 올린다. 요청과 어긋남(V30)은 메모다(M2.1 O2)', () => {
     const findings = [
       finding({ id: 'R1', raise: 'structure', severity: 'low', text: '구조 낮음' }),
       finding({ id: 'R2', raise: 'structure', severity: 'medium', text: '구조 중간' }),
@@ -337,8 +337,11 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
       '리뷰 올림(계약 밖 변경): 계약 밖 낮음',
       '리뷰 올림(예시와 시험 불일치): 불일치 낮음',
       '리뷰 올림(보안): 보안 낮음',
-      '리뷰 올림(요청과 어긋남): 요청 낮음',
     ])
+    const high = finding({ id: 'R7', raise: 'request_gap', severity: 'high', text: '요청 높음' })
+    expect(run({ review: reviewed([high]) }).reasons).not.toContain(
+      '리뷰 올림(요청과 어긋남): 요청 높음',
+    )
   })
 
   test('없는 증거는 이름마다 한 줄이다', () => {

@@ -72,9 +72,9 @@ describe('raises (V26)', () => {
     ['example_test_mismatch', 'high', true],
     ['out_of_contract', 'low', true],
     ['out_of_contract', 'medium', true],
-    // 요청과 어긋남(V30)도 심각도와 상관없이: 저장된 리뷰에서 medium 이상은 드물었다(97개 가운데 high 0, medium 20)
-    ['request_gap', 'low', true],
-    ['request_gap', 'high', true],
+    // 요청과 어긋남(V30)은 심각도와 상관없이 메모다: M2.1 0단계 리뷰 재생(O2)이 기준을 넘지 못했다(devices.md V30 1단계)
+    ['request_gap', 'low', false],
+    ['request_gap', 'high', false],
     ['structure', 'high', true],
     ['structure', 'medium', true],
     // 구조/low는 메모다: '코드는 맞는데 시험이 없음'이 M2 올림의 58%였다

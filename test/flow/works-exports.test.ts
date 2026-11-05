@@ -436,9 +436,9 @@ test("리뷰 범위 'auto_only': 통합 증거가 열려 건너뛴 내보내기 
   expect(clamp?.gate?.reasons).not.toContain('리뷰를 건너뜀')
 })
 
-test('되먹임(V24): 내보내기의 사람 몫 올림(request_gap)이 남았으면 통합 증거의 세션 몫 사실도 저절로 보내지 않는다', async () => {
+test('되먹임(V24): 내보내기의 사람 몫 올림(계약 밖 변경)이 남았으면 통합 증거의 세션 몫 사실도 저절로 보내지 않는다', async () => {
   await kit.review([
-    { severity: 'low', raise: 'request_gap', text: '요청의 다른 경로를 다루지 않음' },
+    { severity: 'low', raise: 'out_of_contract', text: '계약 밖에서 README를 바꿈' },
   ])
   await scenario([
     ...WORK_COMMITS,

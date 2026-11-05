@@ -32,7 +32,10 @@ describe('렌더러의 올림 규칙은 core와 같다', () => {
   })
 
   test('갈래 이름은 관문의 사실 글과 같다', () => {
-    for (const raise of KINDS) {
+    // 요청과 어긋남(V30)은 메모라 관문의 사실이 아니다(M2.1 O2)
+    const up = KINDS.filter((raise) => raises(finding({ raise, severity: 'high' })))
+    expect(up).not.toContain('request_gap')
+    for (const raise of up) {
       const f = finding({ raise, severity: 'high', text: 't' })
       expect(run({ review: reviewed([f]) }).decisive).toBe(`리뷰 올림(${raiseLabel(f)}): t`)
     }
