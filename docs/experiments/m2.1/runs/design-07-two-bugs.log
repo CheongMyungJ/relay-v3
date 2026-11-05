@@ -1,0 +1,256 @@
+결과 폴더: /home/user/relay-v2/app/eval/results/m21-design-07-two-bugs
+작업 폴더: /tmp/relay-eval/m21-design-07-two-bugs
+21:23:13 [07-two-bugs relay3-m21#1] 준비 (/tmp/relay-eval/m21-design-07-two-bugs/07-two-bugs-relay3-m21-1/utils)
+21:23:13 [07-two-bugs relay3-m21#2] 준비 (/tmp/relay-eval/m21-design-07-two-bugs/07-two-bugs-relay3-m21-2/utils)
+21:23:28 [07-two-bugs relay3-m21#2] 차례 1 (0분 13초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:23:28 [07-two-bugs relay3-m21#1] 차례 1 (0분 14초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:23:39 [07-two-bugs relay3-m21#1] 차례 2 (0분 24초, 화면이 멈춤) friction=0 fill textarea "요청" "src/text.js의 truncate('hello world', 8)이
+…(76자 생략)", click button "버그 고침", click button "만들기"
+21:23:39 [07-two-bugs relay3-m21#2] 차례 2 (0분 24초, 화면이 멈춤) friction=0 fill textarea "요청" "src/text.js의 truncate('hello world', 8)이
+…(73자 생략)", click button "버그 고침", click button "만들기"
+21:23:41 [07-two-bugs relay3-m21#1] 첫 실행 창 수락: folder_trust
+21:23:41 [07-two-bugs relay3-m21#2] 첫 실행 창 수락: folder_trust
+21:23:44 [07-two-bugs relay3-m21#1] 첫 실행 창 수락: bypass_permissions_warning
+21:23:44 [07-two-bugs relay3-m21#2] 첫 실행 창 수락: bypass_permissions_warning
+21:24:04 [07-two-bugs relay3-m21#2] 차례 3 (0분 50초, 화면이 멈춤) friction=0 key
+21:24:09 [07-two-bugs relay3-m21#1] 차례 3 (0분 55초, 화면이 멈춤) friction=0 key
+21:24:14 [07-two-bugs relay3-m21#2] 차례 4 (1분 0초, 화면이 멈춤) friction=0 key
+21:24:19 [07-two-bugs relay3-m21#1] 첫 코드 변경 (1분 5초)
+21:24:24 [07-two-bugs relay3-m21#2] 차례 5 (1분 10초, 화면이 멈춤) friction=0 key, wait
+21:24:29 [07-two-bugs relay3-m21#1] 차례 4 (1분 15초, 화면이 멈춤) friction=0 click button "승인", wait
+21:24:33 [07-two-bugs relay3-m21#2] 첫 코드 변경 (1분 20초)
+21:24:44 [07-two-bugs relay3-m21#2] 차례 6 (1분 30초, 화면이 멈춤) friction=0 click button "승인", wait
+21:24:49 [07-two-bugs relay3-m21#1] 차례 5 (1분 35초, 화면이 멈춤) friction=0 click tab "변경", wait
+21:24:59 [07-two-bugs relay3-m21#1] 차례 6 (1분 45초, 화면이 멈춤) friction=0 click tab "증거", wait
+21:25:03 [07-two-bugs relay3-m21#2] 차례 7 (1분 49초, 화면이 멈춤) friction=0 click tab "변경", wait
+21:25:10 [07-two-bugs relay3-m21#1] 차례 7 (1분 56초, 화면이 멈춤) friction=0 click button "끝내기", wait
+21:25:13 [07-two-bugs relay3-m21#2] 차례 8 (1분 59초, 화면이 멈춤) friction=0 click button "끝내기", wait
+21:25:22 [07-two-bugs relay3-m21#1] 차례 8 (2분 8초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:25:23 [07-two-bugs relay3-m21#2] 차례 9 (2분 9초, 화면이 멈춤) friction=0 wait
+21:25:33 [07-two-bugs relay3-m21#2] 차례 10 (2분 19초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:25:34 [07-two-bugs relay3-m21#1] 차례 9 (2분 19초, 화면이 멈춤) friction=0 fill textarea "요청" "src/stats.js의 median([10, 9, 100])이 100을
+…(24자 생략)", click button "버그 고침", click button "만들기", wait
+21:25:46 [07-two-bugs relay3-m21#2] 차례 11 (2분 30초, 화면이 멈춤) friction=0 fill textarea "요청" "src/stats.js의 median([10, 9, 100])이 100을
+…(18자 생략)", click button "버그 고침", click button "만들기", wait
+21:26:00 [07-two-bugs relay3-m21#1] 차례 10 (2분 45초, 화면이 멈춤) friction=0 key, key, wait
+21:26:08 [07-two-bugs relay3-m21#2] 차례 12 (2분 54초, 화면이 멈춤) friction=0 key, wait
+21:26:11 [07-two-bugs relay3-m21#1] 차례 11 (2분 57초, 화면이 멈춤) friction=0 key, key, wait
+21:26:18 [07-two-bugs relay3-m21#2] 차례 13 (3분 3초, 화면이 멈춤) friction=0 key, wait, key, wait
+21:26:22 [07-two-bugs relay3-m21#1] 차례 12 (3분 8초, 화면이 멈춤) friction=1 key, wait
+21:26:34 [07-two-bugs relay3-m21#1] 차례 13 (3분 20초, 화면이 멈춤) friction=0 key, wait
+21:26:43 [07-two-bugs relay3-m21#2] 차례 14 (3분 29초, 화면이 멈춤) friction=0 click button "승인", wait
+21:26:56 [07-two-bugs relay3-m21#1] 차례 14 (3분 42초, 화면이 멈춤) friction=0 click button "승인", wait
+21:27:05 [07-two-bugs relay3-m21#2] 차례 15 (3분 50초, 화면이 멈춤) friction=0 click tab "변경", scroll
+21:27:15 [07-two-bugs relay3-m21#2] 차례 16 (4분 1초, 화면이 멈춤) friction=0 click button "끝내기", wait
+21:27:16 [07-two-bugs relay3-m21#1] 차례 15 (4분 2초, 화면이 멈춤) friction=0 click tab "변경", wait
+21:27:26 [07-two-bugs relay3-m21#2] 차례 17 (4분 12초, 화면이 멈춤) friction=0 wait
+21:27:26 [07-two-bugs relay3-m21#1] 차례 16 (4분 12초, 화면이 멈춤) friction=0 click button "끝내기", wait
+21:27:36 [07-two-bugs relay3-m21#2] 차례 18 (4분 23초, 화면이 멈춤) friction=0 done
+21:27:40 [07-two-bugs relay3-m21#1] 차례 17 (4분 26초, 화면이 멈춤) friction=0 done
+21:27:41 [07-two-bugs relay3-m21#2] 끝: done (4분 28초)
+21:27:42 [07-two-bugs relay3-m21#2] 결과: 성공 (truncate O, median O), 차례 18, 사람 비용 $3.27
+== 진행 1/5
+21:27:43 [07-two-bugs relay3-m21#3] 준비 (/tmp/relay-eval/m21-design-07-two-bugs/07-two-bugs-relay3-m21-3/utils)
+21:27:46 [07-two-bugs relay3-m21#1] 끝: done (4분 33초)
+21:27:47 [07-two-bugs relay3-m21#1] 결과: 성공 (truncate O, median O), 차례 17, 사람 비용 $3.06
+== 진행 2/5
+21:27:47 [07-two-bugs relay3-m21#4] 준비 (/tmp/relay-eval/m21-design-07-two-bugs/07-two-bugs-relay3-m21-4/utils)
+21:27:54 [07-two-bugs relay3-m21#3] 차례 1 (0분 11초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:27:58 [07-two-bugs relay3-m21#4] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:28:06 [07-two-bugs relay3-m21#3] 차례 2 (0분 21초, 화면이 멈춤) friction=0 fill textarea "요청" "truncate('hello world', 8)이 'hello wo…'(
+…(67자 생략)", click button "버그 고침", click button "만들기"
+21:28:07 [07-two-bugs relay3-m21#3] 첫 실행 창 수락: folder_trust
+21:28:10 [07-two-bugs relay3-m21#4] 차례 2 (0분 20초, 화면이 멈춤) friction=0 fill textarea "요청" "src/text.js의 truncate('hello world', 8)이
+…(78자 생략)", click button "버그 고침", click button "만들기"
+21:28:10 [07-two-bugs relay3-m21#3] 첫 실행 창 수락: bypass_permissions_warning
+21:28:13 [07-two-bugs relay3-m21#4] 첫 실행 창 수락: folder_trust
+21:28:15 [07-two-bugs relay3-m21#4] 첫 실행 창 수락: bypass_permissions_warning
+21:28:29 [07-two-bugs relay3-m21#3] 차례 3 (0분 46초, 화면이 멈춤) friction=0 key
+21:28:35 [07-two-bugs relay3-m21#3] 첫 코드 변경 (0분 53초)
+21:28:35 [07-two-bugs relay3-m21#4] 차례 3 (0분 47초, 화면이 멈춤) friction=0 key
+21:28:44 [07-two-bugs relay3-m21#4] 첫 코드 변경 (0분 57초)
+21:28:49 [07-two-bugs relay3-m21#3] 차례 4 (1분 6초, 화면이 멈춤) friction=0 click button "승인"
+21:28:56 [07-two-bugs relay3-m21#4] 차례 4 (1분 8초, 화면이 멈춤) friction=0 click button "승인"
+21:29:06 [07-two-bugs relay3-m21#3] 차례 5 (1분 23초, 화면이 멈춤) friction=0 inspect_diff
+21:29:09 [07-two-bugs relay3-m21#3] 차례 6 (1분 26초, 직전 행동의 결과) friction=0 click button "끝내기"
+21:29:14 [07-two-bugs relay3-m21#4] 차례 5 (1분 27초, 화면이 멈춤) friction=0 inspect_diff
+21:29:18 [07-two-bugs relay3-m21#4] 차례 6 (1분 30초, 직전 행동의 결과) friction=0 click button "+ 새 Work"
+21:29:19 [07-two-bugs relay3-m21#3] 차례 7 (1분 37초, 화면이 멈춤) friction=0 wait
+21:29:29 [07-two-bugs relay3-m21#3] 차례 8 (1분 46초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:29:30 [07-two-bugs relay3-m21#4] 차례 7 (1분 40초, 화면이 멈춤) friction=0 fill textarea "요청" "src/stats.js의 median([10, 9, 100])이 100을
+…(26자 생략)", click button "버그 고침", click button "만들기"
+21:29:40 [07-two-bugs relay3-m21#3] 차례 9 (1분 56초, 화면이 멈춤) friction=0 fill textarea "요청" "median([10, 9, 100])이 100을 돌려줍니다. 10이어야 
+…(19자 생략)", click button "버그 고침", click button "만들기"
+21:29:56 [07-two-bugs relay3-m21#4] 차례 8 (2분 7초, 화면이 멈춤) friction=0 key
+21:30:01 [07-two-bugs relay3-m21#3] 차례 10 (2분 17초, 화면이 멈춤) friction=0 key, key
+21:30:05 [07-two-bugs relay3-m21#4] 차례 9 (2분 17초, 화면이 멈춤) friction=0 key
+21:30:11 [07-two-bugs relay3-m21#3] 차례 11 (2분 28초, 화면이 멈춤) friction=0 key
+21:30:15 [07-two-bugs relay3-m21#4] 차례 10 (2분 27초, 화면이 멈춤) friction=0 key
+21:30:21 [07-two-bugs relay3-m21#3] 차례 12 (2분 38초, 화면이 멈춤) friction=0 key, wait
+21:30:39 [07-two-bugs relay3-m21#4] 차례 11 (2분 50초, 화면이 멈춤) friction=1 fill textarea "고칠 점" "C1.2 예시가 틀렸어요. [100,9,10,8,7]은 정렬하면 7,8,
+…(60자 생략)", click button "보내기"
+21:30:41 [07-two-bugs relay3-m21#3] 차례 13 (2분 58초, 화면이 멈춤) friction=0 click button "승인", wait
+21:31:00 [07-two-bugs relay3-m21#3] 차례 14 (3분 17초, 화면이 멈춤) friction=0 click button "끝내기", wait
+21:31:01 [07-two-bugs relay3-m21#4] 차례 12 (3분 13초, 화면이 멈춤) friction=0 click button "승인"
+21:31:10 [07-two-bugs relay3-m21#3] 차례 15 (3분 27초, 화면이 멈춤) friction=0 wait
+21:31:21 [07-two-bugs relay3-m21#4] 차례 13 (3분 33초, 화면이 멈춤) friction=0 inspect_diff
+21:31:23 [07-two-bugs relay3-m21#3] 차례 16 (3분 39초, 화면이 멈춤) friction=0 click button "그래도 끝내기", wait
+21:31:24 [07-two-bugs relay3-m21#4] 차례 14 (3분 36초, 직전 행동의 결과) friction=0 click button "끝내기"
+21:31:32 [07-two-bugs relay3-m21#3] 차례 17 (3분 50초, 화면이 멈춤) friction=0 done
+21:31:39 [07-two-bugs relay3-m21#3] 끝: done (3분 56초)
+21:31:40 [07-two-bugs relay3-m21#3] 결과: 성공 (truncate O, median O), 차례 17, 사람 비용 $2.52
+== 진행 3/5
+21:31:40 [07-two-bugs relay3-m21#5] 준비 (/tmp/relay-eval/m21-design-07-two-bugs/07-two-bugs-relay3-m21-5/utils)
+21:31:43 [07-two-bugs relay3-m21#4] 차례 15 (3분 55초, 화면이 멈춤) friction=0 click button "그래도 끝내기"
+21:31:51 [07-two-bugs relay3-m21#5] 차례 1 (0분 11초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:31:53 [07-two-bugs relay3-m21#4] 차례 16 (4분 5초, 화면이 멈춤) friction=0 click button "src/text.js의 truncate('hello world', 8)이 'hello wo…'(9자)를 돌… 구현 중"
+21:32:03 [07-two-bugs relay3-m21#4] 차례 17 (4분 15초, 화면이 멈춤) friction=0 click button "끝내기"
+21:32:03 [07-two-bugs relay3-m21#5] 차례 2 (0분 21초, 화면이 멈춤) friction=0 fill textarea "요청" "src/text.js의 truncate('hello world', 8)이
+…(95자 생략)", click button "버그 고침", click button "만들기"
+21:32:05 [07-two-bugs relay3-m21#5] 첫 실행 창 수락: folder_trust
+21:32:08 [07-two-bugs relay3-m21#5] 첫 실행 창 수락: bypass_permissions_warning
+21:32:13 [07-two-bugs relay3-m21#4] 차례 18 (4분 26초, 화면이 멈춤) friction=0 done
+21:32:19 [07-two-bugs relay3-m21#4] 끝: done (4분 32초)
+21:32:21 [07-two-bugs relay3-m21#4] 결과: 성공 (truncate O, median O), 차례 18, 사람 비용 $2.84
+== 진행 4/5
+21:32:33 [07-two-bugs relay3-m21#5] 차례 3 (0분 52초, 화면이 멈춤) friction=0 key
+21:32:42 [07-two-bugs relay3-m21#5] 차례 4 (1분 2초, 화면이 멈춤) friction=0 key
+21:32:52 [07-two-bugs relay3-m21#5] 차례 5 (1분 11초, 화면이 멈춤) friction=0 key, wait
+21:32:58 [07-two-bugs relay3-m21#5] 첫 코드 변경 (1분 18초)
+21:33:12 [07-two-bugs relay3-m21#5] 차례 6 (1분 31초, 화면이 멈춤) friction=0 click button "승인", wait
+21:33:30 [07-two-bugs relay3-m21#5] 차례 7 (1분 50초, 화면이 멈춤) friction=0 inspect_diff
+21:33:34 [07-two-bugs relay3-m21#5] 차례 8 (1분 53초, 직전 행동의 결과) friction=0 click button "끝내기", wait
+21:33:44 [07-two-bugs relay3-m21#5] 차례 9 (2분 4초, 화면이 멈춤) friction=0 wait
+21:33:54 [07-two-bugs relay3-m21#5] 차례 10 (2분 13초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+21:34:07 [07-two-bugs relay3-m21#5] 차례 11 (2분 24초, 화면이 멈춤) friction=0 fill textarea "요청" "src/stats.js의 median([10, 9, 100])이 100을
+…(37자 생략)", click button "버그 고침", click button "만들기", wait
+21:34:27 [07-two-bugs relay3-m21#5] 차례 12 (2분 46초, 화면이 멈춤) friction=0 key, wait
+21:34:47 [07-two-bugs relay3-m21#5] 차례 13 (3분 6초, 화면이 멈춤) friction=0 click button "승인", wait
+21:35:05 [07-two-bugs relay3-m21#5] 차례 14 (3분 25초, 화면이 멈춤) friction=0 inspect_diff
+21:35:09 [07-two-bugs relay3-m21#5] 차례 15 (3분 28초, 직전 행동의 결과) friction=0 click button "끝내기", wait
+21:35:27 [07-two-bugs relay3-m21#5] 차례 16 (3분 47초, 화면이 멈춤) friction=0 done
+21:35:34 [07-two-bugs relay3-m21#5] 끝: done (3분 54초)
+21:35:35 [07-two-bugs relay3-m21#5] 결과: 성공 (truncate O, median O), 차례 16, 사람 비용 $2.19
+== 진행 5/5
+
+# relay 대 맨 CLI 사용성 평가
+
+- 결과 폴더: `/home/user/relay-v2/app/eval/results/m21-design-07-two-bugs`
+- 시작: 2026-11-05T21:23:12.134Z, 앱 커밋: 7866fa8, Claude Code: 2.1.318 (Claude Code)
+- 다른 빌드 커밋: relay3 e465b62
+- 에이전트: sonnet (effort medium), 사람 역할: sonnet, 판정: sonnet
+- 맨 CLI 인자: `claude --dangerously-skip-permissions`, 스크린샷 보기: 켬
+- 판정 모델에 시나리오의 평가 목적: 주지 않음
+- 품질 기준 덧씌우기(.relay/quality.json): 켬 (07-two-bugs 082644e4)
+- 실행 5개, 짝 판정 0개
+
+읽는 법: 수치는 평균 ± 표준편차다. 사람 역할과 판정은 AI이므로 경향을 보는 자료로 쓴다. 회차가 적으면 편차가 크다.
+걸린 시간에는 도구의 준비(앱 띄우기·프로젝트 등록, claude 띄우기)와 사람 역할(AI)이 답을 만드는 동안 기다린 시간이 들어 있다. 쪽끼리 대기를 견줄 때는 그 둘을 뺀 줄을 본다.
+에이전트 토큰에는 앱이 따로 부른 claude -p(relay-v3 독립 리뷰, relay 독립 리뷰·지식 검토)가 들어 있다. 사람은 Claude Code 화면에서 시계만 도는 것(스피너의 경과 시간)으로는 화면이 바뀐 것으로 보지 않는다.
+
+## 07-two-bugs: 서로 관계없는 버그 두 개를 한꺼번에
+
+목적: 두 버그를 나란히 또는 차례로 처리할 때 사람의 부담, 변경이 섞이지 않게 나누기 쉬운지, 둘 다 끝까지 가는지 본다.
+
+| 지표 | relay-v3 M2.1 |
+|---|---|
+| 숨긴 시험 모두 통과 | 100% (5/5) |
+| 레포 시험 통과 | 100% (5/5) |
+| 커밋까지 됨 | 100% (5/5) |
+| 사람이 끝냄(done) | 100% (5/5) |
+| 걸린 시간(분) | 4.3 ± 0.3 |
+| 도구 준비 시간(분, 아래 줄에서 뺌) | 0.0 ± 0.0 |
+| 사람 역할 응답 시간(분) | 0.9 ± 0.1 |
+| 걸린 시간 − 준비 − 사람 역할 응답(분) | 3.3 ± 0.3 |
+| 사람 차례 수 | 17.2 ± 0.8 |
+| 기다리기만 한 차례 | 1.0 ± 1.0 |
+| 스크린샷을 붙인 차례 | 13.6 ± 1.1 |
+| 번호 표시가 빠진 스크린샷 | 0.0 ± 0.0 |
+| 사람 행동 수(기다림 제외) | 20.4 ± 1.8 |
+| 입력한 글자 수 | 202.6 ± 48.9 |
+| 코드 직접 확인(inspect_diff) | 1.0 ± 1.0 |
+| hands-off 규칙 어김(결과를 본 행동) | - |
+| 헛동작(없는 요소, 실패) | 0.0 ± 0.0 |
+| friction 평균 (0~3) | 0.0 ± 0.0 |
+| friction 2 이상 차례 | 0.0 ± 0.0 |
+| 설문 수고 (1~7, 낮을수록 좋음) | 2.2 ± 0.4 |
+| 설문 명확함 | 6.0 ± 0.0 |
+| 설문 통제감 | 6.0 ± 0.0 |
+| 설문 결과 확신 | 6.0 ± 0.0 |
+| 설문 신뢰 | 5.6 ± 0.5 |
+| 설문 복구 | - |
+| 설문 다시 쓰고 싶음 | 6.0 ± 0.0 |
+| 바뀐 줄 수 | 152.0 ± 24.3 |
+| 기대 밖 파일 수 | 0.0 ± 0.0 |
+| main이 움직임(앱 쪽, 판정에 안 넣음) | 0% (0/5) |
+| 지식 파일 수(판정에서 뺌) | 0.0 ± 0.0 |
+| 에이전트 출력 토큰(천) | 7.8 ± 0.5 |
+| 에이전트 입력 토큰(천, 캐시 포함, 앱이 부른 claude -p 포함) | 542.5 ± 40.0 |
+| 그 가운데 앱이 부른 claude -p 입력 토큰(천) | 27.5 ± 8.3 |
+| 에이전트 세션 수 | 2.0 ± 0.0 |
+| 사람 역할 비용($) | 2.8 ± 0.4 |
+
+### relay-v3 M2.1 단계별 에이전트
+
+단계 task 하나의 평균이다. 입력은 캐시 읽기와 쓰기를 더한 값이고, 대화 기록을 찾지 못한 세션은 빼고 센다.
+
+| 단계 | task 수 | 입력 토큰(천) | 캐시 쓰기(천) | 출력 토큰(천) | context.md 글자 | 넣은 지식 글자 |
+|---|---|---|---|---|---|---|
+| session | 10 | 257.5 ± 24.2 | 20.5 ± 7.8 | 3.3 ± 0.6 | - | - |
+
+### relay-v3 M2.1 계약·관문·리뷰
+
+| 지표 | relay-v3 M2.1 |
+|---|---|
+| 계약 승인됨 | 100% (5/5) |
+| Work 끝남([끝 확정]·머지, 확정 없이 리뷰 본 커밋 그대로) | 100% (5/5) |
+| 끝의 종류(Work마다) | [끝 확정] 10 |
+| 끝낸 방식(V25: 한 번·걸림·상자, Work마다) | 걸림 7, 상자에서 [그래도 끝내기] 2, 한 번 1 |
+| 관문 결론(Work마다 마지막) | 사람 머지(내보내기) 10 |
+| 내보내기 결론이 있음(G1·G2의 분모, 없으면 뺌) | 100% (5/5) |
+| 자동 조건을 채움(그림자·자동 후보) | 100% (5/5) |
+| G1 그 가운데 숨긴 시험 모두 통과 | 100% (5/5) |
+| G2 숨긴 시험 모두 통과 가운데 자동 조건을 채움 | 100% (5/5) |
+| 독립 리뷰 호출 수(돈 것) | 2.0 ± 0.0 |
+| 리뷰 건너뜀(리뷰 끈 쪽) | 0.0 ± 0.0 |
+| 미리 리뷰(돈 것 가운데) | 0.8 ± 0.8 |
+| 다시 쓴 리뷰(호출 아님) | 0.8 ± 0.8 |
+| 멈춘 리뷰(호출·토큰에서 뺌) | 0.0 ± 0.0 |
+| 리뷰 실패 | 0.0 ± 0.0 |
+| 토큰을 모르는 리뷰(P5에서 빠짐) | 0.0 ± 0.0 |
+| 리뷰 뒤 세션이 더 일한 Work | 0% (0/10) |
+| 리뷰 입력 토큰(천, 캐시 포함, 에이전트 입력에 들어 있음) | 27.5 ± 8.3 |
+
+### 회차별
+
+| 쪽#회차 | 끝 | 시험 | 분 | 차례 | friction | 에이전트 세션 | 비고 |
+|---|---|---|---|---|---|---|---|
+| relay3-m21#1 | done | OO | 4.5 | 17 | 0.06 | 2 | 두 버그를 별도 Work/브랜치로 고쳐 각각 커밋하고 끝냄. truncate는 relay/src-text-js-truncate-4621, med
+…(49자 생략) |
+| relay3-m21#2 | done | OO | 4.5 | 18 | 0.00 | 2 | 두 버그를 별도 Work/브랜치로 처리했다. truncate는 relay/src-text-js-truncate-1982(3bfce97)에서, m
+…(74자 생략) |
+| relay3-m21#3 | done | OO | 3.9 | 17 | 0.00 | 2 | 두 버그를 별도 Work/브랜치로 나눠 고쳤다. truncate는 relay/truncate-hello-world-8-ec99에, median(
+…(77자 생략) |
+| relay3-m21#4 | done | OO | 4.5 | 18 | 0.06 | 2 | 두 버그를 별도 Work와 별도 브랜치로 고쳐 각각 커밋하고 끝냈다. truncate는 relay/src-text-js-truncate-c16c
+…(118자 생략) |
+| relay3-m21#5 | done | OO | 3.9 | 16 | 0.00 | 2 | 두 버그를 별도 Work와 브랜치로 나눠 고쳤다. truncate는 relay/src-text-js-truncate-452f, median은 r
+…(164자 생략) |
+
+### 사람 역할의 말
+
+- [relay3-m21#1 좋음] Work마다 브랜치와 세션이 따로 생겨서 두 버그를 섞이지 않게 나눠 진행할 수 있었다. 계약 탭에 예시 입력과 출력이 보여서 승인하기 전에 무엇이 바뀌는지 알 수 있었다.
+- [relay3-m21#1 불편] '바꿈'을 고르면 원하는 동작을 적을 칸이 없이 제출 화면으로 넘어가서, 에이전트가 그 뜻을 제대로 알아들었는지 불안했다. 끝내기를 누르자 PR이나 머지 없이 바로 끝나서 낯설었다. 증거 화면에는 '사람 머지'와 '그림자'처럼 낯선 말이 많았다.
+- [relay3-m21#2 좋음] Work마다 브랜치와 계약이 따로 생겨서 두 버그가 섞이지 않았다. 계약에서 예시와 근거를 먼저 확인하고 승인할 수 있었다.
+- [relay3-m21#2 불편] [끝내기] 뒤 리뷰가 도는 동안 기다려야 했다. 끝난 결과가 '머지 없이 끝남'인데 리뷰 지적이 1~2개 있었다는 것만 보였고, 그 내용은 열어 보지 않았다.
+- [relay3-m21#3 좋음] Work마다 브랜치와 커밋이 따로 생겨서 두 버그가 섞이지 않았다. 계약에 예시가 있어서 무엇을 고치는지 승인 전에 분명히 알 수 있었다.
+- [relay3-m21#3 불편] 리뷰가 끝나길 기다리는 동안 화면이 '사람 머지' 결론이라 조금 헷갈렸다. 이 평가에선 머지가 없는데 '머지 없이 끝남'이라는 문구도 낯설었다. 리뷰 지적이 사소한 것이었는데 열린 것으로 떠서 한 번 더 판단해야 했다.
+- [relay3-m21#4 좋음] Work를 따로 만들면 브랜치와 커밋이 자동으로 갈려서 두 버그가 섞이지 않았다. 계약에 예시가 있어서 틀린 값(C1.2)을 승인 전에 잡을 수 있었다.
+- [relay3-m21#4 불편] 증거가 자동으로 재어지지 않아서 [끝내기]를 눌렀을 때야 리뷰 지적이 떴다. 리뷰 지적 중 일부는 사소한 시험 코드 형식 문제였는데 '열린 것'으로 올라와서 판단하기 애매했다.
+- [relay3-m21#5 좋음] Work마다 브랜치가 따로 생겨서 두 버그가 섞이지 않았다. 계약에 예시 입출력이 있어 고칠 내용을 코드 보기 전에 확인할 수 있었다. 에이전트가 짝수 개 중앙값 같은 모호한 점을 먼저 물어봤다.
+- [relay3-m21#5 불편] 끝내기를 누르면 리뷰가 끝날 때까지 기다려야 했다. 증거 탭의 '사람 머지'와 '그림자' 같은 용어는 평가 환경에서는 필요 없는데도 읽기 어려웠다. 지적 2개가 있었는데 끝내기가 별다른 확인 없이 바로 끝나서 그 지적을 못 봤다.
+
+#### friction이 높았던 차례
+
+
+
+보고서: /home/user/relay-v2/app/eval/results/m21-design-07-two-bugs/report.md
