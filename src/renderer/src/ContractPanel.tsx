@@ -1,15 +1,19 @@
 // [계약] 패널 (docs/m2-modules.md 4절): 목표, 줄 표(종류, 글, 근거와 확인됨/추정, 예시 입력→출력, 확인 방법), 비목표,
-// 사람만 아는 규칙, hint. 승인을 기다리면 [승인]·[고쳐 달라고 하기], 계약 다시면 세션의 요청과 [받아들이기]·[거절하기].
+// 사람만 아는 규칙, hint. 승인을 기다리면 [승인]과 늘 보이는 고칠 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과 제안의
+// 차이, [받아들이기]·[거절하기].
 import { useState } from 'react'
 import type { Contract, ContractLine, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
 import {
   CHECK_LABEL,
   KIND_LABEL,
+  contractDelta,
   exampleText,
   groundStatus,
   groundText,
   timeText,
+  type DeltaItem,
+  type Tone,
 } from './format.ts'
 import { Empty, ErrorLine, Tag, useAction } from './ui.tsx'
 
@@ -21,7 +25,12 @@ export function ContractPanel({ view }: { view: WorkView }) {
         <ApproveBox id={view.id} />
       ) : null}
       {view.state === 'recontract' ? (
-        <ChangeBox id={view.id} reason={view.pendingChange} proposed={view.pendingContract} />
+        <ChangeBox
+          id={view.id}
+          reason={view.pendingChange}
+          approved={view.contract}
+          proposed={view.pendingContract}
+        />
       ) : null}
       {shown ? (
         <ContractView
@@ -41,59 +50,59 @@ export function ContractPanel({ view }: { view: WorkView }) {
   )
 }
 
+/** 승인을 기다리는 계약(M2.1 13절): [승인]과, 여는 단계 없이 늘 보이는 고칠 점 칸과 [보내기] */
 function ApproveBox({ id }: { id: string }) {
   const act = useAction()
-  const [asking, setAsking] = useState(false)
   const [text, setText] = useState('')
   return (
     <div className="callout tone-warn" data-testid="approve-box">
       <p className="callout-title">세션이 계약을 냈습니다. 읽고 답해 주세요.</p>
-      {asking ? (
-        <>
-          <textarea
-            className="field"
-            rows={3}
-            value={text}
-            placeholder="무엇을 고쳐야 하나요?"
-            aria-label="고칠 점"
-            onChange={(e) => setText(e.target.value)}
-            autoFocus
-          />
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              disabled={act.busy || text.trim() === ''}
-              onClick={() => void act.run(() => window.relay.askChanges(id, text.trim()))}
-            >
-              보내기
-            </button>
-            <button type="button" className="ghost" onClick={() => setAsking(false)}>
-              취소
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="row">
-          <button
-            type="button"
-            className="primary"
-            disabled={act.busy}
-            onClick={() => void act.run(() => window.relay.approveContract(id))}
-          >
-            승인
-          </button>
-          <button type="button" className="secondary" onClick={() => setAsking(true)}>
-            고쳐 달라고 하기
-          </button>
-        </div>
-      )}
+      <div className="row">
+        <button
+          type="button"
+          className="primary"
+          disabled={act.busy}
+          onClick={() => void act.run(() => window.relay.approveContract(id))}
+        >
+          승인
+        </button>
+      </div>
+      <textarea
+        className="field"
+        rows={2}
+        value={text}
+        placeholder="고칠 점이 있으면 적고 보내기를 누르세요. 세션이 고쳐 다시 냅니다."
+        aria-label="고칠 점"
+        onChange={(e) => setText(e.target.value)}
+      />
+      <div className="row">
+        <button
+          type="button"
+          className="secondary"
+          disabled={act.busy || text.trim() === ''}
+          onClick={() =>
+            void act
+              .run(() => window.relay.askChanges(id, text.trim()))
+              .then((ok) => {
+                // 세션이 곧바로 다시 내면 이 상자가 그대로 남을 수 있다: 보낸 글을 비운다
+                if (ok) setText('')
+              })
+          }
+        >
+          보내기
+        </button>
+      </div>
       <ErrorLine text={act.error} />
     </div>
   )
 }
 
-function ChangeBox(p: { id: string; reason: string | null; proposed: Contract | null }) {
+function ChangeBox(p: {
+  id: string
+  reason: string | null
+  approved: Contract | null
+  proposed: Contract | null
+}) {
   const act = useAction()
   const [text, setText] = useState('')
   const answer = (approved: boolean) =>
@@ -102,9 +111,10 @@ function ChangeBox(p: { id: string; reason: string | null; proposed: Contract | 
     <div className="callout tone-warn" data-testid="change-box">
       <p className="callout-title">세션이 계약을 바꾸자고 합니다</p>
       <p className="quote">{p.reason ?? '(까닭 없음)'}</p>
+      {p.proposed && p.approved ? <Delta approved={p.approved} proposed={p.proposed} /> : null}
       <p className="muted small">
         {p.proposed
-          ? '아래는 세션이 제안한 새 계약입니다.'
+          ? '아래는 세션이 제안한 새 계약 전체입니다.'
           : '새 계약 없이 요청만 했습니다. 거절하고 바꾼 계약 전체를 내 달라고 하세요.'}
       </p>
       <textarea
@@ -135,6 +145,64 @@ function ChangeBox(p: { id: string; reason: string | null; proposed: Contract | 
       </div>
       <ErrorLine text={act.error} />
     </div>
+  )
+}
+
+const DELTA: Record<DeltaItem['how'], { label: string; tone: Tone }> = {
+  added: { label: '더함', tone: 'ok' },
+  removed: { label: '뺌', tone: 'bad' },
+  changed: { label: '고침', tone: 'warn' },
+}
+
+/** 승인본과 제안의 차이(M2.1 13절): 줄과 예시의 더함·뺌·고침, 그 밖에서 바뀐 것의 이름 */
+function Delta(p: { approved: Contract; proposed: Contract }) {
+  const d = contractDelta(p.approved, p.proposed)
+  const empty = d.lines.length === 0 && d.examples.length === 0 && d.other.length === 0
+  return (
+    <div className="delta" data-testid="contract-delta">
+      <p className="delta-title">승인된 계약에서 바뀌는 것</p>
+      {empty ? (
+        <p className="muted small">바뀐 줄, 예시, 칸이 없습니다(차례만 바뀌었을 수 있음)</p>
+      ) : null}
+      <DeltaList title="줄" items={d.lines} />
+      <DeltaList title="예시" items={d.examples} />
+      {d.other.length > 0 ? (
+        <>
+          <p className="delta-sub">그 밖</p>
+          <ul className="delta-list" aria-label="그 밖">
+            <li data-testid="delta-other">
+              <Tag tone="warn">고침</Tag>
+              <span className="line-id" />
+              <span>{d.other.join(', ')}</span>
+            </li>
+          </ul>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function DeltaList({ title, items }: { title: string; items: DeltaItem[] }) {
+  if (items.length === 0) return null
+  return (
+    <>
+      <p className="delta-sub">{title}</p>
+      <ul className="delta-list" aria-label={title}>
+        {items.map((x) => (
+          <li key={`${x.how}:${x.id}`} data-testid="delta-item">
+            <Tag tone={DELTA[x.how].tone}>{DELTA[x.how].label}</Tag>
+            <span className="line-id">{x.id}</span>
+            <span className={x.how === 'removed' ? 'delta-removed' : undefined}>{x.text}</span>
+            {x.fields.length > 0 ? (
+              <span className="delta-more muted small">고친 칸: {x.fields.join(', ')}</span>
+            ) : null}
+            {x.before !== undefined ? (
+              <span className="delta-more muted small">앞: {x.before}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 

@@ -95,6 +95,9 @@ describe('한 Work의 생애', () => {
     await expect(
       runGit(start.cwd as string, ['rev-parse', '--abbrev-ref', '@{u}']),
     ).rejects.toThrow()
+    // 기준의 quality.json이 적은 JUnit 출력은 레포의 exclude에 든다(M2.1 13절. 무시되는지는 [어댑터])
+    const exclude = await runGit(start.cwd as string, ['rev-parse', '--git-path', 'info/exclude'])
+    expect(await readFile(exclude, 'utf8')).toContain('\n/.relay-out/junit.xml\n')
 
     // 틀린 계약과 지침이 준 것과 다른 id(V11)는 바로 invalid, 고친 계약은 사람의 답을 기다린다
     await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')

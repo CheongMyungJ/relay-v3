@@ -1,9 +1,9 @@
 // [변경]과 [빚] 패널 (docs/m2-modules.md 4절). 변경: `git diff --stat`의 내용(모두 몇 줄, 파일마다 몇 줄과 막대)과 파일별
-// diff(접기). git의 영어 --stat 글은 좁은 패널에서 잘리므로 그대로 보이지 않고 patch에서 센다. 빚: 이 Work가 건드린 경로의 빚.
-// HEAD가 바뀌면 다시 읽는다.
+// diff(접기. 작은 diff는 펼친 채로, M2.1 13절). git의 영어 --stat 글은 좁은 패널에서 잘리므로 그대로 보이지 않고 patch에서
+// 센다. 빚: 이 Work가 건드린 경로의 빚. HEAD가 바뀌면 다시 읽는다.
 import { useEffect, useState } from 'react'
 import type { DebtItem, DebtKind } from '../../core/types.ts'
-import { splitDiff } from './format.ts'
+import { diffOpen, splitDiff } from './format.ts'
 import { Empty, ErrorLine, Spinner, Tag } from './ui.tsx'
 
 type Loaded<T> =
@@ -51,6 +51,7 @@ export function DiffPanel({ id, head }: { id: string; head: string | null }) {
   const added = files.reduce((n, f) => n + f.added, 0)
   const deleted = files.reduce((n, f) => n + f.deleted, 0)
   const most = Math.max(1, ...files.map((f) => f.added + f.deleted))
+  const open = diffOpen(files)
   return (
     <div className="panel-body" data-testid="diff-panel">
       <p className="diff-summary">
@@ -61,7 +62,7 @@ export function DiffPanel({ id, head }: { id: string; head: string | null }) {
       </p>
       <div className="diff-files">
         {files.map((f) => (
-          <details key={f.path} className="fold diff-file">
+          <details key={f.path} className="fold diff-file" open={open}>
             <summary>
               <code className="diff-path">{f.path}</code>
               <span className="diff-count">

@@ -3,6 +3,7 @@
 // RELAY_HOME, 임시 git 레포와 bare origin.
 // 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
+// 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
@@ -77,6 +78,8 @@ test('위로 넘는 값은 hi로 [{contractId}:C1.1]', () => {
 const SCENARIO = {
   start: [
     { do: 'print', text: '요청과 코드를 읽었습니다. 계약을 냅니다.' },
+    { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
+    // 첫 프로젝트는 고쳐 달라고 하므로(답 changes) 다시 낸다. 둘째 프로젝트는 승인했으므로 같은 계약의 승인을 돌려받는다
     { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
     { do: 'print', text: '승인됨. clamp를 고칩니다.' },
     {
@@ -179,6 +182,17 @@ async function pickFolder(dir: string): Promise<void> {
   }, dir)
 }
 
+/** 가짜 claude가 받은 submit_contract의 답(차례대로) */
+async function submitted(): Promise<unknown[]> {
+  const text = await readFile(join(tmp, 'claude.jsonl'), 'utf8').catch(() => '')
+  return text
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { type: string; tool?: string; result?: unknown })
+    .filter((e) => e.type === 'mcp' && e.tool === 'submit_contract')
+    .map((e) => e.result)
+}
+
 let shots = 0
 async function shot(name: string): Promise<void> {
   // 그리기(글꼴, 애니메이션)가 가라앉을 틈
@@ -215,6 +229,22 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(panel.getByTestId('contract-line').first()).toContainText('확인됨')
   await expect(panel.getByTestId('contract-line').nth(1)).toContainText('추정')
   await shot('contract')
+  // 고쳐 달라기(M2.1 13절): 여는 단추 없이 글 칸에 쓰고 [보내기]. 세션은 changes 답을 받고 계약을 다시 낸다(가짜 claude는
+  // 답을 받은 호출만 기록한다)
+  const send = approve.getByRole('button', { name: '보내기', exact: true })
+  await expect(send).toBeDisabled()
+  await approve.getByLabel('고칠 점').fill('C2의 근거를 코드에서 찾아 주세요')
+  await shot('ask-changes')
+  await send.click()
+  await expect
+    .poll(async () => (await submitted()).length, { timeout: 30_000 })
+    .toBeGreaterThanOrEqual(1)
+  expect((await submitted())[0]).toEqual({
+    status: 'changes',
+    message: 'C2의 근거를 코드에서 찾아 주세요',
+  })
+  await expect(approve).toBeVisible({ timeout: 30_000 })
+  await expect(approve.getByLabel('고칠 점')).toHaveValue('')
   await approve.getByRole('button', { name: '승인', exact: true }).click()
 
   // 승인 → 커밋·Stop → 증거: [증거] 탭으로 옮겨 결론을 크게. 세션이 쉬고 명령·줄이 통과했으니 미리 리뷰(V23)가 돈다
@@ -251,15 +281,16 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(merge).toBeEnabled()
   await shot('shadow')
 
-  // [변경]: 모두 몇 줄, 파일별 diff(접기)
+  // [변경]: 모두 몇 줄, 파일별 diff. 5파일·400줄 이하라 펼친 채로 열린다(M2.1 13절). 누르면 접힌다
   await page.getByRole('tab', { name: '변경' }).click()
   const diff = page.getByTestId('diff-panel')
   await expect(diff.locator('.diff-summary')).toContainText('파일 3개')
   const calcFile = diff.locator('details', { has: page.getByText('src/calc.js', { exact: true }) })
-  await calcFile.locator('summary').click()
   await expect(calcFile.locator('.patch')).toBeVisible()
   await expect(calcFile.locator('.patch')).toContainText('n > hi ? hi')
   await shot('diff')
+  await calcFile.locator('summary').click()
+  await expect(calcFile.locator('.patch')).toBeHidden()
 
   // [머지] → 끝남
   await page.getByRole('tab', { name: '증거' }).click()

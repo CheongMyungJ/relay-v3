@@ -1,12 +1,15 @@
 // [단위] 렌더러의 순수 조각 (src/renderer/src/format.ts, termSize.ts). 화면을 띄우지 않고 본다.
 // 화면 전체는 [스모크] test/smoke/app.spec.ts가 이어지는지만 본다.
 import { describe, expect, test } from 'vitest'
-import type { GateResult } from '../../src/core/types.ts'
+import type { Contract, ContractLine, GateResult } from '../../src/core/types.ts'
 import type { WorkView } from '../../src/shared/api.ts'
 import {
   canMergeView,
   conclusionOf,
+  contractDelta,
   decisiveText,
+  diffOpen,
+  type DiffFile,
   draftPending,
   draftResultText,
   endArmed,
@@ -108,6 +111,131 @@ describe('splitDiff: diff(id)의 글을 파일로 나눈다', () => {
 
   test('바뀐 것이 없으면 빈 목록', () => {
     expect(splitDiff('\n\n')).toEqual([])
+  })
+})
+
+test('diffOpen: 5파일 이하이고 바뀐 줄(더한 줄 + 뺀 줄)이 400 이하면 펼친 채로 연다(M2.1 13절)', () => {
+  const file = (added: number, deleted = 0): DiffFile => ({
+    path: `f${added}-${deleted}`,
+    added,
+    deleted,
+    binary: false,
+    patch: '',
+  })
+  expect(diffOpen([file(3, 1), file(10)])).toBe(true)
+  expect(diffOpen([file(200, 100), file(100)])).toBe(true)
+  expect(diffOpen([file(200, 100), file(100, 1)])).toBe(false)
+  expect(diffOpen([1, 2, 3, 4, 5].map((n) => file(n)))).toBe(true)
+  expect(diffOpen([1, 2, 3, 4, 5, 6].map((n) => file(n)))).toBe(false)
+})
+
+describe('contractDelta: 계약 바꾸기 상자의 승인본과 제안 사이 차이(M2.1 13절)', () => {
+  const C1: ContractLine = {
+    id: 'C1',
+    kind: 'change',
+    text: 'hi보다 큰 값은 hi가 된다',
+    grounds: [{ type: 'code', path: 'src/calc.js', line: 5, name: 'clamp' }],
+    examples: ['C1.1'],
+    check: 'test',
+  }
+  const C2: ContractLine = {
+    id: 'C2',
+    kind: 'keep',
+    text: '더하기는 그대로',
+    grounds: [{ type: 'guess' }],
+    examples: ['C2.1'],
+    check: 'test',
+  }
+  const approved: Contract = {
+    version: 1,
+    id: 'clamp-fix-ab12',
+    goal: 'clamp가 hi보다 큰 값을 hi로 자른다',
+    lines: [C1, C2],
+    examples: [
+      { id: 'C1.1', input: [15, 0, 10], output: 10 },
+      { id: 'C2.1', input: [2, 3], output: 5 },
+    ],
+    non_goals: [],
+    human_rules: [],
+    tidy: [],
+    approved_by: 'human',
+    approved_at: '2026-11-05T09:00:00.000Z',
+    change_requested: 'lo보다 작은 값도 고쳐야 함',
+  }
+
+  test('줄과 예시를 id로 짝지어 더함·고침(제안 차례), 뺌(승인본 차례). 고침은 고친 칸과 앞 글', () => {
+    const proposed: Contract = {
+      ...approved,
+      lines: [
+        {
+          ...C1,
+          text: 'hi보다 큰 값은 hi, lo보다 작은 값은 lo',
+          examples: ['C1.1', 'C1.2'],
+        },
+        {
+          id: 'C3',
+          kind: 'new',
+          text: 'lo보다 작은 값은 lo가 된다',
+          grounds: [{ type: 'guess' }],
+          examples: ['C1.2'],
+          check: 'test',
+        },
+      ],
+      examples: [
+        { id: 'C1.1', input: [15, 0, 10], output: 10 },
+        { id: 'C1.2', input: [-5, 0, 10], output: 0, note: '아래로 넘음' },
+      ],
+    }
+    delete proposed.approved_by
+    delete proposed.approved_at
+    delete proposed.change_requested
+    const d = contractDelta(approved, proposed)
+    expect(d.lines).toEqual([
+      {
+        id: 'C1',
+        how: 'changed',
+        text: '바뀜 · hi보다 큰 값은 hi, lo보다 작은 값은 lo',
+        fields: ['글', '예시'],
+        before: '바뀜 · hi보다 큰 값은 hi가 된다',
+      },
+      { id: 'C3', how: 'added', text: '새로 · lo보다 작은 값은 lo가 된다', fields: [] },
+      { id: 'C2', how: 'removed', text: '지킴 · 더하기는 그대로', fields: [] },
+    ])
+    expect(d.examples).toEqual([
+      { id: 'C1.2', how: 'added', text: '[-5,0,10] → 0', fields: [] },
+      { id: 'C2.1', how: 'removed', text: '[2,3] → 5', fields: [] },
+    ])
+    // 승인 표시와 계약 변경 요청은 내용이 아니다
+    expect(d.other).toEqual([])
+  })
+
+  test('글이 그대로인 고침은 앞 글 없이 칸만, 열쇠 차례만 다른 값은 같다, 줄 밖에서 바뀐 것은 이름으로', () => {
+    const proposed: Contract = {
+      ...approved,
+      goal: 'clamp가 범위 밖 값을 자른다',
+      non_goals: ['인자 순서는 그대로'],
+      lines: [
+        {
+          ...C1,
+          // 열쇠 차례만 다름
+          grounds: [{ name: 'clamp', line: 5, path: 'src/calc.js', type: 'code' }],
+        },
+        { ...C2, check: 'human' },
+      ],
+      examples: [
+        { id: 'C1.1', input: [15, 0, 10], output: 10 },
+        { id: 'C2.1', input: [2, 3], output: 5, note: '그대로' },
+      ],
+    }
+    const d = contractDelta(approved, proposed)
+    expect(d.lines).toEqual([
+      { id: 'C2', how: 'changed', text: '지킴 · 더하기는 그대로', fields: ['확인 방법'] },
+    ])
+    expect(d.examples).toEqual([
+      { id: 'C2.1', how: 'changed', text: '[2,3] → 5', fields: ['메모'] },
+    ])
+    expect(d.other).toEqual(['목표', '비목표'])
+    expect(contractDelta(approved, { ...approved })).toEqual({ lines: [], examples: [], other: [] })
   })
 })
 

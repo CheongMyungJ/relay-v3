@@ -4,6 +4,8 @@
 // 포트·토큰이 앱 실행마다 바뀌므로 띄울 때마다 새로 쓴다. [변경]과 [빚]도 worktree에서 읽는다.
 
 import { randomBytes } from 'node:crypto'
+import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { git } from '../adapters/exec.ts'
 import { lsTree, mergeBase, repoRoot, showFile } from '../adapters/git.ts'
 import { parseDebt, touching } from '../core/debt.ts'
@@ -18,7 +20,7 @@ import {
   TOOL_SUBMIT,
 } from '../core/instructions.ts'
 import { parseQuality } from '../core/quality.ts'
-import type { DebtItem } from '../core/types.ts'
+import type { DebtItem, QualityConfig } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import { EVENTS, type NewWorkInput } from '../shared/api.ts'
 import type { ProjectRecord, WorkRecord } from './store.ts'
@@ -92,12 +94,58 @@ export async function baseRef(root: string, base: string): Promise<string> {
   throw new Error(`기준 브랜치를 찾지 못함: ${base}`)
 }
 
-/** 기준의 quality.json이 정한 예시 자료 폴더(없으면 기본값). 지침과 앱이 쓰는 예시 자료(V27)가 함께 쓴다 */
-export async function examplesDir(root: string, ref: string): Promise<string> {
+/** 기준 ref의 quality.json. 없거나 깨졌으면 null */
+async function baseQuality(root: string, ref: string): Promise<QualityConfig | null> {
   const sha = (await git(['rev-parse', ref], root)).trim()
   const text = await showFile(root, sha, QUALITY_PATH).catch(() => null)
   const parsed = text === null ? null : parseQuality(text)
-  return parsed?.ok ? parsed.value.examples_dir : '.relay/examples'
+  return parsed?.ok ? parsed.value : null
+}
+
+const examplesOf = (q: QualityConfig | null): string => q?.examples_dir ?? '.relay/examples'
+
+/** 기준의 quality.json이 정한 예시 자료 폴더(없으면 기본값). 지침과 앱이 쓰는 예시 자료(V27)가 함께 쓴다 */
+export async function examplesDir(root: string, ref: string): Promise<string> {
+  return examplesOf(await baseQuality(root, ref))
+}
+
+/**
+ * 품질 기준의 명령이 쓰는 JUnit 출력을 exclude 파일에 더할 줄(M2.1 13절). 폴더가 아니라 파일을 '/'로 시작해 쓴다: 무시된
+ * 파일만 든 폴더는 git status에 보이지 않고, 폴더를 빼면 test/junit.xml처럼 커밋할 파일의 폴더일 때 세션의 새 파일이
+ * `git add -A`에서 빠진다. 역슬래시는 /로 읽고(quality.json의 경로 검사와 같게), glob 글자(* ? [)와 끝 공백은 역슬래시로
+ * 막는다. 줄바꿈이 든 경로는 쓰지 않는다
+ */
+export function junitExcludes(q: QualityConfig | null): string[] {
+  if (q === null) return []
+  const specs = [...q.commands.fast, q.commands.acceptance, ...(q.commands.full?.local ?? [])]
+  const out: string[] = []
+  for (const spec of specs) {
+    const path = spec?.junit?.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '')
+    if (!path || /[\r\n]/.test(path) || path.endsWith('/')) continue
+    const line = `/${path.replace(/[*?[]/g, '\\$&').replace(/ $/, '\\ ')}`
+    if (!out.includes(line)) out.push(line)
+  }
+  return out
+}
+
+/**
+ * worktree가 읽는 exclude 파일(`git rev-parse --git-path info/exclude`: linked worktree에서는 레포의 공통 git 폴더의 것)에
+ * 없는 줄만 더한다. 쓴 줄을 돌려준다
+ */
+export async function addExcludes(worktree: string, lines: string[]): Promise<string[]> {
+  if (lines.length === 0) return []
+  const file = resolve(
+    worktree,
+    (await git(['rev-parse', '--git-path', 'info/exclude'], worktree)).trim(),
+  )
+  const text = await readFile(file, 'utf8').catch(() => '')
+  const have = new Set(text.split(/\r?\n/))
+  const add = lines.filter((l) => !have.has(l))
+  if (add.length === 0) return []
+  await mkdir(dirname(file), { recursive: true })
+  const lead = text === '' || text.endsWith('\n') ? '' : '\n'
+  await appendFile(file, `${lead}# relay: 품질 기준 명령의 JUnit 출력\n${add.join('\n')}\n`)
+  return add
 }
 
 /**
@@ -125,6 +173,11 @@ export async function newWork(
   const worktree = store.worktreeDir(id)
   // --no-track: origin/<base>를 upstream으로 두면 인자 없는 `git push`가 push.default=upstream에서 기준 브랜치로 간다
   await git(['worktree', 'add', '--quiet', '--no-track', '-b', branch, worktree, ref], project.path)
+  const quality = await baseQuality(project.path, ref)
+  // 세션이 수용 시험을 직접 돌려 생긴 출력이 untracked로 보이면 .gitignore를 고친다(계약 밖 변경, M2.1 13절)
+  await addExcludes(worktree, junitExcludes(quality)).catch((e) =>
+    deps.log?.('JUnit 출력을 exclude에 더하지 못함', e),
+  )
   const hint = o.hint?.trim() || null
   const at = deps.now()
   const rec: WorkRecord = {
@@ -163,7 +216,7 @@ export async function newWork(
     instructionsText({
       workId: id,
       contractId: rec.contract_id,
-      examplesDir: await examplesDir(project.path, ref),
+      examplesDir: examplesOf(quality),
       baseBranch: base,
       workBranch: branch,
       questionMode: project.settings.question_mode,

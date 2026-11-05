@@ -4,6 +4,8 @@
 import type {
   CommandOutcome,
   Conclusion,
+  Contract,
+  ContractLine,
   EvidenceBundle,
   Example,
   GateResult,
@@ -369,6 +371,103 @@ export function exampleText(e: Example): string {
   return `${valueText(e.input)} → ${out}`
 }
 
+/** 계약 바꾸기 상자(M2.1 13절)의 차이 한 줄: 줄이나 예시 하나를 더함, 뺌, 고침 */
+export interface DeltaItem {
+  id: string
+  how: 'added' | 'removed' | 'changed'
+  /** 화면 글: 줄이면 종류와 글, 예시면 입력 → 출력. 뺌이면 승인본의 것, 아니면 제안의 것 */
+  text: string
+  /** 고침이면 고친 칸의 이름(줄: 종류, 글, 근거, 예시, 확인 방법. 예시: 입력, 출력, 오류, 메모) */
+  fields: string[]
+  /** 고침이고 화면 글이 바뀌었으면 승인본의 화면 글 */
+  before?: string
+}
+
+export interface ContractDelta {
+  lines: DeltaItem[]
+  examples: DeltaItem[]
+  /** 줄과 예시 밖에서 바뀐 것의 이름: 목표, 비목표, 사람만 아는 규칙, 곁들일 정리, 일의 성격 제안 */
+  other: string[]
+}
+
+/** 열쇠를 정렬한 JSON: 같은 값이면 열쇠 차례가 달라도 같은 글 */
+function canonical(v: unknown): string {
+  return (
+    JSON.stringify(v, (_k, x: unknown) =>
+      x !== null && typeof x === 'object' && !Array.isArray(x)
+        ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : x,
+    ) ?? 'undefined'
+  )
+}
+
+const LINE_FIELDS: [keyof ContractLine, string][] = [
+  ['kind', '종류'],
+  ['text', '글'],
+  ['grounds', '근거'],
+  ['examples', '예시'],
+  ['check', '확인 방법'],
+]
+
+const EXAMPLE_FIELDS: [keyof Example, string][] = [
+  ['input', '입력'],
+  ['output', '출력'],
+  ['error', '오류'],
+  ['note', '메모'],
+]
+
+// 승인 표시(approved_by, approved_at)와 계약 변경 요청(change_requested)은 내용이 아니라 견주지 않는다
+const OTHER_FIELDS: [keyof Contract, string][] = [
+  ['goal', '목표'],
+  ['non_goals', '비목표'],
+  ['human_rules', '사람만 아는 규칙'],
+  ['tidy', '곁들일 정리'],
+  ['hint', '일의 성격 제안'],
+]
+
+const lineText = (l: ContractLine): string => `${KIND_LABEL[l.kind]} · ${l.text}`
+
+/** id로 짝지어 제안의 차례로 더함과 고침, 그 뒤에 승인본의 차례로 뺌 */
+function deltaOf<T extends { id: string }>(
+  before: T[],
+  after: T[],
+  fields: [keyof T, string][],
+  text: (x: T) => string,
+): DeltaItem[] {
+  const old = new Map(before.map((x) => [x.id, x]))
+  const ids = new Set(after.map((x) => x.id))
+  const out: DeltaItem[] = []
+  for (const x of after) {
+    const was = old.get(x.id)
+    if (!was) {
+      out.push({ id: x.id, how: 'added', text: text(x), fields: [] })
+      continue
+    }
+    const changed = fields.filter(([k]) => canonical(was[k]) !== canonical(x[k])).map(([, n]) => n)
+    if (changed.length === 0) continue
+    const item: DeltaItem = { id: x.id, how: 'changed', text: text(x), fields: changed }
+    if (text(was) !== item.text) item.before = text(was)
+    out.push(item)
+  }
+  for (const x of before)
+    if (!ids.has(x.id)) out.push({ id: x.id, how: 'removed', text: text(x), fields: [] })
+  return out
+}
+
+/**
+ * 계약 바꾸기 상자(M2.1 13절): 승인본과 세션이 제안한 새 계약 사이의 줄과 예시 차이(더함, 뺌, 고침)와, 그 밖에서 바뀐 것의
+ * 이름. 줄과 예시는 id로 짝짓는다
+ */
+export function contractDelta(approved: Contract, proposed: Contract): ContractDelta {
+  return {
+    lines: deltaOf(approved.lines, proposed.lines, LINE_FIELDS, lineText),
+    examples: deltaOf(approved.examples, proposed.examples, EXAMPLE_FIELDS, exampleText),
+    other: OTHER_FIELDS.filter(([k]) => canonical(approved[k]) !== canonical(proposed[k])).map(
+      ([, n]) => n,
+    ),
+  }
+}
+
 export interface DiffFile {
   path: string
   added: number
@@ -404,6 +503,15 @@ export function splitDiff(text: string): DiffFile[] {
     })
   }
   return files
+}
+
+/** [변경]을 펼친 채로 여는 상한(M2.1 13절): 파일 수와 바뀐 줄(더한 줄과 뺀 줄의 합) */
+export const DIFF_OPEN = { files: 5, lines: 400 }
+
+/** 작은 diff면 파일을 모두 펼친 채로 연다. 크면 파일마다 접어 둔다 */
+export function diffOpen(files: DiffFile[]): boolean {
+  const lines = files.reduce((n, f) => n + f.added + f.deleted, 0)
+  return files.length <= DIFF_OPEN.files && lines <= DIFF_OPEN.lines
 }
 
 /** 시각을 '11월 4일 09:00'처럼 */
