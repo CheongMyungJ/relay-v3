@@ -1,13 +1,13 @@
 // 리뷰 재생 (docs/m2.1-design.md 14절 0단계 O2: V26 기준표, V30 요청 대조). 저장된 M2 내보내기 묶음에 지금의 리뷰어를 다시
 // 돌린다: core/review.ts의 프롬프트(요청 포함, 지금 판)와 스키마, adapters/claude.ts의 claude -p, 앱과 같은 읽기 도구와 시간
 // 상한(main/works-review.ts). claude의 환경은 평가가 앱에 준 것이다: run.json options의 에이전트 모델과 effort를
-// ANTHROPIC_MODEL, CLAUDE_CODE_EFFORT_LEVEL로 준다(relay-v2 eval lib/env.mjs agentEnv. 앱의 리뷰어가 물려받았다).
+// ANTHROPIC_MODEL, CLAUDE_CODE_EFFORT_LEVEL로 주고(relay-v2 eval lib/env.mjs agentEnv. 앱의 리뷰어가 물려받았다), 호출마다 새
+// 임시 CLAUDE_CONFIG_DIR(평가의 makeClaudeConfig와 같은 내용: CONFIG_FILES)을 준다. 운영자의 설정 폴더(스킬, 플러그인, 훅)와
+// 세션 변수(CLAUDECODE, CLAUDE_*, ANTHROPIC_*)는 넘기지 않는다(OPERATOR_ENV, --pass-env로 더 넘긴다): M2에서 앱의 리뷰어는
+// 실행마다 새로 만든 설정 폴더와 평가의 cleanEnv가 고른 변수로 돌았다.
 //   node scripts/review-replay.ts [--dry] [--out <파일.jsonl>] [--resume] [--summary] [--jobs <n>] [--limit <n>]
-//                                 [--results <폴더>] [--scenarios <폴더>] [--prompts <폴더>] [--keep]
-// - 대상: A는 14에서 숨긴 시험이 실패한 relay3·relay3-noreview 묶음(8개)을 3번씩, B는 통과한 묶음을 07, 08, 10, 19, 40, 43에서
-//   다섯씩(30개) 1번씩. B는 (회차, 쪽, Work id) 차례로 실행마다 첫 Work를 먼저, 모자라면 같은 차례로 나머지에서 고른다.
-// - 묶음은 gate-replay-fixture.ts의 규칙이다: results/m2-main-<시나리오>(report.json이 있는 배치), 오류 없이 숨긴 시험 결과가
-//   있는 실행, works[].gate.export가 참이고 evidence.json의 head가 exportedHead인 Work.
+//                                 [--results <폴더>] [--scenarios <폴더>] [--prompts <폴더>] [--keep] [--pass-env <이름,…>]
+// - 대상과 묶음 고르기는 review-replay-plan.ts다(A 8묶음 × 3번, B 30묶음 × 1번. B는 요청이 Work의 몫보다 넓은 묶음을 뺀다).
 // - 레포: 시나리오의 repo/에 품질 기준 덧씌우기(지금의 relay init 초안, run.json의 sha256과 견줌)를 얹어 base로, final/<Work>.diff
 //   (평가의 `git diff --no-index base tree`라 a/base/, b/tree/가 붙는다)를 git apply -p2로 얹어 head로 커밋한 임시 checkout.
 //   diff와 diff stat은 앱처럼 base..head로 낸다. 최종 diff는 실행 끝의 작업 트리라 증거의 diff와 견준다(same_as_evidence).
@@ -17,7 +17,7 @@
 //   하는 값을 찍는다(--summary는 찍기만). --dry는 claude 대신 고정 지적의 가짜 리뷰어다(레포와 프롬프트는 그대로, 판정에 안 씀).
 import { createHash } from 'node:crypto'
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs'
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,9 +31,18 @@ import { REVIEW_SCHEMA, reviewPrompt } from '../src/core/review.ts'
 import type { EvidenceBundle, ReviewFinding } from '../src/core/types.ts'
 import { QUALITY_PATH } from '../src/engine/check.ts'
 import { draftFor, draftText } from '../src/engine/init.ts'
+import {
+  B_BUNDLES,
+  callsOf,
+  DESIGN_CALLS,
+  excludedFromB,
+  keyOf,
+  plan,
+} from './review-replay-plan.ts'
+import { readBundles, readReport, TARGET_A, TARGET_B } from './review-replay-plan.ts'
+import type { Bundle, Call, RunOptions, Target } from './review-replay-plan.ts'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
-const ARMS = ['relay3', 'relay3-noreview']
 /** 리뷰어의 읽기 도구. main/works-review.ts REVIEW_TOOLS와 같다([단위]가 본다) */
 export const REVIEW_TOOLS = ['Read', 'Grep', 'Glob']
 /** main/works-review.ts REVIEW_TIMEOUT_MS와 같다 */
@@ -42,13 +51,25 @@ const TIMEOUT_MS = 15 * 60 * 1000
 const SKIP = new Set(['.git', 'node_modules', '.relay-out'])
 const GIT_ID = ['-c', 'user.name=relay review replay', '-c', 'user.email=replay@relay.invalid']
 
-/** 14절의 대상과 통과 기준. A: 3번 중 gaps번 이상 request_gap인 묶음이 hits개 이상. B: request_gap인 묶음이 hits개 이하 */
-export const TARGET_A = { scenario: '14-double-notify', bundles: 8, repeats: 3, gaps: 2, hits: 4 }
-const B_LIST = '07-two-bugs 08-timezone 10-invoice-rounding 19-split-report 40-three-libraries'
-const B_SCENARIOS = `${B_LIST} 43-split-engines`.split(' ')
-export const TARGET_B = { scenarios: B_SCENARIOS, each: 5, hits: 4 }
-const B_BUNDLES = TARGET_B.scenarios.length * TARGET_B.each
-const DESIGN_CALLS = TARGET_A.bundles * TARGET_A.repeats + B_BUNDLES
+/**
+ * 호출마다 새로 만드는 claude 설정 폴더의 파일: 평가가 실행마다 만든 설정 폴더(relay-v2 eval lib/env.mjs makeClaudeConfig)의
+ * 처음 내용과 같다. 대화형 온보딩을 건너뛰고 입력창의 추천 문구를 끈다
+ */
+export const CONFIG_FILES: Record<string, object> = {
+  '.claude.json': { hasCompletedOnboarding: true },
+  'settings.json': { promptSuggestionEnabled: false },
+}
+
+/**
+ * 운영자의 Claude Code 세션 변수: 리뷰어(claude -p)에게 넘기지 않는다(스킬·플러그인 동기화, 세션 연결, effort 등이 리뷰를
+ * 바꿀 수 있다). 평가의 cleanEnv는 PATH, HOME, 프록시, 인증서 같은 고른 변수만 앱에 넘겼다
+ */
+export const OPERATOR_ENV = /^(?:CLAUDECODE|CLAUDE_\w*|ANTHROPIC_\w*)$/
+
+/** 이 프로세스의 환경에서 지울 이름(OPERATOR_ENV 가운데 pass에 없는 것). claude -p는 이 프로세스의 환경을 물려받는다 */
+export function operatorEnv(env: NodeJS.ProcessEnv, pass: string[] = []): string[] {
+  return Object.keys(env).filter((k) => OPERATOR_ENV.test(k) && !pass.includes(k))
+}
 
 /** --dry의 가짜 리뷰어가 내는 고정 지적(structured_output 꼴): 올림 둘(request_gap/low, 구조/medium), 메모 둘 */
 export const DRY_FINDINGS = [
@@ -57,34 +78,6 @@ export const DRY_FINDINGS = [
   { severity: 'low', raise: 'structure', text: '가짜 리뷰어(--dry): 구조 low' },
   { severity: 'low', text: '가짜 리뷰어(--dry): 갈래 없음' },
 ]
-
-type Target = 'A' | 'B'
-
-/** run.json options에서 읽는 칸(relay-v2 eval episode.mjs) */
-export interface RunOptions {
-  agentModel?: string
-  effort?: string
-  humanMode?: string
-  qualityOverlay?: { sha256?: string } | null
-}
-
-/** 저장된 내보내기 묶음 하나 */
-export interface Bundle {
-  scenario: string
-  arm: string
-  run: number
-  work: string
-  hidden_pass: boolean
-  /** 실행 폴더(<시나리오>/<쪽>-<n>) */
-  dir: string
-  options: RunOptions
-}
-
-export interface Call {
-  target: Target
-  key: string
-  repeat: number
-}
 
 interface CheckoutFacts {
   /** 덧씌운 품질 기준이 평가의 것과 같은가(run.json의 sha256) */
@@ -131,76 +124,29 @@ const readJson = <T>(p: string): T => JSON.parse(readFileSync(p, 'utf8')) as T
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const sha256 = (t: string) => createHash('sha256').update(t).digest('hex')
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
-export const keyOf = (b: Pick<Bundle, 'scenario' | 'arm' | 'run' | 'work'>) =>
-  `${b.scenario}/${b.arm}-${b.run}/${b.work}`
-
-// ── 묶음 고르기 ─────────────────────────────────────────────────────────────
-
-interface StoredRun {
-  error?: unknown
-  outcome?: { success?: unknown } | null
-  options?: RunOptions
-  works?: { id: string; exportedHead?: string | null; gate?: { export?: boolean } }[]
-}
-
-/** 배치 하나(results/m2-main-<시나리오>)의 relay3·relay3-noreview 내보내기 묶음 */
-export function readBundles(results: string, scenario: string): Bundle[] {
-  const batch = path.join(results, `m2-main-${scenario}`)
-  const sDir = path.join(batch, scenario)
-  if (!existsSync(path.join(batch, 'report.json')) || !existsSync(sDir)) return []
-  const out: Bundle[] = []
-  for (const name of readdirSync(sDir).sort()) {
-    const [, arm = '', n] = /^(.+)-(\d+)$/.exec(name) ?? []
-    const dir = path.join(sDir, name)
-    if (!ARMS.includes(arm) || !existsSync(path.join(dir, 'run.json'))) continue
-    const run = readJson<StoredRun>(path.join(dir, 'run.json'))
-    const success = run.outcome?.success
-    if (run.error !== undefined && run.error !== null) continue
-    if (typeof success !== 'boolean' || run.options?.humanMode === 'hands-off') continue
-    const options = run.options ?? {}
-    const id = { scenario, arm, run: Number(n), hidden_pass: success, dir, options }
-    for (const w of run.works ?? []) {
-      const ev = path.join(dir, 'works', w.id, 'evidence.json')
-      if (w.gate?.export !== true || !existsSync(ev)) continue
-      if (readJson<EvidenceBundle>(ev).head === w.exportedHead) out.push({ ...id, work: w.id })
-    }
-  }
-  return out
-}
-
-const order = (a: Bundle, b: Bundle) => a.run - b.run || cmp(a.arm, b.arm) || cmp(a.work, b.work)
-
-/** n개를 고른다: (회차, 쪽, Work) 차례로 실행마다 첫 Work를 먼저, 모자라면 같은 차례로 나머지에서 */
-export function spread(bundles: Bundle[], n: number): Bundle[] {
-  const sorted = [...bundles].sort(order)
-  const seen = new Set<string>()
-  const first = sorted.filter((b) => !seen.has(b.dir) && seen.add(b.dir))
-  return [...first, ...sorted.filter((b) => !first.includes(b))].slice(0, n)
-}
-
-/** 14절의 계획: 대상 A(모두, 3번씩)와 B(시나리오마다 다섯, 1번씩) */
-export function plan(all: Bundle[]): { target: Target; bundle: Bundle; repeats: number }[] {
-  const a = all.filter((b) => b.scenario === TARGET_A.scenario && !b.hidden_pass).sort(order)
-  const passed = (s: string) => all.filter((x) => x.scenario === s && x.hidden_pass)
-  const b = TARGET_B.scenarios.flatMap((s) => spread(passed(s), TARGET_B.each))
-  const as = (target: Target, repeats: number) => (bundle: Bundle) => ({ target, bundle, repeats })
-  return [...a.map(as('A', TARGET_A.repeats)), ...b.map(as('B', 1))]
-}
-
-export function callsOf(p: ReturnType<typeof plan>): Call[] {
-  return p.flatMap(({ target, bundle, repeats }) =>
-    Array.from({ length: repeats }, (_, i) => ({ target, key: keyOf(bundle), repeat: i + 1 })),
-  )
-}
 
 // ── 레포와 리뷰 ─────────────────────────────────────────────────────────────
 
-/** 평가가 앱에 준 claude 환경(relay-v2 eval lib/env.mjs agentEnv) */
-export function evalEnv(o: RunOptions): Record<string, string> {
+/**
+ * 평가가 앱에 준 claude 환경: cleanEnv가 더한 것(자동 업데이트 알림과 입력창 추천 끔), agentEnv(모델과 effort), 이 호출의
+ * 설정 폴더(makeConfigDir)
+ */
+export function evalEnv(o: RunOptions, configDir: string): Record<string, string> {
   return {
+    DISABLE_AUTOUPDATER: '1',
+    CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: 'false',
     ...(o.agentModel ? { ANTHROPIC_MODEL: o.agentModel } : {}),
     ...(o.effort ? { CLAUDE_CODE_EFFORT_LEVEL: o.effort } : {}),
+    CLAUDE_CONFIG_DIR: configDir,
   }
+}
+
+/** 호출 하나의 새 claude 설정 폴더(CONFIG_FILES, makeClaudeConfig처럼 두 칸 들여 쓴 JSON). 부른 쪽이 지운다 */
+export function makeConfigDir(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'relay-review-replay-config-'))
+  for (const [name, value] of Object.entries(CONFIG_FILES))
+    writeFileSync(path.join(dir, name), JSON.stringify(value, null, 2))
+  return dir
 }
 
 /** 사용량의 수 칸만(맨 위) */
@@ -279,7 +225,8 @@ export function reviewFields(r: ClaudeJsonResult): ReviewFields {
     const k = `${f.raise ?? ''}/${f.severity}`
     counts[k] = (counts[k] ?? 0) + 1
   }
-  const gap = findings.some((f) => f.raise === 'request_gap' && raises(f))
+  // 리뷰어가 request_gap을 냈는가: 올림 규칙과 따로 센다(V30을 메모로 내린 빌드에서도 같은 값)
+  const gap = findings.some((f) => f.raise === 'request_gap')
   const memos = findings.filter((f) => !raises(f)).length
   return { status: 'done', findings, raises: counts, memos, request_gap: gap, usage }
 }
@@ -323,9 +270,11 @@ async function runBundle(b: Bundle, target: Target, repeats: number[], o: RunOpt
     }
     for (const repeat of repeats) {
       const t0 = Date.now()
+      const config = makeConfigDir()
       const r = await o
-        .reviewer({ cwd: co.dir, prompt, env: evalEnv(b.options) })
+        .reviewer({ cwd: co.dir, prompt, env: evalEnv(b.options, config) })
         .catch((e: unknown): ClaudeJsonResult => ({ ok: false, error: message(e) }))
+        .finally(() => rmSync(config, { recursive: true, force: true }))
       const rest = { request: request !== null, prompt_chars: prompt.length, checkout: facts }
       write({ ...common, prompt_version, repeat, ...reviewFields(r), ...rest, ms: Date.now() - t0 })
     }
@@ -352,7 +301,8 @@ export interface Summary {
   /** 계획이 설계의 규모(A 8×3, B 30×1)인가 */
   design: boolean
   a: { rows: Row[]; hits: number; pass: boolean | null }
-  b: { rows: Row[]; hits: number; pass: boolean | null }
+  /** excluded: B에서 뺀 묶음(요청이 Work의 몫보다 넓음, review-replay-plan.ts excludedFromB) */
+  b: { rows: Row[]; hits: number; pass: boolean | null; excluded: string[] }
   structure: Record<Target, { all: number; up: number }>
   raises: Record<Target, Record<string, number>>
   flips: { bundles: number; request_gap: number; any_raise: number; structure_up: number }
@@ -366,8 +316,8 @@ const num = (l: Line, k: string) => l.usage?.[k] ?? 0
 const INPUT = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']
 const tokens = (l: Line) => INPUT.reduce((n, k) => n + num(l, k), 0)
 
-/** 계획된 호출마다 끝난 줄(다시 돈 것은 뒤의 끝난 줄)로 14절의 기준과 보고 값을 센다 */
-export function summarize(lines: Line[], calls: Call[]): Summary {
+/** 계획된 호출마다 끝난 줄(다시 돈 것은 뒤의 끝난 줄)로 14절의 기준과 보고 값을 센다. excluded는 B에서 뺀 묶음 */
+export function summarize(lines: Line[], calls: Call[], excluded: string[] = []): Summary {
   const latest = new Map<string, Line>()
   for (const l of lines) {
     const k = `${l.key}#${l.repeat}`
@@ -408,7 +358,12 @@ export function summarize(lines: Line[], calls: Call[]): Summary {
     calls: calls_,
     design: calls.length === DESIGN_CALLS && rows.A.length === TARGET_A.bundles,
     a: { rows: rows.A, hits: aHits, pass: complete('A') ? aHits >= TARGET_A.hits : null },
-    b: { rows: rows.B, hits: bHits, pass: complete('B') ? bHits <= TARGET_B.hits : null },
+    b: {
+      rows: rows.B,
+      hits: bHits,
+      pass: complete('B') ? bHits <= TARGET_B.hits : null,
+      excluded,
+    },
     structure,
     raises: byKind,
     flips: {
@@ -457,6 +412,7 @@ export function summaryText(s: Summary): string {
     ),
     `대상 B (통과 묶음 × 1번): request_gap을 올린 묶음 ${s.b.hits}/${s.b.rows.length} → ${verdict(s.b.pass)} (기준: ${TARGET_B.hits}개 이하)`,
     ...s.b.rows.filter((r) => r.done.some((l) => l.request_gap)).map((r) => `  ${r.key}`),
+    `B에서 뺀 묶음(숨긴 시험은 통과했지만 요청이 Work의 몫보다 넓음): ${list(s.b.excluded)}`,
   )
   const both = s.a.pass === true && s.b.pass === true
   const fail = s.a.pass === false || s.b.pass === false
@@ -518,6 +474,7 @@ async function main(argv: string[]): Promise<void> {
       scenarios: { type: 'string', default: path.join(ROOT, '../relay-v2/app/eval/scenarios') },
       prompts: { type: 'string' },
       keep: { type: 'boolean', default: false },
+      'pass-env': { type: 'string', default: '' },
     },
   })
   const out = path.resolve(
@@ -526,10 +483,12 @@ async function main(argv: string[]): Promise<void> {
         ? path.join(tmpdir(), 'relay-review-replay.dry.jsonl')
         : path.join(ROOT, 'docs/experiments/m2.1/review-replay.jsonl')),
   )
-  const planned = plan(
-    [TARGET_A.scenario, ...TARGET_B.scenarios].flatMap((s) => readBundles(v.results, s)),
+  const all = [TARGET_A.scenario, ...TARGET_B.scenarios].flatMap((s) =>
+    readBundles(v.results, s, readReport(v.scenarios, s)),
   )
+  const planned = plan(all)
   const calls = callsOf(planned)
+  const excluded = excludedFromB(all)
   if (!v.summary) {
     let lines = readLines(out)
     if (lines.length > 0 && !v.resume) {
@@ -546,12 +505,15 @@ async function main(argv: string[]): Promise<void> {
     const todo = v.limit === undefined ? left : left.slice(0, int(v.limit))
     const bin = v.dry ? null : findClaude(process.env)
     if (!v.dry && bin === null) throw new Error('claude를 찾지 못함(CLAUDE_BIN이나 PATH)')
+    // 운영자의 세션 변수를 리뷰어에게 넘기지 않는다(claude를 찾은 뒤에)
+    for (const k of operatorEnv(process.env, v['pass-env'].split(',').filter(Boolean)))
+      Reflect.deleteProperty(process.env, k)
     const repeatsOf = (b: Bundle) => todo.filter((c) => c.key === keyOf(b)).map((c) => c.repeat)
     const jobs = planned.map((p) => ({ ...p, repeats: repeatsOf(p.bundle) }))
     mkdirSync(path.dirname(out), { recursive: true })
     const say = (t: string) => process.stderr.write(`${t}\n`)
     say(
-      `${v.dry ? '가짜 리뷰어(--dry)' : `claude -p (${bin ?? ''}, 환경: ANTHROPIC_MODEL, CLAUDE_CODE_EFFORT_LEVEL은 run.json options)`}로 ${todo.length}번 부른다 (계획 ${calls.length}, 끝남 ${done.size}) → ${out}`,
+      `${v.dry ? '가짜 리뷰어(--dry)' : `claude -p (${bin ?? ''}, 환경: ANTHROPIC_MODEL, CLAUDE_CODE_EFFORT_LEVEL은 run.json options, CLAUDE_CONFIG_DIR은 호출마다 새 임시 폴더, 운영자의 CLAUDE*·ANTHROPIC_* 변수는 뺌)`}로 ${todo.length}번 부른다 (계획 ${calls.length}, 끝남 ${done.size}) → ${out}`,
     )
     let n = 0
     const opts: RunOpts = {
@@ -569,7 +531,7 @@ async function main(argv: string[]): Promise<void> {
     const work = jobs.filter((j) => j.repeats.length > 0)
     await pool(work, int(v.jobs), (j) => runBundle(j.bundle, j.target, j.repeats, opts))
   }
-  console.log(summaryText(summarize(readLines(out), calls)))
+  console.log(summaryText(summarize(readLines(out), calls, excluded)))
 }
 
 const entry = process.argv[1]

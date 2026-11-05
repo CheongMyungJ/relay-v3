@@ -1,11 +1,11 @@
 # M2.1 평가 규약
 
 - 상태: **초안 (2026-11-05)**. 시범으로 도구를 확인한 뒤 고정한다(9절). 고정한 뒤에는 바꾸지 않는다. 바꿀 일이 생기면 사람에게 묻고 까닭을 `log.md`에 적는다.
-- 고정: `<날짜, 고정 때 채움>`. 빌드: relay3-m21 = relay-v3 `<SHA, 고정 때 채움>`(브랜치 `ccr-19f35f13-cr75ji`의 끝), relay3-m2p = relay-v3 `8526e0c`, 평가 도구 = relay-v2 `5f7bf2e` + `<평가 도구 커밋, 고정 때 채움>`. O2가 기준을 넘지 못하면 relay3-m21은 V30을 메모로 내린 커밋 `<SHA, 그때 채움>`으로 돈다(6절).
+- 고정: `<날짜, 고정 때 채움>`. 빌드: relay3-m21 = relay-v3 `<SHA, 고정 때 채움>`(브랜치 `ccr-19f35f13-cr75ji`의 끝), relay3-m2p = relay-v3 `8526e0c`, 평가 도구 = relay-v2 `5f7bf2e` + `<평가 도구 커밋, 고정 때 채움>`. O2가 기준을 넘지 못하면 relay3-m21은 V30을 메모로 내린 커밋(`v30-memo.patch`를 얹은 것) `<SHA, 그때 채움>`으로 돌고, 평가 도구는 그 규칙을 따르는 커밋 `<SHA, 그때 채움>`으로 돈다(6절).
 - 근거: [m2.1-design.md](../../m2.1-design.md) 14절(이 규약의 모양)과 2~13절의 '만든 것', [M2 규약](../m2/protocol.md)(지표의 정의), [M2 보고](../m2/report.md).
 - 결정: V14 ✅(실제 Claude 평가 n≥5, 배치마다 규모를 먼저 알림). 이번 규모(실제 실행 65회, O2 리뷰 재생 54번)는 사용자가 승인했다(2026-11-05, 설계 15절 1). 철학 원칙 5('하나씩'), [devices.md](../../devices.md)의 끄는 조건과 최소 n.
 - 도구: relay-v2 평가 도구(`relay-v2/app/eval`)에 M2.1 쪽(`relay3-m21`, `relay3-m2p`), M2.1 화면의 운전, 장치 지표(`lib/relay3-devices.mjs`), 집계 `m21-primary.mjs`를 더해 쓴다. 시나리오·숨긴 시험·판정은 v2 것을 쓴다. 0단계는 relay-v3 쪽 도구다(O1 `npm run test:replay`, O2 `npm run replay:review`).
-- 시범 실행: `<고정 전에 채움>`. 결과는 판정에 넣지 않는다.
+- 시범 실행: `<고정 전에 채움>`. 결과 폴더는 `m21-pilot-*`이고 판정과 집계에 넣지 않는다(9절 1).
 
 ## 1. 묻는 것
 
@@ -24,7 +24,7 @@ M2에서 relay3은 숨긴 시험(P1)으로는 relay@auto와 가를 수 없었고
 
 | 쪽 | 빌드 | 사람 역할 설명서 | 끝내기 |
 |---|---|---|---|
-| `relay3-m21` | relay-v3 고정 SHA. 이 설계를 만든 빌드(`RELAY3_APP`, 기본 relay-v2 옆의 `relay-v3`) | `guides/relay3.md`(M2.1 화면) | 열린 것이 없으면 한 번(V25). 아니면 걸린 끝이나 상자 |
+| `relay3-m21` | relay-v3 고정 SHA. 이 설계를 만든 빌드(`RELAY3_APP`, 기본 relay-v2 옆의 `relay-v3`). O2가 기준을 넘지 못하면 그 위에 `v30-memo.patch`를 얹은 커밋(6절) | `guides/relay3.md`(M2.1 화면) | 열린 것이 없으면 한 번(V25). 아니면 걸린 끝이나 상자 |
 | `relay3-m2p` | relay-v3 `8526e0c`: M2 빌드 `53f7fbb`에 미룬 고침 셋을 합친 것(`RELAY3_M2P_APP`, 기본 relay-v2 옆의 `relay-v3-m2p`에 꺼내 빌드) | `guides/relay3-m2p.md`(M2의 `guides/relay3.md`와 같은 글) | 두 단계(V18): [끝내기] 뒤 [끝 확정] |
 | `relay@auto` | relay-v2 `5f7bf2e`의 앱(M2와 같음. 평가 도구 커밋은 `app/eval`과 문서만 바꾼다) | v2 설명서 그대로 | v2 자율 |
 
@@ -45,10 +45,11 @@ M2에서 relay3은 숨긴 시험(P1)으로는 relay@auto와 가를 수 없었고
 | 19-split-report | 예시 자료(NaN, V27), 기준 확인(padEnd, V28) | 설계 | 5 | | |
 | 40-three-libraries | 모듈마다 브랜치(V22) | 설계 | 5 | | |
 | H1 39-three-modules | 모듈 셋. 모듈마다 리뷰어가 달라 변경이 나뉘기를 바람. M2에 없음 | 봉인 | 5 | 5 | 5 |
-| H2 (46-…, 고정 때 채움) | 원인 둘. 23의 Work 2를 한 Work로 둔 것으로, 23의 레포에 Work 1 참조 패치를 얹어 만든다. 14와 같은 레포 영역 | 봉인 | 5 | 5 | 5 |
+| H2 47-double-notify-digest-w2 | 원인 둘. 23의 Work 2를 한 Work로 둔 것으로, 23의 레포에 Work 1 참조 패치를 얹어 만든다. 14와 같은 레포 영역 | 봉인 | 5 | 5 | 5 |
 | H3 09-stock-negative | 증상과 원인이 다른 모듈에 있고, 요청은 엉뚱한 모듈을 가리킨다. 리포트만 막는 고침은 작아서 자동 조건을 채우기 쉽다(거짓 자동과 V26의 G1 손실) | 봉인 | 5 | 5 | 5 |
 
 - 회차: 쪽·시나리오마다 5.
+- H2(`47-double-notify-digest-w2`)는 이 준비 세션(2026-11-05)에 만들었다. 설계자가 읽지 않은 에이전트가 23의 Work 2로 만들고 `eval/check-scenario.mjs`로 확인했다. `46-rough-modules`는 다른 시나리오다. H2의 숨긴 시험과 참조 패치는 트리에 평문으로 있으므로, 설계자는 배치 1·2가 끝날 때까지 그 폴더의 `hidden/`, `reference.patch`, `traps`를 열지 않기로 한다(8절). 만든 때와 그때의 relay-v3 SHA는 `log.md`에 있다.
 - 설계 셋은 저장된 M2 relay3과 relay@auto 값과 견줘 기제만 보고한다. 결론에 쓰지 않는다(M2 규약 6절). 다만 설계 셋의 relay3-m21 실행도 G1·G2와 장치 지표에 들고, 14는 거짓 자동(규칙 3)과 V29의 최소 n에도 든다.
 - 결론(질문 1~3)은 봉인 셋에서만 낸다.
 
@@ -106,23 +107,30 @@ M2에서 relay3은 숨긴 시험(P1)으로는 relay@auto와 가를 수 없었고
 
 ### 5.3 장치 지표
 
-앱의 `events.jsonl`과 `work.json`에서 평가 도구가 센다(설계 14절 '장치마다 쓰는 지표'). 주로 `relay3-m21` 실행에서 센다. `relay3-m2p`에는 없는 장치가 많아 그 칸은 비운다(올림과 메모는 두 빌드 모두 센다). 설계 셋은 저장된 M2 값과 나란히 보인다. M2 값은 규약 밖으로 센 것이다.
+앱의 `events.jsonl`과 `work.json`에서 평가 도구가 센다(설계 14절 '장치마다 쓰는 지표'). 주로 `relay3-m21` 실행에서 센다. `relay3-m2p`에는 없는 장치가 많아 그 칸은 비운다. 설계 셋은 저장된 M2 값과 나란히 보인다. M2 값은 규약 밖으로 센 것이다.
+- 올림과 메모는 두 빌드 모두 세되, 각자 그 빌드의 관문이 쓴 규칙으로 센다. `relay3-m21`은 V26 규칙(구조/low와 갈래 없는 지적은 메모. O2가 기준을 넘지 못했으면 `request_gap`도 메모)이다. `relay3-m2p`와 M2 묶음은 V4 규칙(raise가 있는 지적은 심각도와 상관없이 모두 올림)이다. 표에는 규칙 이름을 붙인다. 그래서 두 빌드의 올림 수는 같은 지적을 다르게 센 것이고, 견주는 값이 아니다.
 
 | 장치 | 세는 것 | M2 값 → 목표 | 끄는 조건(devices.md) · 최소 n |
 |---|---|---|---|
 | V21 한 Work | 회당 Work 수, 세션이 만들었는데 relay가 재지 않은 브랜치 수 | 40의 relay3·relay3-noreview 10회 가운데 9회가 Work 셋 → 회당 1.0 | 장치가 아님 |
-| V22 단위 브랜치 | Work당 내보내기 수, 단위가 있는 계약과 단위 브랜치 전달의 수, 내보내기 수가 사람이 원한 단위 수와 같은가, '단위 브랜치 없음'과 통합 실패 | — | 장치가 아님 |
-| V23 미리 리뷰 | 미리 리뷰·다시 쓴 리뷰·멈춘 리뷰의 수, [끝내기]를 누를 때 리뷰가 끝나 있던 비율, Work당 리뷰 호출과 리뷰 토큰, [끝내기] 뒤 순수 기다림(5.4) | 기다림 1.23/회 → 0.3 이하, 끝나 있던 비율 80% 이상 | 계기만: Work당 리뷰 수(단위 브랜치 Work는 내보내기당)가 M2의 2배를 넘는데 [끝내기] 뒤 기다림이 반으로 줄지 않으면 PR과 [끝내기] 계기로 돌아간다 · 5×시나리오 |
+| V22 단위 브랜치 | Work당 내보내기 수, 단위가 있는 계약과 단위 브랜치 전달의 수, 내보내기 수가 사람이 원한 단위 수와 같은가, '단위 브랜치 없음'(`export_missing` 기록 수), 통합 증거: 단위 브랜치 Work마다 잰 수(`evidence` 기록 가운데 `integration: true`), 마지막 통합 증거에 열린 것이 있었나(`open > 0`), 커밋이 Work 브랜치에 없는 단위 브랜치의 수(not_on_work_branch: 내보내기 관문 까닭의 '단위 브랜치의 커밋이 Work 브랜치에 없음'에서 브랜치마다 한 번) | — | 장치가 아님 |
+| V23 미리 리뷰 | 미리 리뷰·다시 쓴 리뷰·멈춘 리뷰의 수, [끝내기]를 누를 때 리뷰가 끝나 있던 비율, Work당·내보내기당 리뷰 호출과 리뷰 토큰, [끝내기] 뒤 순수 기다림(5.4) | 기다림 1.23/회 → 0.3 이하, 끝나 있던 비율 80% 이상 | 계기만: 봉인 셋에서 relay3-m21의 Work당 리뷰 호출(단위 브랜치 Work는 내보내기당)이 기준의 2배를 넘는데, [끝내기] 뒤 순수 기다림(회당)이 기준의 반 아래로 줄지 않으면 PR과 [끝내기] 계기로 돌아간다 · 봉인 시나리오마다 두 쪽 5회 |
 | V24 되먹임 | 종류별(결정론, 리뷰) 라운드, 보낸 사실·지적의 결과(고쳐짐, 까닭을 대고 넘김, 해로움), 보내지 않은 까닭(`feedback_held`: 상한, 사람 몫 올림, 쓰다 둔 글, 최근 입력), [세션에 넘기기] 수와 그 결과, 질문을 기다리던 세션에 끼어든 횟수(표본) | 리뷰 왕복 1.73/회, review_relay 0.47/회, evidence_confusion 1.20/회 | 종류마다: 고쳐짐이 50% 아래, 해로움이 10% 넘음, 끼어듦이 10% 넘음 가운데 하나면 그 종류는 [세션에 넘기기]만. P2가 relay3-m2p보다 구간 밖으로 낮으면 리뷰 종류를 끈다 · 종류마다 30건 |
-| V25 한 번 끝 | 끝 방식(한 번, 걸림, 상자: `ended.how`), [끝내기] 누름, 걸린 끝, 상자, 새 커밋으로 지운 수, 끝 범주 차례(5.4), 끝낸 뒤 바로잡은 일(5.4), 끝 방식별 P1 | 끝 4.63/회, 상자를 다시 띄움 2 → 0 | 한 번에 끝낸 Work에서 바로잡은 일이 10%를 넘거나, 한 번 끝의 P1이 상자 끝보다 δ(10%p) 넘게 낮으면 두 단계로 · 30 Work |
+| V25 한 번 끝 | 끝 방식(한 번, 걸림, 상자: `ended.how`), [끝내기] 누름, 걸린 끝, 상자, 새 커밋으로 지운 수, 끝 범주 차례(5.4), 끝낸 뒤 바로잡은 일(5.4), 끝 방식별 P1 | 끝 4.63/회, 상자를 다시 띄움 2 → 0 | 상자 없이 끝낸 Work(`ended.how`가 once 또는 armed: 걸린 끝도 리뷰 뒤 상자 없이 끝난다)에서 바로잡은 일이 10%를 넘거나, 상자 없이 끝낸 실행(끝난 Work가 모두 once·armed)의 P1이 상자에서 끝낸 실행(하나라도 box)보다 δ(10%p) 넘게 낮으면 두 단계로 · 상자 없이 끝낸 Work 30 |
 | V26 올림 기준 | 리뷰한 내보내기당 올림과 메모, 갈래별·심각도별 올림(core `raises`의 규칙으로 센다), 메모만 있던 내보내기의 숨긴 시험 실패 | M2 올림 97개 가운데 구조/low 56 | V31 재생과 합쳐, 숨긴 시험이 실패했는데 structure/low 지적 하나만 막을 수 있었던 내보내기가 하나라도 있으면 structure/low를 다시 올린다 · 내보내기 30 |
 | V27 예시 자료 | 예시 자료 사실(없음, 다름, 읽지 못함)이 난 Work, 19의 NaN | 27/45 Work → 20개 중 1 이하 | 장치를 더하지 않음('수용 시험' 줄의 지표) |
 | V28 기준 확인 | 확인이 돈 제출의 비율(`probe.ran`), 돌려보낸 제출(`probe.problems`), 확인 시간 중앙값, 승인 뒤 기준 까닭으로 낸 계약 바꾸기(5.4), 끝에 남은 지킴 줄 '증거 없음' | M2 배치 1: 계약 바꾸기 요청 28번 가운데 약 14번이 기준 규칙에서 | 잡은 것과 승인 뒤 기준 까닭의 바꾸기를 합쳐 20 Work당 1 아래, 확인이 돈 제출이 20% 아래, 늘어난 지연의 중앙값이 2분을 넘음 가운데 하나면 뺀다 · 30 Work |
 | V29 계약이 요청을 설명 | 원인 둘(14, H2)에서 모든 원인을 담은 계약의 비율(5.4), 그 시나리오의 P1, 증상 영역의 비목표 수, 원인 둘이 아닌 시나리오의 질문 수·P3·제출까지의 시간 | 14 relay3: 1/5 | 원인 둘 실행 10회에서 모든 원인을 담은 계약이 3회 아래이거나, 원인이 하나인 시나리오(relay3-m2p와 견줄 수 있는 H1, H3)에서 P3가 relay3-m2p보다 1 넘게 늘면 지침 문단을 뺀다 · 원인 둘 실행 10회 |
 | V30 요청 대조 | `request_gap`을 올린 실행과 내보내기, 잡음, 거짓 올림, 사람이 넘긴 뒤 고쳐진 비율 | 14: G1 1/4 | 1단계: 잡음이 10건 이상에서 50% 아래이거나 거짓 올림이 통과한 내보내기 30개 이상에서 15%를 넘으면 메모로. 2단계: 메모 30건 이상에서 사람이 넘겨 고쳐진 것이 10% 아래면 요청 입력을 뺀다 · 잡음 10건, 통과 30개(재생 포함) |
 
-- V30의 잡음은 '자동 조건을 채웠는데 숨긴 시험이 실패한 내보내기'에서 `request_gap`을 올린 비율이다. 온라인에서는 V30이 관문에 들어 있으므로, 관문의 사람 머지 사실이 '리뷰 올림(요청과 어긋남)'뿐이고 자동 조건을 채운 실패 내보내기와 거짓 자동 실행의 내보내기를 분모로 센다. 오프라인은 6절.
+- V23의 기준은 같은 배치의 `relay3-m2p` 봉인 셋 실행이다(같은 날, 같은 도구. devices.md의 'M2의 2배'를 이 값으로 읽는다). 리뷰 호출은 앱이 부른 `claude -p`에서 다시 쓴 리뷰와 멈춘 리뷰를 뺀 수다. Work당과 내보내기당(Work의 내보내기 수, 옛 기록은 1)을 둘 다 내고, 끄는 조건은 내보내기당으로 견준다(one_branch Work는 둘이 같다). '[끝내기] 뒤 순수 기다림'은 5.4의 P3 갈래 판정에서 wait 갈래 가운데 [끝내기]를 누른 뒤의 차례를 회당으로 센 값이고, relay3-m21과 relay3-m2p를 같은 방법으로 판정한다. '반 아래로 줄지 않음'은 relay3-m21의 값이 relay3-m2p 값의 반보다 큰 것이다.
+- V30의 잡음은 '자동 조건을 채웠는데 숨긴 시험이 실패한 내보내기'에서 `request_gap`을 올린 비율이다. 온라인 값은 배치가 끝난 뒤 관문 재생으로 센다(`run.json`에는 관문의 까닭이 남지 않아 평가 도구로는 세지 못한다):
+  - 자료: relay3-m21의 모든 실행의 내보내기 묶음을 관문 재생 자료(`test/fixtures/gate-replay/m2.1.jsonl`, 9절 10)로 만든다. 단위는 관문 재생과 같다(Work 브랜치의 내보내기, 단위 브랜치마다의 내보내기). 숨긴 시험 결과는 실행의 값이다.
+  - 관문: 각 묶음을 초안 정책(O1과 같음)과 V26 규칙으로 core `gate`에 다시 돌리되, raise가 `request_gap`인 지적은 메모로 본다(그 지적의 raise를 지운 묶음).
+  - 분모: 숨긴 시험이 실패한 실행의 묶음 가운데 그 관문이 자동 조건을 채운 것. 분자: 그 가운데 묶음의 리뷰에 raise가 `request_gap`인 지적이 있는 것.
+  - 오프라인 값은 6절(O2 대상 A).
 - V30의 거짓 올림은 숨긴 시험을 모두 통과한 실행의 리뷰한 내보내기에서 `request_gap`을 올린 비율이다. O2의 대상 B를 함께 센다.
+- 두 값에서 '`request_gap`을 올림'은 리뷰어가 raise가 `request_gap`인 지적을 낸 것이다(심각도와 상관없이). V30을 메모로 내린 빌드에서도 같게 센다.
 
 ### 5.4 사람·AI가 판정하는 값 (배치가 끝난 뒤)
 
@@ -148,14 +156,35 @@ M2에서 relay3은 숨긴 시험(P1)으로는 relay@auto와 가를 수 없었고
 - 무엇: 저장된 M2 내보내기 묶음에 고정한 빌드의 리뷰어(`claude -p`, 요청을 담은 지금 판의 프롬프트와 스키마)를 다시 돌린다. 54번이다.
   - 대상 A: 14에서 숨긴 시험이 실패한 묶음 8개(relay3 넷, relay3-noreview 넷)를 3번씩, 24번.
   - 대상 B: 숨긴 시험을 통과한 묶음 30개(07, 08, 10, 19, 40, 43에서 다섯씩)를 1번씩, 30번.
-  - 묶음을 고르는 법과 레포를 만드는 법은 설계 14절 '만든 것' 그대로다. 관문 재생과 같은 규칙으로 고르고, B는 실행마다 첫 Work를 먼저 고른다. 예시 자료 확인(V27)은 넣지 않는다.
-- 명령: `npm run replay:review -- --dry`로 먼저 본 뒤 `npm run replay:review`(끊기면 `--resume`). 결과는 `docs/experiments/m2.1/review-replay.jsonl`이고, 요약(`--summary`)을 `result.md`에 옮긴다.
+  - 묶음을 고르는 법과 레포를 만드는 법은 설계 14절 '만든 것' 그대로다. 관문 재생과 같은 규칙으로 고르고, B는 (회차, 쪽, Work id) 차례로 실행마다 첫 Work를 먼저 고른다. 예시 자료 확인(V27)은 넣지 않는다.
+  - B는 깨끗한 일이어야 한다. 그래서 요청이 그 Work의 몫보다 넓은 묶음은 B에서 빼고, 남은 묶음에서 같은 차례로 다섯을 고른다(30 그대로). 그런 Work의 `request_gap`은 거짓 올림이 아닐 수 있다. 빼는 묶음은 Work가 여럿인 실행의 Work 가운데 다음 하나에 드는 것이다.
+    - `request.md`가 시나리오의 리포트 전부다: 리포트(여럿이면 모두)의 낱말 가운데 요청에 있는 것이 80% 이상이다. M2 묶음에서 몫만 받은 요청은 61% 이하, 리포트 전부를 받은 요청은 100%였다.
+    - 계약의 비목표 하나가 다른 Work나 브랜치를 말하며, 요청이 이름 부른 파일이나 함수를 이름 부른다(그 몫을 다른 Work로 넘김).
+    - 지금 자료에서는 40의 9개가 빠진다(모두 첫째 까닭: 세 모듈의 요청을 받고 계약이 둘을 다른 Work로 넘긴 Work). 그래서 40의 B는 relay3-1/0729062f, relay3-noreview-1/434678e3, relay3-2/045b5ff0, relay3-noreview-2/1e8bb67a, relay3-3/80fb17f6이다. 다른 시나리오의 B는 그대로다. 뺀 묶음은 요약에 적힌다.
+  - 리뷰어의 환경: 평가가 앱에 준 모델과 effort(run.json options), 호출마다 새로 만든 임시 `CLAUDE_CONFIG_DIR`(평가의 `makeClaudeConfig`와 같은 내용: 온보딩 건너뜀, 입력창 추천 끔), 평가의 `cleanEnv`가 더한 두 변수. 운영자의 설정 폴더(스킬, 플러그인, 훅)와 Claude Code 세션 변수(`CLAUDECODE`, `CLAUDE_*`, `ANTHROPIC_*`)는 넘기지 않는다. M2에서 앱의 리뷰어가 이렇게 돌았다. 인증에 그런 변수가 필요한 곳에서만 `--pass-env <이름>`으로 넘긴다.
+- 명령(고정한 relay-v3에서):
+  1. `npm run replay:review -- --dry`로 고른 묶음과 뺀 묶음을 본다.
+  2. 시범: `npm run replay:review -- --limit 1 --out /tmp/o2-pilot.jsonl`. 실제 호출 하나가 `status: done`, `request: true`로 끝나는지 본다. 이 줄은 판정에 쓰지 않고 레포에 두지 않는다.
+  3. `npm run replay:review`(끊기면 `--resume`). 결과는 `docs/experiments/m2.1/review-replay.jsonl`이고, 요약(`--summary`)을 `result.md`에 옮긴다.
 - **통과 기준:** 다음 둘을 모두 채운다.
   - 대상 A의 8개 가운데 4개 이상에서 3번 중 2번 이상 `request_gap`을 올린다.
   - 대상 B의 30개 가운데 4개 이하에서만 `request_gap`을 올린다.
-- **넘지 못하면:** V30은 메모로 내린 채 배치를 돈다.
-  - 메모로 내리는 것은 core `raises`가 `request_gap`을 메모로 보는 한 가지 변경이다(devices.md V30의 1단계와 같다). 리뷰어는 요청을 그대로 받고, '리뷰가 요청을 보지 않음' 사실도 그대로다.
-  - 그 커밋의 SHA를 머리의 고정 줄과 `log.md`에 적는다. 결과 전에 정한 갈래이므로 규약을 바꾼 것이 아니다.
+- **넘지 못하면:** V30은 메모로 내린 채 배치를 돈다(devices.md V30의 1단계와 같다).
+  - 메모로 내리는 변경은 미리 만들어 둔 `docs/experiments/m2.1/v30-memo.patch`다. `request_gap`의 규칙은 여러 곳에 있어 한 번에 바꾼다.
+    - core `review.ts`의 `raises`
+    - 렌더러 `findings.ts`의 `raisesFinding`(렌더러는 core를 가져오지 않아 같은 규칙을 다시 쓴다)
+    - 그 규칙을 보는 [단위]·[흐름]·[스모크] 시험
+    - devices.md의 V30 상태
+  - 리뷰어는 요청을 그대로 받고, '리뷰가 요청을 보지 않음' 사실도 그대로다. 프롬프트 판도 그대로라 끝난 리뷰를 다시 쓴다.
+  - 패치는 규약 준비 커밋(relay-v3에 `scripts/review-replay-plan.ts`가 있는 커밋)을 바탕으로 만들었다. 그 위에 얹으면 `npm run check`와 [스모크]가 통과함을 확인했다(2026-11-05, 임시 worktree).
+  - 차례(배치 1 전에 모두 한다, relay-v3에서):
+    1. `git apply --check docs/experiments/m2.1/v30-memo.patch && git apply docs/experiments/m2.1/v30-memo.patch`
+    2. `npm run check`
+    3. 커밋하고 push한다.
+    4. `npm run build`: relay3-m21이 띄우는 `out/`을 다시 만든다.
+    5. 그 SHA를 머리의 고정 줄과 `log.md`에 적는다.
+    6. 평가 도구의 거울(relay-v2 `app/eval/lib/relay3-devices.mjs`)에는 메모 규칙(`raisesMemo`, 시험 있음)이 이미 있다. 배치와 집계를 `RELAY3_RAISE_RULE=memo`를 준 환경에서 돌린다(`run-batch.sh`와 `m21-primary.mjs` 모두). request_gap을 낸 수는 규칙과 상관없이 센다.
+  - 결과 전에 정한 갈래이므로 규약을 바꾼 것이 아니다.
   - 끝나지 않은 호출이 남아 판정이 '모름'이면 `--resume`으로 잇는다. 배치는 판정이 난 뒤 시작한다.
 - 보고만: structure 지적 가운데 medium 이상의 비율, 반복 사이의 뒤집힘(request_gap, 올림 있음, structure medium 이상), 갈래·심각도별 올림, 토큰.
 - **O1에 대어 본 값(오프라인 거짓 자동, V26+V30):** O1의 V26 거짓 자동 묶음 셋(14의 relay3-1, 2, 5)은 대상 A에 든다. 그 가운데 O2에서 3번 중 2번 이상 `request_gap`을 올리지 않은 묶음의 수다. 보고만 하고, 규칙 3은 온라인 실행에 쓴다.
@@ -195,35 +224,61 @@ M2에서 relay3은 숨긴 시험(P1)으로는 relay@auto와 가를 수 없었고
 
 - 봉인 셋(H1, H2, H3)의 숨긴 시험(`hidden/`)과 참조 패치(`reference.patch`)는 배치 1·2가 모두 끝날 때까지 설계자가 열지 않는다. 판정 결과의 숨긴 시험 출력(실패한 시험의 이름과 메시지)도 같다. 배치 도중 봉인 셋의 판정 결과에서는 실행의 끝(ending)과 숨긴 시험 통과 여부만 본다. 숨긴 시험은 평가 도구가 돌린다.
 - H2는 M2.1 빌드를 다 만든 뒤에 만든다. H2를 만들며 본 것으로 relay3-m21 빌드, 사람 역할 설명서, 이 규약을 고치지 않는다.
+- H2(`47-double-notify-digest-w2`)는 설계자가 읽지 않은 에이전트가 만들었고 `eval/check-scenario.mjs`로 확인했다(3절). 숨긴 시험, 참조 패치, 함정(`traps`)은 relay-v2 트리에 평문으로 있다. 설계자는 배치 1·2가 끝날 때까지 그것들을 열지 않기로 한다. 시나리오의 `scenario.json`은 id와 제한(시간, 차례)을 볼 때만 연다. H2를 만든 뒤 빌드를 고친 것은 `log.md`에 까닭과 함께 적는다(H2를 보고 고친 것이 아님을 보이려고).
 - 고정 때 봉인 셋 세 시나리오의 `hidden/`과 `reference.patch`의 sha256을 `log.md`에 적는다(열지 않고 잰다). H2는 만든 때와 그때의 relay-v3 SHA도 적는다. 봉인을 풀 때 sha256이 같은지 본다.
 - 시범은 봉인 셋에서 돌리지 않는다.
-- 봉인을 푸는 때: 배치 2가 끝나고 `result.md`의 표를 낸 뒤. 그 뒤에 V29 판정(H2)과 실패 분석을 한다.
+- 봉인을 푸는 때: 배치 2가 끝나고 집계 표(`primary.md`, `result.md`가 가리킴)를 낸 뒤. 그 뒤에 V29 판정(H2)과 실패 분석을 한다.
 - H2는 14와 같은 레포 영역이다. 이것을 한계로 적는다(12절).
 
 ## 9. 배치와 차례
 
-1. **시범(고정 전):** 봉인 셋이 아닌 시나리오(측정하지 않는 08·10, 그리고 설계 셋의 40)에서 `relay3-m21`과 `relay3-m2p`를 몇 회 돌린다. 결과는 판정에 넣지 않는다. 볼 것:
-   - 운전자와 사람 역할이 한 번 끝, 걸린 끝 기다리기, 상자의 [그래도 끝내기]·[더 고치기]·[세션에 넘기기], 늘 보이는 '고칠 점' 칸을 다룬다(relay3-m21). relay3-m2p에서는 [고쳐 달라고 하기]와 [끝 확정]을 다룬다.
-   - 사람 역할의 입력이 xterm 길로 가서, 입력 뒤 60초 안이나 쓰다 둔 글이 있을 때 되먹임이 미뤄진다(`events.jsonl`의 `feedback_held`).
-   - 단위 브랜치 Work(40)의 내보내기마다 결론과 통합 증거가 `run.json`에 남는다.
-   - `run.json`의 장치 지표를 `m21-primary.mjs`가 읽는다.
-   - `run.json`의 빌드 기록(`appCommits`)에 두 relay-v3 체크아웃의 SHA가 있고 `+dirty`가 없다.
+1. **시범(고정 전):** 봉인 셋이 아닌 시나리오(측정하지 않는 08·10, 그리고 설계 셋의 40)에서 `relay3-m21`과 `relay3-m2p`를 몇 회 돌린다. 결과는 판정에 넣지 않는다.
+   - 먼저 relay-v3의 준비 변경을 커밋하고 `npm run build`한다(작업 트리가 깨끗해야 `appCommits`에 `+dirty`가 없다). 평가 도구(relay-v2)의 변경도 커밋하고 push한다(`config.json`의 `commit`이 돈 코드를 가리키게. `run-batch.sh`는 relay-v2가 깨끗하지 않으면 시작하지 않는다).
+   - 명령(relay-v2 `app/`에서). 결과 폴더는 모두 `eval/results/m21-pilot-<시나리오>`다. 집계 명령(9절 9)은 일곱 결과 폴더를 이름으로 받으므로 시범 폴더는 들어가지 않는다.
+     ```
+     node eval/run.mjs --scenarios 40-three-libraries --runs 1 --arms relay3-m21,relay3-m2p --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-pilot-40-three-libraries
+     node eval/run.mjs --scenarios 08-timezone --runs 1 --arms relay3-m21,relay3-m2p --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-pilot-08-timezone
+     node eval/run.mjs --scenarios 10-invoice-rounding --runs 1 --arms relay3-m21 --parallel 1 --quality-overlay --no-judge-purpose --out eval/results/m21-pilot-10-invoice-rounding
+     node eval/m21-primary.mjs eval/results/m21-pilot-* --out /tmp/m21-pilot.md
+     ```
+   - 볼 것:
+     - 운전자와 사람 역할이 한 번 끝, 걸린 끝 기다리기, 상자의 [그래도 끝내기]·[더 고치기]·[세션에 넘기기], 늘 보이는 '고칠 점' 칸을 다룬다(relay3-m21). relay3-m2p에서는 [고쳐 달라고 하기]와 [끝 확정]을 다룬다.
+     - 사람 역할의 입력이 xterm 길로 가서, 입력 뒤 60초 안이나 쓰다 둔 글이 있을 때 되먹임이 미뤄진다(`events.jsonl`의 `feedback_held`).
+     - `feedback_held {reason: 'draft'}`는 사람 역할이 Enter 없이 글을 남긴 뒤에만 있다. 그런 기록마다 그때 사람 역할의 마지막 터미널 입력(`turns.jsonl`)이 Enter 없이 끝난 글인지 본다. 질문 메뉴(AskUserQuestion)에 숫자 키로 답한 것이 마지막 입력이면 안 된다(앱은 메뉴의 PostToolUse에서 쓰다 둔 글 표시를 지운다). 그런 것이 있으면 고정하지 않고 고친다.
+     - 단위 브랜치 Work(40)의 내보내기마다 결론과 통합 증거가 `run.json`에 남는다: 장치 지표의 `integration`(잰 수, 마지막 통합 증거의 열린 것, Work 브랜치에 없는 단위 브랜치 수)과 `missingExports`.
+     - `run.json`의 장치 지표를 `m21-primary.mjs`가 읽는다(위의 `/tmp/m21-pilot.md`에 표가 찬다).
+     - `run.json`의 빌드 기록(`appCommits`)에 두 relay-v3 체크아웃의 SHA가 있고 `+dirty`가 없다.
+     - 보관 묶음이 새 파일을 담는다: `run-batch.sh`의 `find` 조건을 `m21-pilot-40-three-libraries`에 돌려 `request.md`, `works/*/evidence/*.json`, `works/*/feedback/*.md`가 드는지 본다.
 2. **고정:** 머리의 고정 줄을 채우고, 봉인 셋의 sha256과 5.4의 판정 지침을 `log.md`에 적고, 커밋한다.
-3. **0단계:** O1(찍기) → O2(54번). O2의 판정으로 V30의 상태를 정한다(6절).
-4. **배치 1 — 봉인 셋(45회):** 시나리오(39, H2, 9)마다 명령 하나, 결과 폴더 하나다. 세 쪽을 한 명령으로 함께 돌려 같은 때, 같은 도구로 잰다. 짝은 기본(relay3-m21:relay3-m2p, relay3-m21:relay@auto)이다.
-   `node eval/run.mjs --scenarios <시나리오> --runs 5 --arms relay3-m21,relay3-m2p,relay@auto --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-sealed-<시나리오>`
-5. **배치 2 — 설계 셋(20회):** 시나리오(7, 14, 19, 40)마다 명령 하나다.
-   `node eval/run.mjs --scenarios <시나리오> --runs 5 --arms relay3-m21 --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-design-<시나리오>`
-6. 차례의 까닭: 주지표(봉인 셋)가 먼저 차게 한다. relay3-m2p는 relay3-m21과 같은 배치에서 돈다. 설계 셋은 저장된 M2 값과 견주므로 같은 날일 필요가 없다.
-7. **보관:** 시나리오가 끝날 때마다 보고서와 실행 기록(`run.json`, `turns.jsonl`, `config.json`, `report.json`, `report.md`, `events.jsonl`, `ledger.jsonl`, `work.json`, `evidence.json`, `contract.json`, 되먹임 파일, `final/*.diff`)을 `docs/experiments/m2.1/runs/`에 묶어 커밋한다(M2 `run-batch.sh`처럼, 컨테이너가 다시 시작돼도 남게).
-8. **집계:** `node eval/m21-primary.mjs <배치 1·2 결과 폴더> <M2 m2-main의 07·14·19·40 결과 폴더> --h2 <H2 id> --out <relay-v3>/docs/experiments/m2.1/result.md`. M2 폴더는 설계 셋의 기제 보고에만 쓴다.
-9. **배치 뒤:** 봉인을 풀고 5.4의 값을 판정한다. `relay3-m21` 묶음을 관문 재생 자료(`test/fixtures/gate-replay/m2.1.jsonl`)로 더한다(설계 12절). 쉬운 말의 `report.md`를 쓰고, 등록부는 판정 규칙대로 고친다.
+3. **0단계:** O1(찍기) → O2(`--dry`, `--limit 1` 시범, 54번). O2의 판정으로 V30의 상태를 정한다. 넘지 못했으면 6절의 차례로 `v30-memo.patch`를 얹고 다시 빌드한다.
+4. **배치 1 전 커밋:** O2 결과(`docs/experiments/m2.1/review-replay.jsonl`), O1·O2 요약을 옮긴 `result.md`, (넘지 못했으면) 메모 커밋과 평가 도구 커밋을 relay-v3·relay-v2에 커밋하고 push한다. relay-v3 작업 트리가 깨끗해야 배치가 시작된다(`run-batch.sh`가 확인하고 멈춘다. 그래야 `appCommits`에 `+dirty`가 남지 않는다).
+5. **배치 1 — 봉인 셋(45회):** 시나리오(39, H2 47, 9)마다 명령 하나, 결과 폴더 하나다. 세 쪽을 한 명령으로 함께 돌려 같은 때, 같은 도구로 잰다. 짝은 기본(relay3-m21:relay3-m2p, relay3-m21:relay@auto)이다. relay-v3에서 `bash docs/experiments/m2.1/run-batch.sh sealed 39-three-modules 47-double-notify-digest-w2 09-stock-negative`로 돌린다. 이 스크립트가 시나리오마다 relay-v2 `app/`에서 돌리는 명령은 이것이다(`--scenarios 47`과 같다).
+   ```
+   node eval/run.mjs --scenarios 39-three-modules --runs 5 --arms relay3-m21,relay3-m2p,relay@auto --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-sealed-39-three-modules
+   node eval/run.mjs --scenarios 47-double-notify-digest-w2 --runs 5 --arms relay3-m21,relay3-m2p,relay@auto --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-sealed-47-double-notify-digest-w2
+   node eval/run.mjs --scenarios 09-stock-negative --runs 5 --arms relay3-m21,relay3-m2p,relay@auto --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-sealed-09-stock-negative
+   ```
+6. **배치 2 — 설계 셋(20회):** 시나리오(7, 14, 19, 40)마다 명령 하나다. `bash docs/experiments/m2.1/run-batch.sh design 07-two-bugs 14-double-notify 19-split-report 40-three-libraries`. 시나리오마다 `node eval/run.mjs --scenarios <시나리오 id> --runs 5 --arms relay3-m21 --parallel 2 --quality-overlay --no-judge-purpose --out eval/results/m21-design-<시나리오 id>`다.
+7. 차례의 까닭: 주지표(봉인 셋)가 먼저 차게 한다. relay3-m2p는 relay3-m21과 같은 배치에서 돈다. 설계 셋은 저장된 M2 값과 견주므로 같은 날일 필요가 없다.
+8. **보관(`run-batch.sh`):** 시나리오가 끝날 때마다 보고서와 실행 기록을 `docs/experiments/m2.1/runs/<모드>-<시나리오 id>.tar.gz`에 묶어 커밋하고 push한다(M2 `run-batch.sh`처럼, 컨테이너가 다시 시작돼도 남게). 이미 묶음이 있는 시나리오는 건너뛴다.
+   - 묶는 것: M2와 같은 `run.json`, `turns.jsonl`, `config.json`, `report.json`, `report.md`, `events.jsonl`, `ledger.jsonl`, `work.json`, `evidence.json`, `contract.json`, `final/*.diff`. 더해서 `request.md`, 단위 브랜치와 통합 증거의 묶음(`works/<id>/evidence/*.json`), 되먹임 파일(`works/<id>/feedback/*.md`).
+   - 배치가 도는 동안의 로그(`batch.log`, 시나리오마다의 로그)는 relay-v2 `eval/results/m21-batch/`에 쓰고, 시나리오가 끝난 뒤 묶음과 함께 `runs/`로 옮겨 커밋한다. 커밋하지 못하면 배치를 멈춘다. 커밋 메시지 끝에 붙일 줄은 `RELAY_BATCH_TRAILER`로 준다(이 폴더의 파일에 모델 이름을 쓰지 않는다).
+   - 보관 커밋은 `docs/experiments/m2.1/runs`만 바꾼다. 그래서 배치 중 relay-v3의 HEAD는 움직이고, `run.json`의 `appCommits.relay3`은 고정 SHA이거나 그 뒤의 보관 커밋이다. 앱 빌드(`out/`)는 고정 SHA에서 만든 그대로다. 배치 1을 시작하기 직전의 커밋(O2 결과·result.md·기록, 그리고 O2를 넘지 못했으면 메모 커밋까지 들어간 뒤)을 '배치 기준 SHA'로 log.md에 적는다. 집계 전에 기록된 SHA마다 `git diff --stat <배치 기준 SHA> <기록된 SHA> -- . ':!docs/experiments/m2.1/runs'`가 비었는지 본다(고정 SHA와 배치 기준 SHA 사이의 차이는 문서와 O2 결과, 메모 커밋뿐이어야 한다. 이것도 따로 본다). 평가 도구(relay-v2)도 작업 트리가 깨끗해야 배치가 시작된다(run-batch.sh가 막는다). 로그(`*.log`)는 `.gitignore`에 걸려 `git add -f`로 더한다. 평가 도구가 실패로 끝난 시나리오는 묶지 않고 결과 폴더를 `m21-aborted/`로 옮긴 뒤 배치를 멈춘다.
+9. **집계:** relay-v2 `app/`에서 아래 명령. 결과 폴더는 이름으로 준다(glob을 쓰지 않는다): 시범 폴더(`m21-pilot-*`), 로그 폴더(`m21-batch`), 끊겨 옮긴 폴더(`m21-aborted/`)가 들어가지 않게. H2는 도구의 기본값(`47-double-notify-digest-w2`)이라 `--h2`를 주지 않는다. M2 폴더(`m2-main-*` 넷)는 설계 셋의 기제 보고에만 쓴다. `--out`은 파일을 갈아 쓰므로 O1·O2 요약이 있는 `result.md`가 아니라 `primary.md`에 쓰고, `result.md`는 그것을 가리킨다.
+   ```
+   node eval/m21-primary.mjs \
+     eval/results/m21-sealed-39-three-modules eval/results/m21-sealed-47-double-notify-digest-w2 eval/results/m21-sealed-09-stock-negative \
+     eval/results/m21-design-07-two-bugs eval/results/m21-design-14-double-notify eval/results/m21-design-19-split-report eval/results/m21-design-40-three-libraries \
+     eval/results/m2-main-07-two-bugs eval/results/m2-main-14-double-notify eval/results/m2-main-19-split-report eval/results/m2-main-40-three-libraries \
+     --out <relay-v3>/docs/experiments/m2.1/primary.md
+   ```
+10. **배치 뒤:** 봉인을 풀고 5.4의 값을 판정한다. `relay3-m21` 묶음을 관문 재생 자료(`test/fixtures/gate-replay/m2.1.jsonl`)로 더한다(설계 12절). 그 자료로 V30의 온라인 잡음을 센다(5.3). 쉬운 말의 `report.md`를 쓰고, 등록부는 판정 규칙대로 고친다.
 
 ## 10. 도구 문제
 
 - 도구 문제(`harness_error`, `human_error`)로 끝난 실행은 빼고 따로 센다. 시간·차례 제한과 포기는 빼지 않는다(실패로 셈). M2 규약 4절과 같다.
 - 뺀 실행은 다시 돌리지 않는다. 그 쪽·시나리오의 n이 준다(M2의 44 relay3처럼).
-- 컨테이너가 다시 시작돼 시나리오가 도중에 끊기면, 그 시나리오의 결과 폴더를 `.aborted-restart`로 옮겨 집계에 넣지 않고 그 시나리오를 처음부터 다시 돌린다(M2 `log.md` 2026-11-05).
+- 컨테이너가 다시 시작돼 시나리오가 도중에 끊기면, 그 시나리오의 결과 폴더를 `eval/results/m21-aborted/`로 옮겨 집계에 넣지 않고 그 시나리오를 처음부터 다시 돌린다(M2 `log.md` 2026-11-05). `run-batch.sh`를 다시 돌리면 묶음이 없는 시나리오의 남은 결과 폴더를 그렇게 옮기고 다시 돈다. 옮긴 것은 `log.md`에 적는다.
 - 도구 문제가 한 쪽·시나리오에 둘 이상 나면 배치를 멈추고 사람에게 알린다. 도구를 고치면 까닭을 `log.md`에 적는다.
 
 ## 11. 하지 않는 것
@@ -251,6 +306,8 @@ M2에서 relay3은 숨긴 시험(P1)으로는 relay@auto와 가를 수 없었고
 
 - **봉인 셋이 작다:** 쪽마다 15회(3 시나리오 × 5)다. P1의 −10%p 한계를 가르기에는 힘이 약해 '모름'이 나오기 쉽다. '모름'은 '같음'이 아니라 '이번 횟수로는 모른다'는 뜻이다.
 - **고침 여럿을 한 빌드로 잰다:** 어느 고침이 차례를 줄였는지는 장치 지표로만 가리킨다. 인과가 아니다. 판정 규칙 6이 그 몫을 줄인다.
+- **H2의 봉인은 약속이다:** H2의 숨긴 시험과 참조 패치는 relay-v2 트리에 평문으로 있다. 설계자가 열지 않기로 한 것(8절)이지 막혀 있는 것이 아니다. 봉인을 풀 때 sha256이 고정 때와 같은지 본다.
+- **O2 대상 B를 고르는 규칙을 결과 전에 바꿨다:** 초안의 B에는 요청이 그 Work의 몫보다 넓은 40의 묶음 둘이 들어 있었다. 그 규칙(6절)은 O2를 돌리기 전에 정했다. 낱말 비율 80%는 M2 자료의 간격(61%와 100%) 사이에서 고른 값이다.
 - **H2는 14와 같은 레포 영역이다.** 14를 보고 만든 V29·V30이 같은 영역에서 되는지는 보이지만, 다른 영역으로 옮아가는지는 H1·H3만 본다. V29 지침의 예시 말은 14의 말을 피해 썼다(설계 10절 '만든 것', [단위] 시험이 본다).
 - **설계 셋의 견줌:** 저장된 M2 값은 날, 도구 판, 빌드가 다르다. 기제만 보고한다.
 - **설명서가 쪽마다 다르다:** 화면 조작만 다르지만 글의 길이와 내용 차이가 사람 역할의 행동을 바꿀 수 있다.

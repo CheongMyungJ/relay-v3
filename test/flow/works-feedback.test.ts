@@ -1,8 +1,9 @@
 // [흐름] 쉬는 세션에 주는 되먹임 (V24, src/main/works-feedback.ts). 경우: 결정론 실패(못 미침 줄, 실패한 명령)와 세션 몫의
 // 리뷰 올림이 파일과 터미널 한 줄로 가고 세션이 고친다, relay_check가 같은 사실을 준다, 라운드는 Work마다 3까지(상한에 닿으면
 // 보내지 않고 사람이 [세션에 넘기기]로 보냄), 사람이 입력 칸에 쓰다 둔 글이 있으면 보내지 않음, 사람이 말한 뒤에는 창이
-// 끝나면 보냄, 계약의 몫(계약 밖 변경)이 있으면 사람이 볼 때까지 보내지 않고 사람이 [세션에 넘기기]로 보냄(라운드로 세지
-// 않고 겹쳐도 번호가 겹치지 않음), 쉴 때 돌던 재기가 끝나면 보냄, [끝내기]의 상자가 떠 있으면 보내지 않고 [더 고치기] 뒤 보냄.
+// 끝나면 보냄, 질문 메뉴(AskUserQuestion)에 숫자 키 하나로 답한 것은 쓰다 둔 글이 아님, 계약의 몫(계약 밖 변경)이 있으면
+// 사람이 볼 때까지 보내지 않고 사람이 [세션에 넘기기]로 보냄(라운드로 세지 않고 겹쳐도 번호가 겹치지 않음), 쉴 때 돌던 재기가
+// 끝나면 보냄, [끝내기]의 상자가 떠 있으면 보내지 않고 [더 고치기] 뒤 보냄.
 // 사람의 입력은 ipc terminalWrite처럼 Works.typed를 지나 터미널에 넣는다(human). 바탕은 test/support/works-flow.ts.
 import { readFile } from 'node:fs/promises'
 import { expect, test, vi } from 'vitest'
@@ -222,6 +223,30 @@ test('사람이 입력 칸에 글을 쓰다 두었으면 보내지 않는다([�
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
   }
+})
+
+test('질문 메뉴(AskUserQuestion)에 숫자 키 하나로 답한 것은 쓰다 둔 글이 아니다: 메뉴의 답은 UserPromptSubmit을 내지 않지만 세션이 쉬면 보낸다', async () => {
+  await kit.review(SESSION_FINDINGS)
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'ask', key: true }, ...STOP_AND_WAIT])
+  const app = await kit.openApp(await makeTempDir('relay-home-'), { humanQuietMs: 500 })
+  const { works } = app
+  const id = await start(app)
+  const asked = async () =>
+    (await events(app, id, 'hook')).some(
+      (e) => e.event === 'PreToolUse' && e.tool === 'AskUserQuestion',
+    )
+  await until(asked, '질문 메뉴')
+  // 사람이 메뉴에서 1을 누른다(ipc terminalWrite). 앱은 아직 입력 칸의 글로 본다
+  human(app, id, '1')
+  expect(works.runtime(id).draft).toBe(true)
+  // 메뉴가 받았다(PostToolUse): 세션이 쉬면 쓰다 둔 글 때문에 미루지 않고 보낸다
+  await until(() => works.record(id).feedback.rounds === 1, '메뉴의 답 뒤 보냄')
+  expect(works.runtime(id).draft).toBe(false)
+  expect((await events(app, id, 'feedback_held')).map((e) => e.reason)).not.toContain('draft')
+  expect((await fake()).filter((e) => e.type === 'key').map((e) => e.text)).toEqual(['1'])
+  // 메뉴의 답은 입력 칸으로 가지 않았다: 터미널에 들어간 줄은 되먹임 한 줄뿐이다
+  await until(async () => (await inputs()).length === 1, '되먹임 한 줄')
+  expect((await inputs())[0]).toMatch(/^relay feedback 1 for head /)
 })
 
 test('사람 몫의 올림(계약 밖 변경)이 있으면 세션 몫도 저절로 보내지 않는다: 사람이 보고 [세션에 넘기기]로 보낸다. 겹친 넘기기는 번호가 겹치지 않는다', async () => {

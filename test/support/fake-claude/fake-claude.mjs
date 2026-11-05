@@ -5,7 +5,9 @@
 // - `-p`(리뷰 흉내, src/adapters/claude.ts claudeJson): 표준 입력의 프롬프트를 읽고 FAKE_CLAUDE_REVIEW 파일의 JSON(없으면
 //   `{ "findings": [] }`)을 structured_output으로 낸다. --output-format json과 JSON인 --json-schema가 없으면 실패한다.
 //   FAKE_CLAUDE_REVIEW_FAIL: exit(종료 코드 1), error(is_error true), garbage(JSON이 아닌 출력),
-//   empty(structured_output 없음), hang(끝나지 않음). FAKE_CLAUDE_REVIEW_MS만큼 기다린 뒤 답한다.
+//   empty(structured_output 없음), hang(끝나지 않음). FAKE_CLAUDE_REVIEW_MS만큼 기다린 뒤 답한다. 기록(review)에는
+//   CLAUDE_CONFIG_DIR이 있으면 그 폴더와 그 안의 이름, .claude.json·settings.json의 글을 남기고(config), 환경의
+//   CLAUDE·ANTHROPIC으로 시작하는 이름을 남긴다(claudeEnv).
 // - 그 밖(PTY 대화형): ARGS, FAKE-CLAUDE READY, PID, SIZE를 찍고, 크기가 바뀌면 SIZE를 다시 찍는다.
 //   FAKE_CLAUDE_SCENARIO의 JSON이 있으면 단계를 차례로 한다(아래). 단계가 끝나면 끝나지 않고 기다린다(실제처럼 입력 대기).
 //   첫 프롬프트(마지막 위치 인자)가 있으면 단계 전에 UserPromptSubmit을 보낸다.
@@ -16,7 +18,7 @@
 //   RELAY_CONTROL_URL의 경로가 비었으면 /control을 붙인다. 도구 앞뒤로 PreToolUse·PostToolUse(mcp__relay_work__<도구>).
 // - --mcp-config는 실제처럼 값을 여럿 먹는다: 다음 '-' 인자까지. 그래서 그 뒤에 바로 첫 프롬프트가 오면 프롬프트가 없다.
 // - SIGHUP을 받으면 SessionEnd(reason: other)를 보내고 끝난다(v2 D231).
-// - FAKE_CLAUDE_LOG 파일이 있으면 한 줄에 하나씩 JSON을 남긴다: start, hook, bash, denied, mcp, input, review, error.
+// - FAKE_CLAUDE_LOG 파일이 있으면 한 줄에 하나씩 JSON을 남긴다: start, hook, bash, denied, mcp, input, key, review, error.
 //
 // 시나리오 JSON: 배열이면 새 세션의 단계, 객체면 { "start": [단계…], "resume": [단계…] }(--resume이면 resume).
 // 글 값의 {workId} {sessionId} {branch} {head} {cwd} {contractId}(작업 브랜치에서 relay/를 뗀 것)는 지금 값으로 바꾼다.
@@ -28,7 +30,8 @@
 //   bash     { command }                   PreToolUse(Bash). deny면 돌리지 않는다. 아니면 셸로 돌리고 PostToolUse
 //                                           (종료 코드가 0이 아니면 PostToolUseFailure)
 //   mcp      { tool, args }                control에 POST하고 답을 기록한다(답이 올 때까지 기다린다)
-//   ask      { question? }                 AskUserQuestion: PreToolUse, Enter를 기다림, PostToolUse
+//   ask      { question?, key? }           AskUserQuestion: PreToolUse, Enter를 기다림, PostToolUse. key가 참이면 Enter
+//                                           대신 키 하나(실제 메뉴의 숫자 키처럼 그 키로 답함)를 기다린다
 //   waitInput                              터미널에서 한 줄을 받아 UserPromptSubmit으로 보낸다
 //   stop     { message? }                  Stop (stop_hook_active false)
 //   sleep    { ms }                        기다린다
@@ -63,9 +66,25 @@ function value(name) {
   return i >= 0 ? argv[i + 1] : undefined
 }
 
+/** 설정 폴더(CLAUDE_CONFIG_DIR)의 이름과, 평가가 쓰는 두 파일의 글(다른 파일은 읽지 않는다) */
+function configOf(dir) {
+  const read = (name) => {
+    const p = path.join(dir, name)
+    return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null
+  }
+  const names = fs.existsSync(dir) ? fs.readdirSync(dir).sort() : null
+  return { dir, names, claudeJson: read('.claude.json'), settings: read('settings.json') }
+}
+
 async function review() {
   const prompt = fs.readFileSync(0, 'utf8')
-  record({ type: 'review', args: argv, prompt, cwd: process.cwd() })
+  const config =
+    env.FAKE_CLAUDE_LOG && env.CLAUDE_CONFIG_DIR ? configOf(env.CLAUDE_CONFIG_DIR) : null
+  const claudeEnv = Object.keys(env)
+    .filter((k) => /^(CLAUDE|ANTHROPIC)/.test(k))
+    .sort()
+  const seen = { claudeEnv, ...(config ? { config } : {}) }
+  record({ type: 'review', args: argv, prompt, cwd: process.cwd(), ...seen })
   const failWith = (message) => {
     process.stderr.write(`${message}\n`)
     process.exit(1)
@@ -161,13 +180,21 @@ process.stdout.on('resize', () => out(`SIZE ${size()}`))
 
 // 실제 claude처럼 stdin을 raw 모드로 읽는다. Windows의 libuv는 이때만 콘솔 크기 변경을 알아챈다.
 // 받은 글은 줄로 모은다: Enter마다 한 줄. 기다리는 단계가 없으면 쌓아 둔다
+// 키 하나를 기다리는 단계(ask의 key)가 있으면 다음 글자는 그 단계가 받는다(입력 칸에 쌓이지 않는다)
 let typing = ''
 const lines = []
 const lineWaiters = []
+const keyWaiters = []
 if (process.stdin.isTTY) process.stdin.setRawMode(true)
 process.stdin.resume()
 process.stdin.on('data', (d) => {
   for (const ch of d.toString('utf8')) {
+    const k = keyWaiters.shift()
+    if (k) {
+      record({ type: 'key', text: ch })
+      k(ch)
+      continue
+    }
     if (ch !== '\r' && ch !== '\n') {
       typing += ch
       continue
@@ -182,6 +209,7 @@ process.stdin.on('data', (d) => {
 })
 const readLine = () =>
   lines.length > 0 ? Promise.resolve(lines.shift()) : new Promise((r) => lineWaiters.push(r))
+const readKey = () => new Promise((r) => keyWaiters.push(r))
 
 // ── 훅 ──────────────────────────────────────────────────────────────────────
 
@@ -491,8 +519,8 @@ async function step(s) {
       const tool_input = { questions: [{ question: fill(s.question ?? '질문', vs), options: [] }] }
       const fields = { tool_name: 'AskUserQuestion', tool_input, tool_use_id: toolUseId() }
       await hook('PreToolUse', fields, 'AskUserQuestion')
-      out('질문 대기: Enter를 누르세요')
-      await readLine()
+      out(s.key ? '질문 대기: 키 하나로 답하세요' : '질문 대기: Enter를 누르세요')
+      await (s.key ? readKey() : readLine())
       const tool_response = { answers: {} }
       return void (await hook('PostToolUse', { ...fields, tool_response }, 'AskUserQuestion'))
     }

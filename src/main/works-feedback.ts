@@ -94,6 +94,9 @@ export function leavesDraft(data: string): boolean {
   return typed !== '' && !typed.endsWith('\r') && !typed.endsWith(CTRL_C)
 }
 
+/** 세션이 사람에게 묻는 도구. 그 메뉴가 떠 있는 동안 사람의 입력은 입력 칸이 아니라 메뉴로 간다 */
+export const ASK_TOOL = 'AskUserQuestion'
+
 /** 이 head에 이미 보낸 사실과 지적의 이름 */
 function sentKeys(rec: WorkRecord, head: string): Set<string> {
   return new Set(rec.feedback.sent.filter((r) => r.head === head).flatMap((r) => r.keys))
@@ -206,6 +209,14 @@ export class FeedbackDesk {
     const reason = rt.feedbackHeld?.reason
     if (reason === 'draft' && !rt.draft) this.retry(id, this.quietMs)
     if (reason === 'draft' || reason === 'human_input') this.ctx.publish(id)
+  }
+
+  /**
+   * 질문 메뉴(AskUserQuestion)의 PostToolUse·PostToolUseFailure: 메뉴가 받은 사람의 입력(숫자 키 하나, 화살표 등)은 입력 칸의
+   * 글이 아니다. 메뉴의 답은 UserPromptSubmit을 내지 않으므로 여기서 쓰다 둔 글 표시를 지운다(V24)
+   */
+  menuAnswered(id: string): void {
+    this.ctx.runtime(id).draft = false
   }
 
   /** 자리의 지금 끝 */

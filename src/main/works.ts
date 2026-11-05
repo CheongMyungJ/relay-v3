@@ -31,7 +31,7 @@ import { upgradeWork, type ProjectRecord, type WorkRecord } from './store.ts'
 import { ContractDesk } from './works-contract.ts'
 import { dropEnd, EndDesk } from './works-end.ts'
 import { EvidenceRunner, exportable, isExportCommand } from './works-evidence.ts'
-import { checkReplies, FeedbackDesk } from './works-feedback.ts'
+import { ASK_TOOL, checkReplies, FeedbackDesk } from './works-feedback.ts'
 import { ProjectDesk } from './works-projects.ts'
 import { followReview } from './works-review.ts'
 import {
@@ -368,6 +368,8 @@ export class Works implements WorkCtx {
       case 'PostToolUse':
       case 'PostToolUseFailure':
         rt.session = 'running'
+        // 질문 메뉴가 사람의 입력을 받았다: 입력 칸의 글이 아니다(V24)
+        if (tool === ASK_TOOL) this.feedback.menuAnswered(workId)
         // 셸 명령은 차례 안에서 커밋할 수 있다: 화면의 HEAD를 바로 고친다(낡은 head의 걸린 끝과 끝내기 상자를 지운다, V25)
         if (command !== null) void this.followHead(workId)
         if (event === 'PostToolUse' && command !== null && isExportCommand(command))

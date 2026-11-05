@@ -1,7 +1,7 @@
 // [흐름] 리뷰 재생(m2.1-design 14절 O2, scripts/review-replay.ts)을 명령줄로 돌린다: 저장된 평가 결과의 꼴(results/m2-main-*,
 // run.json, works/<id>/, final/<id>.diff)과 시나리오 레포를 임시 폴더에 만들고, 묶음 고르기 → 임시 checkout(덧씌우기, git apply
 // -p2) → 프롬프트 → 리뷰어 → JSONL → 요약이 이어지는지 본다. --dry(가짜 리뷰어)와 가짜 claude(-p, 같은 어댑터)를 쓴다. 고르기
-// 차례, 리뷰 칸, 통과 기준의 자세한 경우는 [단위] test/unit/review-replay.test.ts가 본다.
+// 차례, 리뷰 칸, 통과 기준의 자세한 경우는 [단위] test/unit/review-replay.test.ts가 본다. claude는 호출마다 새 설정 폴더로 뜬다.
 import { execFile, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -94,6 +94,8 @@ interface WorkSpec {
   /** 증거의 diff 경로에서 뺄 것(내보낸 head 뒤에 바뀐 파일 흉내) */
   notCommitted?: string[]
   exported?: boolean
+  /** request.md(없으면 REQUEST) */
+  request?: string
 }
 
 /** 실행 폴더 하나: run.json, works/<id>/{evidence,contract,request}, final/<id>.diff */
@@ -121,7 +123,7 @@ async function makeRun(
     const head = `${w.id}`.padEnd(40, '0')
     writeFiles(join(dir, 'works', w.id), {
       'contract.json': JSON.stringify(CONTRACT, null, 2),
-      'request.md': REQUEST,
+      'request.md': w.request ?? REQUEST,
       'evidence.json': JSON.stringify({
         version: 1,
         repo: '',
@@ -187,7 +189,15 @@ const callKeys = (lines: Record<string, unknown>[]) =>
 const A = '14-double-notify/relay3-1/aaaa0001'
 const B1 = '07-two-bugs/relay3-1/bbbb0001'
 const B2 = '07-two-bugs/relay3-1/bbbb0002'
-const KEYS = [`${A}#1`, `${A}#2`, `${A}#3`, `${B1}#1`, `${B2}#1`].sort()
+const B3 = '07-two-bugs/relay3-2/eeee0002'
+/** Work 둘인 실행에서 07의 리포트 둘을 다 받은 Work: B에서 뺀다 */
+const WIDE = '07-two-bugs/relay3-2/eeee0001'
+const KEYS = [`${A}#1`, `${A}#2`, `${A}#3`, `${B1}#1`, `${B2}#1`, `${B3}#1`].sort()
+/** 07의 리포트 둘(scenario.json report): REQUEST는 첫째만 담는다 */
+const REPORTS = [
+  'clamp가 위로 넘으면 lo를 돌려준다. (src/calc.js)',
+  'sum이 빈 목록에 NaN을 돌려준다. (src/sum.js)',
+]
 
 beforeAll(async () => {
   root = await makeTempDir('relay-review-replay-flow-')
@@ -195,6 +205,9 @@ beforeAll(async () => {
   scenarios = join(root, 'scenarios')
   for (const s of ['14-double-notify', '07-two-bugs', '08-timezone'])
     writeFiles(join(scenarios, s, 'repo'), REPO)
+  writeFiles(join(scenarios, '07-two-bugs'), {
+    'scenario.json': JSON.stringify({ report: REPORTS }),
+  })
   const overlay = await overlayText('14-double-notify')
   // 대상 A: 14의 숨긴 시험 실패. 14의 통과는 대상이 아니다
   await makeRun('14-double-notify', 'relay3-1', {
@@ -211,6 +224,11 @@ beforeAll(async () => {
   await makeRun('07-two-bugs', 'relay3-1', {
     success: true,
     works: [{ id: 'bbbb0001' }, { id: 'bbbb0002', notCommitted: ['test/calc.test.js'] }],
+  })
+  // Work 둘인 실행에서 리포트 둘을 다 받은 Work는 B에서 빠지고 그 실행의 다른 Work가 고른다
+  await makeRun('07-two-bugs', 'relay3-2', {
+    success: true,
+    works: [{ id: 'eeee0001', request: REPORTS.join('\n') }, { id: 'eeee0002' }],
   })
   // 빠지는 것: 내보내기 결론이 없는 Work, report.json이 없는 배치
   await makeRun('07-two-bugs', 'relay3-noreview-1', {
@@ -259,15 +277,16 @@ describe('리뷰 재생', () => {
     expect(prompt).not.toContain('.relay/quality.json')
 
     expect(r.stdout).toContain('--dry: 가짜 리뷰어의 고정 지적이라 판정에 쓰지 않는다')
-    expect(r.stdout).toContain('호출: 계획 5, 끝남 5, 실패 0, 남음 0')
-    expect(r.stdout).toContain('주의: 계획(A 1묶음, B 2묶음, 5번)이 설계')
+    expect(r.stdout).toContain('호출: 계획 6, 끝남 6, 실패 0, 남음 0')
+    expect(r.stdout).toContain('주의: 계획(A 1묶음, B 3묶음, 6번)이 설계')
     expect(r.stdout).toContain(`diff가 증거와 다른 묶음 1 (${B2})`)
+    expect(r.stdout).toContain(`요청이 Work의 몫보다 넓음): 1 (${WIDE} (full_report))`)
 
     // --dry는 다시 돌면 파일을 갈아 쓰고, --resume은 끝난 호출을 건너뛴다
     expect((await replay(['--dry', '--out', out])).code).toBe(0)
     const again = await replay(['--dry', '--resume', '--out', out])
     expect(again.stderr).toContain('0번 부른다')
-    expect(readLines(out)).toHaveLength(5)
+    expect(readLines(out)).toHaveLength(6)
   })
 
   test('claude -p: 앱의 어댑터와 읽기 도구로 부르고, --limit 뒤 --resume으로 잇는다', async () => {
@@ -283,11 +302,18 @@ describe('리뷰 재생', () => {
         ],
       }),
     )
-    const env = { CLAUDE_BIN: FAKE_CLAUDE, FAKE_CLAUDE_REVIEW: review, FAKE_CLAUDE_LOG: log }
+    // 운영자의 Claude Code 세션 변수(CLAUDECODE 등)는 리뷰어에게 가지 않는다
+    const operator = { CLAUDECODE: '1', CLAUDE_CODE_SYNC_SKILLS: '1', ANTHROPIC_BASE_URL: 'x' }
+    const env = {
+      ...operator,
+      CLAUDE_BIN: FAKE_CLAUDE,
+      FAKE_CLAUDE_REVIEW: review,
+      FAKE_CLAUDE_LOG: log,
+    }
     const first = await replay(['--out', out, '--limit', '2', '--jobs', '1'], env)
     expect(first.code).toBe(0)
     expect(readLines(out)).toHaveLength(2)
-    expect(first.stdout).toContain('끝남 2, 실패 0, 남음 3 (--resume으로 잇는다)')
+    expect(first.stdout).toContain('끝남 2, 실패 0, 남음 4 (--resume으로 잇는다)')
 
     const refused = await replay(['--out', out], env)
     expect(refused.code).toBe(1)
@@ -305,10 +331,28 @@ describe('리뷰 재생', () => {
         memos: 1,
         usage: { input_tokens: 1000, output_tokens: 50 },
       })
-    expect(rest.stdout).toContain('토큰: 입력(캐시 포함) 5000, 출력 250')
+    expect(rest.stdout).toContain('토큰: 입력(캐시 포함) 6000, 출력 300')
 
     const calls = readLines(log).filter((e) => e['type'] === 'review')
-    expect(calls).toHaveLength(5)
+    expect(calls).toHaveLength(6)
+    // 호출마다 새 설정 폴더(평가의 makeClaudeConfig와 같은 내용). 운영자의 설정 폴더를 쓰지 않고, 끝나면 지운다
+    const configs = calls.map((c) => c['config'] as Record<string, unknown>)
+    expect(new Set(configs.map((c) => c['dir'])).size).toBe(6)
+    for (const c of configs) {
+      expect(c['dir']).not.toBe(process.env.CLAUDE_CONFIG_DIR)
+      expect(c).toMatchObject({
+        names: ['.claude.json', 'settings.json'],
+        claudeJson: JSON.stringify({ hasCompletedOnboarding: true }, null, 2),
+        settings: JSON.stringify({ promptSuggestionEnabled: false }, null, 2),
+      })
+      expect(existsSync(String(c['dir']))).toBe(false)
+    }
+    for (const c of calls)
+      expect(c['claudeEnv']).toEqual([
+        'CLAUDE_CODE_EFFORT_LEVEL',
+        'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION',
+        'CLAUDE_CONFIG_DIR',
+      ])
     for (const c of calls) {
       const args = c['args'] as string[]
       expect(args[args.indexOf('--tools') + 1]).toBe('Read,Grep,Glob')

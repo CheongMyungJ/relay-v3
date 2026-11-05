@@ -147,7 +147,7 @@ export interface Runtime {
   lastHumanInputAt: number | null
   /**
    * 사람이 화면에서 터미널에 마지막으로 친 글이 Enter(나 입력 칸을 비우는 Ctrl+C)로 끝나지 않았다: 입력 칸에 보내지 않은 글이
-   * 있을 수 있다(V24). UserPromptSubmit과 세션을 띄울 때 거짓
+   * 있을 수 있다(V24). UserPromptSubmit, 질문 메뉴(AskUserQuestion)의 PostToolUse·PostToolUseFailure, 세션을 띄울 때 거짓
    */
   draft: boolean
   /**
