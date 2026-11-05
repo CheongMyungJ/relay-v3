@@ -41,7 +41,7 @@ function examplesNote(path: string): string {
 }
 
 /**
- * 앱이 아직 받지 않는 전달 방식(V21): 단위마다 브랜치(branch_per_unit)는 V22이고 사용자의 답을 기다린다. 모양 검사보다 먼저
+ * 앱이 아직 받지 않는 전달 방식(V21): 단위마다 브랜치(branch_per_unit)는 V22이고 아직 만들지 않았다. 모양 검사보다 먼저
  * 본다(그 방식의 모양 오류는 고쳐도 받지 않으므로). 세션이 읽으므로 영어
  */
 function unsupportedDelivery(raw: unknown, branch: string, field: string): string | null {
