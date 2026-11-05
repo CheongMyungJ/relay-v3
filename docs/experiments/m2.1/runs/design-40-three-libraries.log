@@ -1,0 +1,262 @@
+결과 폴더: /home/user/relay-v2/app/eval/results/m21-design-40-three-libraries
+작업 폴더: /tmp/relay-eval/m21-design-40-three-libraries
+22:01:17 [40-three-libraries relay3-m21#1] 준비 (/tmp/relay-eval/m21-design-40-three-libraries/40-three-libraries-relay3-m21-1/office-utils)
+22:01:18 [40-three-libraries relay3-m21#2] 준비 (/tmp/relay-eval/m21-design-40-three-libraries/40-three-libraries-relay3-m21-2/office-utils)
+22:01:28 [40-three-libraries relay3-m21#1] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+22:01:28 [40-three-libraries relay3-m21#2] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+22:01:42 [40-three-libraries relay3-m21#1] 차례 2 (0분 22초, 화면이 멈춤) friction=0 fill textarea "요청" "공용 도구 세 개를 이번에 같이 만들어 주세요. 서로 관계없는 모듈입니다
+…(504자 생략)", click button "기능", click button "만들기"
+22:01:42 [40-three-libraries relay3-m21#2] 차례 2 (0분 22초, 화면이 멈춤) friction=0 fill textarea "요청" "공용 도구 세 개를 이번에 같이 만들어 주세요. 서로 관계없는 모듈입니다
+…(524자 생략)", click button "기능", click button "만들기"
+22:01:43 [40-three-libraries relay3-m21#1] 첫 실행 창 수락: folder_trust
+22:01:45 [40-three-libraries relay3-m21#2] 첫 실행 창 수락: folder_trust
+22:01:46 [40-three-libraries relay3-m21#1] 첫 실행 창 수락: bypass_permissions_warning
+22:01:47 [40-three-libraries relay3-m21#2] 첫 실행 창 수락: bypass_permissions_warning
+22:02:16 [40-three-libraries relay3-m21#2] 차례 3 (0분 57초, 화면이 멈춤) friction=0 key
+22:02:25 [40-three-libraries relay3-m21#2] 차례 4 (1분 7초, 화면이 멈춤) friction=0 key
+22:02:26 [40-three-libraries relay3-m21#1] 차례 3 (1분 8초, 화면이 멈춤) friction=0 key
+22:02:35 [40-three-libraries relay3-m21#2] 차례 5 (1분 17초, 화면이 멈춤) friction=0 key
+22:02:36 [40-three-libraries relay3-m21#1] 차례 4 (1분 17초, 화면이 멈춤) friction=0 key
+22:02:45 [40-three-libraries relay3-m21#2] 차례 6 (1분 27초, 화면이 멈춤) friction=0 key
+22:02:48 [40-three-libraries relay3-m21#1] 차례 5 (1분 29초, 화면이 멈춤) friction=1 key, type "start가 end보다 뒤면 음수가 아니라 0. formatKrw는 소수
+…(94자 생략)"
+22:02:54 [40-three-libraries relay3-m21#2] 차례 7 (1분 36초, 화면이 멈춤) friction=0 key, wait
+22:02:58 [40-three-libraries relay3-m21#1] 차례 6 (1분 40초, 화면이 멈춤) friction=0 key
+22:03:07 [40-three-libraries relay3-m21#1] 차례 7 (1분 49초, 화면이 멈춤) friction=0 key, wait
+22:03:17 [40-three-libraries relay3-m21#1] 차례 8 (2분 0초, 화면이 멈춤) friction=0 wait
+22:03:19 [40-three-libraries relay3-m21#2] 첫 코드 변경 (2분 1초)
+22:03:30 [40-three-libraries relay3-m21#2] 차례 8 (2분 11초, 화면이 멈춤) friction=1 fill textarea "고칠 점" "C5가 소수를 RangeError로 처리하는데, 원 미만은 0 쪽으로 버
+…(69자 생략)", click button "보내기"
+22:03:36 [40-three-libraries relay3-m21#1] 첫 코드 변경 (2분 18초)
+22:03:46 [40-three-libraries relay3-m21#1] 차례 9 (2분 28초, 화면이 멈춤) friction=0 click button "승인", wait
+22:04:04 [40-three-libraries relay3-m21#2] 차례 9 (2분 46초, 화면이 멈춤) friction=0 click button "승인", wait
+22:04:15 [40-three-libraries relay3-m21#2] 차례 10 (2분 57초, 화면이 멈춤) friction=0 wait
+22:04:35 [40-three-libraries relay3-m21#1] 차례 10 (3분 17초, 화면이 멈춤) friction=0 wait
+22:04:55 [40-three-libraries relay3-m21#1] 차례 11 (3분 38초, 화면이 멈춤) friction=0 wait
+22:05:01 [40-three-libraries relay3-m21#2] 차례 11 (3분 44초, 화면이 멈춤) friction=0 wait
+22:05:27 [40-three-libraries relay3-m21#2] 차례 12 (4분 9초, 화면이 멈춤) friction=0 wait
+22:05:30 [40-three-libraries relay3-m21#1] 차례 12 (4분 12초, 화면이 멈춤) friction=0 inspect_diff
+22:05:34 [40-three-libraries relay3-m21#1] 차례 13 (4분 15초, 직전 행동의 결과) friction=0 click button "끝내기", wait
+22:05:37 [40-three-libraries relay3-m21#2] 차례 13 (4분 19초, 화면이 멈춤) friction=0 inspect_diff
+22:05:41 [40-three-libraries relay3-m21#2] 차례 14 (4분 23초, 직전 행동의 결과) friction=0 click button "끝내기", wait
+22:05:43 [40-three-libraries relay3-m21#1] 차례 14 (4분 25초, 화면이 멈춤) friction=0 wait
+22:05:50 [40-three-libraries relay3-m21#2] 차례 15 (4분 33초, 화면이 멈춤) friction=0 wait
+22:05:53 [40-three-libraries relay3-m21#1] 차례 15 (4분 36초, 화면이 멈춤) friction=0 wait
+22:06:02 [40-three-libraries relay3-m21#1] 차례 16 (4분 45초, 화면이 멈춤) friction=0 wait
+22:06:03 [40-three-libraries relay3-m21#2] 차례 16 (4분 46초, 화면이 멈춤) friction=0 wait
+22:06:14 [40-three-libraries relay3-m21#1] 차례 17 (4분 56초, 화면이 멈춤) friction=1 click button "그래도 끝내기", wait
+22:06:18 [40-three-libraries relay3-m21#2] 차례 17 (5분 1초, 화면이 멈춤) friction=0 wait
+22:06:24 [40-three-libraries relay3-m21#1] 차례 18 (5분 7초, 화면이 멈춤) friction=0 done
+22:06:29 [40-three-libraries relay3-m21#1] 끝: done (5분 12초)
+22:06:31 [40-three-libraries relay3-m21#1] 결과: 성공 (CSV 읽기 O, 원화 쓰기·읽기 O, 근무일 O, 기존 함수 그대로 O), 차례 18, 사람 비용 $3.70
+== 진행 1/5
+22:06:31 [40-three-libraries relay3-m21#3] 준비 (/tmp/relay-eval/m21-design-40-three-libraries/40-three-libraries-relay3-m21-3/office-utils)
+22:06:31 [40-three-libraries relay3-m21#2] 차례 18 (5분 13초, 화면이 멈춤) friction=0 click button "세션에 넘기기", wait
+22:06:41 [40-three-libraries relay3-m21#3] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+22:06:55 [40-three-libraries relay3-m21#3] 차례 2 (0분 22초, 화면이 멈춤) friction=0 fill textarea "요청" "공용 도구 세 개를 이번에 같이 만들어 주세요. 서로 관계없는 모듈입니다
+…(503자 생략)", click button "기능", click button "만들기"
+22:06:57 [40-three-libraries relay3-m21#3] 첫 실행 창 수락: folder_trust
+22:07:00 [40-three-libraries relay3-m21#3] 첫 실행 창 수락: bypass_permissions_warning
+22:07:07 [40-three-libraries relay3-m21#2] 차례 19 (5분 48초, 화면이 멈춤) friction=0 click button "끝내기", wait
+22:07:18 [40-three-libraries relay3-m21#2] 차례 20 (6분 0초, 화면이 멈춤) friction=0 wait
+22:07:23 [40-three-libraries relay3-m21#3] 차례 3 (0분 51초, 화면이 멈춤) friction=0 key
+22:07:29 [40-three-libraries relay3-m21#2] 차례 21 (6분 12초, 화면이 멈춤) friction=0 wait
+22:07:32 [40-three-libraries relay3-m21#3] 차례 4 (1분 1초, 화면이 멈춤) friction=0 key
+22:07:43 [40-three-libraries relay3-m21#2] 차례 22 (6분 24초, 화면이 멈춤) friction=1 click button "그래도 끝내기", wait
+22:07:45 [40-three-libraries relay3-m21#3] 차례 5 (1분 12초, 화면이 멈춤) friction=0 key, type "1번 기준으로 하되 formatKrw는 소수를 에러로 하지 말고 0 쪽으
+…(43자 생략)"
+22:07:53 [40-three-libraries relay3-m21#2] 차례 23 (6분 36초, 화면이 멈춤) friction=0 done
+22:07:54 [40-three-libraries relay3-m21#3] 차례 6 (1분 23초, 화면이 멈춤) friction=0 key
+22:08:02 [40-three-libraries relay3-m21#2] 끝: done (6분 44초)
+22:08:03 [40-three-libraries relay3-m21#2] 결과: 성공 (CSV 읽기 O, 원화 쓰기·읽기 O, 근무일 O, 기존 함수 그대로 O), 차례 23, 사람 비용 $6.58
+== 진행 2/5
+22:08:03 [40-three-libraries relay3-m21#4] 준비 (/tmp/relay-eval/m21-design-40-three-libraries/40-three-libraries-relay3-m21-4/office-utils)
+22:08:04 [40-three-libraries relay3-m21#3] 차례 7 (1분 33초, 화면이 멈춤) friction=0 key, wait
+22:08:14 [40-three-libraries relay3-m21#4] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+22:08:27 [40-three-libraries relay3-m21#4] 차례 2 (0분 22초, 화면이 멈춤) friction=0 fill textarea "요청" "공용 도구 세 개를 이번에 같이 만들어 주세요. 서로 관계없는 모듈입니다
+…(505자 생략)", click button "기능", click button "만들기"
+22:08:29 [40-three-libraries relay3-m21#4] 첫 실행 창 수락: folder_trust
+22:08:31 [40-three-libraries relay3-m21#4] 첫 실행 창 수락: bypass_permissions_warning
+22:08:38 [40-three-libraries relay3-m21#3] 첫 코드 변경 (2분 7초)
+22:08:46 [40-three-libraries relay3-m21#3] 차례 8 (2분 14초, 화면이 멈춤) friction=0 click button "승인", wait
+22:08:57 [40-three-libraries relay3-m21#4] 차례 3 (0분 53초, 화면이 멈춤) friction=0 key
+22:09:10 [40-three-libraries relay3-m21#4] 차례 4 (1분 5초, 화면이 멈춤) friction=0 key, type "시작이 끝보다 뒤면 0이에요. 음수 n이랑 형식 오류는 제가 따로 정한 
+…(18자 생략)"
+22:09:20 [40-three-libraries relay3-m21#4] 차례 5 (1분 16초, 화면이 멈춤) friction=0 key
+22:09:29 [40-three-libraries relay3-m21#4] 차례 6 (1분 25초, 화면이 멈춤) friction=0 key
+22:09:37 [40-three-libraries relay3-m21#3] 차례 9 (3분 6초, 화면이 멈춤) friction=0 inspect_diff
+22:09:38 [40-three-libraries relay3-m21#4] 차례 7 (1분 35초, 화면이 멈춤) friction=0 key, wait
+22:09:41 [40-three-libraries relay3-m21#3] 차례 10 (3분 9초, 직전 행동의 결과) friction=0 click button "끝내기", wait
+22:09:50 [40-three-libraries relay3-m21#3] 차례 11 (3분 19초, 화면이 멈춤) friction=0 wait
+22:09:59 [40-three-libraries relay3-m21#3] 차례 12 (3분 28초, 화면이 멈춤) friction=0 wait
+22:10:06 [40-three-libraries relay3-m21#4] 첫 코드 변경 (2분 3초)
+22:10:09 [40-three-libraries relay3-m21#3] 차례 13 (3분 39초, 화면이 멈춤) friction=0 wait
+22:10:18 [40-three-libraries relay3-m21#4] 차례 8 (2분 13초, 화면이 멈춤) friction=0 fill textarea "고칠 점" "C6에서 formatKrw에 소수를 주면 TypeError라고 했는데, 
+…(86자 생략)", click button "보내기"
+22:10:21 [40-three-libraries relay3-m21#3] 차례 14 (3분 49초, 화면이 멈춤) friction=1 click button "그래도 끝내기", wait
+22:10:31 [40-three-libraries relay3-m21#3] 차례 15 (4분 0초, 화면이 멈춤) friction=0 done
+22:10:37 [40-three-libraries relay3-m21#3] 끝: done (4분 6초)
+22:10:41 [40-three-libraries relay3-m21#3] 결과: 성공 (CSV 읽기 O, 원화 쓰기·읽기 O, 근무일 O, 기존 함수 그대로 O), 차례 15, 사람 비용 $2.56
+== 진행 3/5
+22:10:41 [40-three-libraries relay3-m21#5] 준비 (/tmp/relay-eval/m21-design-40-three-libraries/40-three-libraries-relay3-m21-5/office-utils)
+22:10:51 [40-three-libraries relay3-m21#4] 차례 9 (2분 47초, 화면이 멈춤) friction=0 click button "승인", wait
+22:10:52 [40-three-libraries relay3-m21#5] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+22:11:05 [40-three-libraries relay3-m21#5] 차례 2 (0분 21초, 화면이 멈춤) friction=0 fill textarea "요청" "공용 도구 세 개를 이번에 같이 만들어 주세요. 서로 관계없는 모듈입니다
+…(507자 생략)", click button "기능", click button "만들기"
+22:11:08 [40-three-libraries relay3-m21#5] 첫 실행 창 수락: folder_trust
+22:11:10 [40-three-libraries relay3-m21#5] 첫 실행 창 수락: bypass_permissions_warning
+22:11:40 [40-three-libraries relay3-m21#5] 차례 3 (0분 58초, 화면이 멈춤) friction=0 key
+22:11:49 [40-three-libraries relay3-m21#5] 차례 4 (1분 7초, 화면이 멈춤) friction=0 key
+22:11:57 [40-three-libraries relay3-m21#4] 차례 10 (3분 53초, 화면이 멈춤) friction=0 click button "끝내기", wait
+22:12:03 [40-three-libraries relay3-m21#5] 차례 5 (1분 20초, 화면이 멈춤) friction=0 key, type "formatKrw는 정수가 아니어도 오류 없이 원 미만을 0 쪽으로 버려
+…(95자 생략)"
+22:12:05 [40-three-libraries relay3-m21#4] 차례 11 (4분 2초, 화면이 멈춤) friction=0 wait
+22:12:13 [40-three-libraries relay3-m21#5] 차례 6 (1분 30초, 화면이 멈춤) friction=0 key
+22:12:20 [40-three-libraries relay3-m21#4] 차례 12 (4분 16초, 화면이 멈춤) friction=0 wait
+22:12:22 [40-three-libraries relay3-m21#5] 차례 7 (1분 40초, 화면이 멈춤) friction=0 key, wait
+22:12:28 [40-three-libraries relay3-m21#4] 차례 13 (4분 25초, 화면이 멈춤) friction=0 wait
+22:12:39 [40-three-libraries relay3-m21#4] 차례 14 (4분 35초, 화면이 멈춤) friction=0 click button "세션에 넘기기", wait
+22:12:47 [40-three-libraries relay3-m21#5] 첫 코드 변경 (2분 5초)
+22:12:55 [40-three-libraries relay3-m21#5] 차례 8 (2분 13초, 화면이 멈춤) friction=0 click button "승인", wait
+22:12:59 [40-three-libraries relay3-m21#4] 차례 15 (4분 55초, 화면이 멈춤) friction=1 click button "끝내기", wait
+22:13:10 [40-three-libraries relay3-m21#4] 차례 16 (5분 7초, 화면이 멈춤) friction=0 wait
+22:13:21 [40-three-libraries relay3-m21#4] 차례 17 (5분 17초, 화면이 멈춤) friction=1 click button "그래도 끝내기", wait
+22:13:32 [40-three-libraries relay3-m21#4] 차례 18 (5분 29초, 화면이 멈춤) friction=0 done
+22:13:38 [40-three-libraries relay3-m21#4] 끝: done (5분 35초)
+22:13:40 [40-three-libraries relay3-m21#4] 결과: 성공 (CSV 읽기 O, 원화 쓰기·읽기 O, 근무일 O, 기존 함수 그대로 O), 차례 18, 사람 비용 $3.58
+== 진행 4/5
+22:13:54 [40-three-libraries relay3-m21#5] 차례 9 (3분 12초, 화면이 멈춤) friction=1 wait
+22:14:38 [40-three-libraries relay3-m21#5] 차례 10 (3분 56초, 화면이 멈춤) friction=1 click button "증거 다시 재기", wait
+22:14:50 [40-three-libraries relay3-m21#5] 차례 11 (4분 8초, 화면이 멈춤) friction=1 wait
+22:15:04 [40-three-libraries relay3-m21#5] 차례 12 (4분 21초, 화면이 멈춤) friction=1 click summary "리뷰 지적 3", scroll summary "리뷰 지적 3"
+22:15:14 [40-three-libraries relay3-m21#5] 차례 13 (4분 32초, 화면이 멈춤) friction=1 wait
+22:15:40 [40-three-libraries relay3-m21#5] 차례 14 (4분 58초, 화면이 멈춤) friction=1 click button "끝내기", wait
+22:15:51 [40-three-libraries relay3-m21#5] 차례 15 (5분 10초, 화면이 멈춤) friction=0 wait
+22:16:03 [40-three-libraries relay3-m21#5] 차례 16 (5분 21초, 화면이 멈춤) friction=1 wait
+22:16:16 [40-three-libraries relay3-m21#5] 차례 17 (5분 34초, 화면이 멈춤) friction=1 click button "그래도 끝내기", wait
+22:16:26 [40-three-libraries relay3-m21#5] 차례 18 (5분 45초, 화면이 멈춤) friction=1 done
+22:16:32 [40-three-libraries relay3-m21#5] 끝: done (5분 51초)
+22:16:33 [40-three-libraries relay3-m21#5] 결과: 성공 (CSV 읽기 O, 원화 쓰기·읽기 O, 근무일 O, 기존 함수 그대로 O), 차례 18, 사람 비용 $3.57
+== 진행 5/5
+
+# relay 대 맨 CLI 사용성 평가
+
+- 결과 폴더: `/home/user/relay-v2/app/eval/results/m21-design-40-three-libraries`
+- 시작: 2026-11-05T22:01:16.282Z, 앱 커밋: 7866fa8, Claude Code: 2.1.318 (Claude Code)
+- 다른 빌드 커밋: relay3 2d86ceb
+- 에이전트: sonnet (effort medium), 사람 역할: sonnet, 판정: sonnet
+- 맨 CLI 인자: `claude --dangerously-skip-permissions`, 스크린샷 보기: 켬
+- 판정 모델에 시나리오의 평가 목적: 주지 않음
+- 품질 기준 덧씌우기(.relay/quality.json): 켬 (40-three-libraries 082644e4)
+- 실행 5개, 짝 판정 0개
+
+읽는 법: 수치는 평균 ± 표준편차다. 사람 역할과 판정은 AI이므로 경향을 보는 자료로 쓴다. 회차가 적으면 편차가 크다.
+걸린 시간에는 도구의 준비(앱 띄우기·프로젝트 등록, claude 띄우기)와 사람 역할(AI)이 답을 만드는 동안 기다린 시간이 들어 있다. 쪽끼리 대기를 견줄 때는 그 둘을 뺀 줄을 본다.
+에이전트 토큰에는 앱이 따로 부른 claude -p(relay-v3 독립 리뷰, relay 독립 리뷰·지식 검토)가 들어 있다. 사람은 Claude Code 화면에서 시계만 도는 것(스피너의 경과 시간)으로는 화면이 바뀐 것으로 보지 않는다.
+
+## 40-three-libraries: 서로 독립된 중간 크기 기능 셋을 한 요청으로, 모듈마다 브랜치를 따로
+
+목적: 한 요청 안에 서로 다른 파일을 고치고 규칙이 여럿인 중간 크기 기능 셋(CSV 읽기, 원화 쓰기·읽기, 근무일 계산)이 있고 모듈마다 브랜치를 따로 두고 싶을 때, 자율 유형(relay D533)이 조각을 자식 Work(D543)로 나란히 맡기는지, 그렇게 했을 때 시간, 사람의 수고, 결과, 브랜치 나눔이 전용 유형(기능 추가)과 맨 CLI에 견줘 어떤지 본다. 39보다 조각이 커서 나누는 비용을 넘을 수 있다.
+
+| 지표 | relay-v3 M2.1 |
+|---|---|
+| 숨긴 시험 모두 통과 | 100% (5/5) |
+| 레포 시험 통과 | 100% (5/5) |
+| 커밋까지 됨 | 100% (5/5) |
+| 사람이 끝냄(done) | 100% (5/5) |
+| 걸린 시간(분) | 5.5 ± 1.0 |
+| 도구 준비 시간(분, 아래 줄에서 뺌) | 0.0 ± 0.0 |
+| 사람 역할 응답 시간(분) | 1.0 ± 0.2 |
+| 걸린 시간 − 준비 − 사람 역할 응답(분) | 4.5 ± 0.8 |
+| 사람 차례 수 | 18.4 ± 2.9 |
+| 기다리기만 한 차례 | 5.2 ± 1.9 |
+| 스크린샷을 붙인 차례 | 12.8 ± 2.4 |
+| 번호 표시가 빠진 스크린샷 | 0.0 ± 0.0 |
+| 사람 행동 수(기다림 제외) | 15.6 ± 1.5 |
+| 입력한 글자 수 | 677.6 ± 36.6 |
+| 코드 직접 확인(inspect_diff) | 0.6 ± 0.5 |
+| hands-off 규칙 어김(결과를 본 행동) | - |
+| 헛동작(없는 요소, 실패) | 0.0 ± 0.0 |
+| friction 평균 (0~3) | 0.2 ± 0.2 |
+| friction 2 이상 차례 | 0.0 ± 0.0 |
+| 설문 수고 (1~7, 낮을수록 좋음) | 2.6 ± 0.5 |
+| 설문 명확함 | 5.6 ± 0.5 |
+| 설문 통제감 | 5.6 ± 0.5 |
+| 설문 결과 확신 | 5.4 ± 0.5 |
+| 설문 신뢰 | 5.6 ± 0.5 |
+| 설문 복구 | 5.5 ± 0.7 |
+| 설문 다시 쓰고 싶음 | 5.6 ± 0.5 |
+| 바뀐 줄 수 | 708.0 ± 607.7 |
+| 기대 밖 파일 수 | 0.0 ± 0.0 |
+| main이 움직임(앱 쪽, 판정에 안 넣음) | 0% (0/5) |
+| 지식 파일 수(판정에서 뺌) | 0.0 ± 0.0 |
+| 에이전트 출력 토큰(천) | 19.4 ± 4.8 |
+| 에이전트 입력 토큰(천, 캐시 포함, 앱이 부른 claude -p 포함) | 948.8 ± 272.3 |
+| 그 가운데 앱이 부른 claude -p 입력 토큰(천) | 74.3 ± 24.0 |
+| 에이전트 세션 수 | 1.0 ± 0.0 |
+| 사람 역할 비용($) | 4.0 ± 1.5 |
+
+### relay-v3 M2.1 단계별 에이전트
+
+단계 task 하나의 평균이다. 입력은 캐시 읽기와 쓰기를 더한 값이고, 대화 기록을 찾지 못한 세션은 빼고 센다.
+
+| 단계 | task 수 | 입력 토큰(천) | 캐시 쓰기(천) | 출력 토큰(천) | context.md 글자 | 넣은 지식 글자 |
+|---|---|---|---|---|---|---|
+| session | 5 | 874.5 ± 252.1 | 42.5 ± 6.1 | 15.3 ± 3.8 | - | - |
+
+### relay-v3 M2.1 계약·관문·리뷰
+
+| 지표 | relay-v3 M2.1 |
+|---|---|
+| 계약 승인됨 | 100% (5/5) |
+| Work 끝남([끝 확정]·머지, 확정 없이 리뷰 본 커밋 그대로) | 100% (5/5) |
+| 끝의 종류(Work마다) | [끝 확정] 5 |
+| 끝낸 방식(V25: 한 번·걸림·상자, Work마다) | 상자에서 [그래도 끝내기] 5 |
+| 관문 결론(Work마다 마지막) | 사람 머지(내보내기) 15 |
+| 내보내기 결론이 있음(G1·G2의 분모, 없으면 뺌) | 100% (5/5) |
+| 자동 조건을 채움(그림자·자동 후보) | 0% (0/5) |
+| G1 그 가운데 숨긴 시험 모두 통과 | - |
+| G2 숨긴 시험 모두 통과 가운데 자동 조건을 채움 | 0% (0/5) |
+| 독립 리뷰 호출 수(돈 것) | 4.0 ± 1.0 |
+| 리뷰 건너뜀(리뷰 끈 쪽) | 0.0 ± 0.0 |
+| 미리 리뷰(돈 것 가운데) | 0.6 ± 1.3 |
+| 다시 쓴 리뷰(호출 아님) | 0.2 ± 0.4 |
+| 멈춘 리뷰(호출·토큰에서 뺌) | 0.0 ± 0.0 |
+| 리뷰 실패 | 0.0 ± 0.0 |
+| 토큰을 모르는 리뷰(P5에서 빠짐) | 0.0 ± 0.0 |
+| 리뷰 뒤 세션이 더 일한 Work | 60% (3/5) |
+| 리뷰 입력 토큰(천, 캐시 포함, 에이전트 입력에 들어 있음) | 74.3 ± 24.0 |
+
+### 회차별
+
+| 쪽#회차 | 끝 | 시험 | 분 | 차례 | friction | 에이전트 세션 | 비고 |
+|---|---|---|---|---|---|---|---|
+| relay3-m21#1 | done | OOOO | 5.2 | 18 | 0.11 | 1 | 세 모듈을 한 Work로 맡겨 csv/money/workdays 단위별 브랜치(relay/1-src-csv-js-parsecsv-1188--cs
+…(151자 생략) |
+| relay3-m21#2 | done | OOOO | 6.7 | 23 | 0.09 | 1 | 세 모듈(csv, money, workdays)을 한 Work로 맡겼다. 도구가 모듈마다 브랜치를 따로 만들어 줬고 통합 브랜치에도 합쳐졌다. 
+…(67자 생략) |
+| relay3-m21#3 | done | OOOO | 4.1 | 15 | 0.07 | 1 | 세 모듈(csv, money, workdays)을 한 Work로 맡겼다. 세션이 계약을 쓰고 승인한 뒤 구현했고, 모듈별 브랜치(--csv, -
+…(99자 생략) |
+| relay3-m21#4 | done | OOOO | 5.6 | 18 | 0.11 | 1 | 세 모듈을 한 Work로 맡겼고, 도구가 csv·money·workdays 단위로 나눠 모듈별 브랜치(relay/1-src-csv-js-pars
+…(160자 생략) |
+| relay3-m21#5 | done | OOOO | 5.8 | 18 | 0.50 | 1 | 세 모듈(csv, money, workdays)을 Work 하나로 맡겼다. 계약을 승인했고 모듈마다 브랜치(--csv, --money, --wo
+…(89자 생략) |
+
+### 사람 역할의 말
+
+- [relay3-m21#1 좋음] 세 모듈을 요청 하나로 맡겼는데 도구가 알아서 단위로 나눴고, 단위마다 브랜치와 증거가 따로 생겼다. 계약에 예시와 근거가 보여서 승인하기 쉬웠다.
+- [relay3-m21#1 불편] 단위별 리뷰가 따로 돌아서 끝내기 전에 여러 번 기다려야 했다. 질문에서 추천 선택지가 내가 아는 규칙과 달라 직접 써서 답해야 한 적도 있었다.
+- [relay3-m21#2 좋음] 요청 한 번으로 세 모듈이 단위별 브랜치로 알아서 나뉘었다. 계약에 예시가 있어서 승인하기 전에 formatKrw 소수 처리가 내가 아는 것과 다른 것을 잡아 고칠 수 있었다.
+- [relay3-m21#2 불편] 리뷰와 증거 재기를 기다리는 시간이 길었다. 끝내기를 눌렀는데 리뷰가 지적하고 세션이 고치고 다시 리뷰가 도는 과정을 반복해서 거쳤다. 마지막 지적은 계약 밖 검사였는데 내가 넘기라고 한 쪽이어서 헷갈렸다.
+- [relay3-m21#3 좋음] 세션이 모듈별 브랜치를 먼저 물어보고 계약에 반영했다. 계약 탭에서 예시와 규칙을 확인한 뒤 승인할 수 있어서 안심이 됐다.
+- [relay3-m21#3 불편] 끝내기를 누르니 리뷰를 기다리느라 한참 걸렸고, 열린 것 6개가 한꺼번에 떴다. 대부분 테스트 보강이라 '그래도 끝내기'를 눌러야 하는지 잠깐 망설였다. 모듈별 브랜치가 따로 push되지 않은 채 끝나는 점도 조금 아쉬웠다.
+- [relay3-m21#4 좋음] 요청 하나로 세 모듈을 맡겼더니 도구가 모듈별 단위와 브랜치로 알아서 나눴다. 계약에 예시가 있어서 내가 아는 규칙(소수 버림 등)이 어긋난 것도 바로 잡을 수 있었다.
+- [relay3-m21#4 불편] 끝내기를 누르면 리뷰가 단위마다 따로 돌아 기다림이 길었다. 다시 끝내기를 누르면 새 리뷰 지적이 또 나와서 어디서 멈출지 정하기가 애매했다.
+- [relay3-m21#5 좋음] 요청 하나로 세 모듈을 맡겼더니 세션이 알아서 모듈별 브랜치로 나눠 줬고, 계약 단계에서 경계 규칙을 하나씩 물어 내 선호가 잘 반영됐다.
+- [relay3-m21#5 불편] 단위별 증거와 리뷰가 제각각 낡았다고 뜨고 리뷰가 새 지적을 계속 내서 상태 파악이 번거로웠다. 패널이 길어 스크롤도 많이 해야 했다. 끝내기도 리뷰를 기다리느라 오래 걸렸다.
+
+#### friction이 높았던 차례
+
+
+
+보고서: /home/user/relay-v2/app/eval/results/m21-design-40-three-libraries/report.md
