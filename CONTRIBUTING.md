@@ -31,10 +31,11 @@ npm test                   # [단위], [어댑터], [흐름]
 npm run test:replay        # 관문 재생(V31)만 돌리고 G1·G2 표를 찍는다
 ```
 
-관문 재생의 자료(`test/fixtures/gate-replay/<규약>.jsonl`)는 저장된 평가 결과에서 만듭니다. 새 규약의 묶음을 더하거나 래칫 코드를 바꿨으면 다시 만들고, 시험의 `RECORDED_RULE`과 `FALSE_AUTO_MAX`를 봅니다.
+관문 재생의 자료(`test/fixtures/gate-replay/<규약>.jsonl`)는 저장된 평가 결과에서 만듭니다. 새 규약의 묶음을 더하거나 래칫 코드를 바꿨으면 다시 만들고, 시험의 규약마다의 표(`RECORDED_RULE`, `FALSE_AUTO_MAX`, `RUN_MET`)를 봅니다.
 
 ```bash
 node scripts/gate-replay-fixture.ts test/fixtures/gate-replay/m2.jsonl ../relay-v2/app/eval/results/m2-*
+node scripts/gate-replay-fixture.ts test/fixtures/gate-replay/m2.1.jsonl ../relay-v2/app/eval/results/m21-sealed-* ../relay-v2/app/eval/results/m21-design-*
 ```
 
 리뷰 재생(M2.1 0단계 O2, `docs/m2.1-design.md` 14절)은 저장된 M2 내보내기 묶음에 지금의 리뷰어(`claude -p`)를 다시 돌리고 통과 기준을 찍습니다. 결과 폴더는 옆의 `../relay-v2/app/eval/results`를 읽습니다. 실제 호출은 54번이라 `--dry`(가짜 리뷰어)로 먼저 보고, `--limit 1`로 실제 호출 하나를 시험합니다. claude는 호출마다 새 임시 설정 폴더(`CLAUDE_CONFIG_DIR`)로 돌고 이 셸의 `CLAUDECODE`, `CLAUDE_*`, `ANTHROPIC_*` 변수를 받지 않습니다(평가의 앱 리뷰어처럼). 인증에 그런 변수가 필요하면 `--pass-env <이름,…>`으로 넘깁니다.
