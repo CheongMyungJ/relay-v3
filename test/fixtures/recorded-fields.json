@@ -197,7 +197,9 @@
     "hooks.<PreToolUse|PostToolUse|PostToolUseFailure|Stop>.effort.level": "main/works-session-log.ts (M4a effort, 녹화본 sample: 'medium')",
     "gh.prView.mergeCommit.oid": "adapters/gh.ts prMerge (M4b merge_commit)",
     "gh.prView.mergedAt": "adapters/gh.ts prMerge (M4b merged_at)",
-    "gh.run.<name|path|head_sha|event|status|conclusion|run_attempt>": "adapters/gh.ts runsAt (M4d main 실패)"
+    "gh.run.<name|path|head_sha|event|status|conclusion|run_attempt>": "adapters/gh.ts runsAt (M4d main 실패)",
+    "hooks.<PreToolUse|PostToolUse|PostToolUseFailure>.tool_input.command": "main/hooks.ts toolCommand (바닥 막기. M4e 세션 커밋 집합이 셸 도구를 고른다)",
+    "hooks.<PreToolUse|PostToolUse|PostToolUseFailure>.tool_use_id": "main/works-session-log.ts (M4e 셸 도구의 창: 겹친 도구를 가른다)"
   },
   "not_recorded": {
     "gh.actions/runs?head_sha=…": "목록의 봉투 workflow_runs는 녹화본에 없다(녹화본의 run은 actions/runs/<실행> 하나의 응답). GitHub REST 문서의 꼴을 쓰고 가짜 gh도 그 꼴로 낸다. 다시 녹화(Q9)할 때 함께 녹화한다"

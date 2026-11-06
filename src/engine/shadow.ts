@@ -1,7 +1,7 @@
 // 조건별 그림자 실적의 숫자 (M4c, docs/m4-design.md 5절). 관문 판의 파일이 아니다(engine/track.ts는 관문 판의 파일이라
 // 여기 둔다): 실적은 관문의 결론을 엄격하게만 바꾸고(track_record_ok) 장부를 읽기만 한다. 순수 함수이고 시계는 인자다.
 // - 단위는 (Work, 조건) 한 건(V22). 표본에 드는지는 결론 줄의 met(옛 줄은 condition)으로 정한다.
-// - 일치: 그 조건을 채운 내보내기가 모두 같은 변경으로 사람 손에 머지됨. 불일치: 더 커밋해 머지함, 닫힘, 버림(discarded,
+// - 일치: 그 조건을 채운 내보내기가 모두 같은 변경으로 사람 손에 머지됨. 불일치: 더 커밋해 머지함(M4e: 세션, 사람, 모름), 닫힘, 버림(discarded,
 //   90일 뒤 unmerged), 같은 변경을 모름. 분모 밖: 열림, 낡음(14일), 추적 잃음(90일), 정책 머지, preapproved, 판이 다름.
 // - 비교군(control): 그 조건을 못 채운 Work. lift = 이 조건의 일치율 − 비교군의 '그대로 머지' 비율(기술일 뿐 원인이 아니다).
 // - trackRecord(관문의 track_record_ok)는 이 셈 위의 얇은 함수다.
@@ -22,6 +22,7 @@ import {
 } from './after-merge.ts'
 import { isConclusionLine, NO_PR_DAYS } from './follow.ts'
 import { gateEpoch } from './gate-version.ts'
+import { sessionStats } from './session-commits.ts'
 import {
   claudeMinor,
   epochKey,
@@ -60,6 +61,10 @@ type End =
       same: boolean | null | undefined
       /** 머지 뒤 30일의 열쇠: 머지 커밋, 없으면 머지된 head(로컬 fast-forward) */
       commit: string
+      /** 끝 줄의 head 뒤 머지된 head까지의 커밋 갈래(M4e). 모르면 없다 */
+      after: LedgerEntry['after_commits']
+      /** 앞 결론 줄의 head마다 그 갈래(M4e) */
+      heads: LedgerEntry['after_heads']
     }
   | { kind: 'closed' }
   | { kind: 'discarded' }
@@ -78,6 +83,8 @@ function ends(entries: readonly LedgerEntry[]): Map<string, End> {
         head: e.head,
         same: e.same_change,
         commit: e.merge_commit ?? e.merged_head,
+        after: e.after_commits,
+        heads: e.after_heads,
       })
     else if (before === 'merged') continue
     else if (e.closed) out.set(key, { kind: 'closed' })
@@ -109,8 +116,12 @@ function verdict(
   if (end.by === 'policy') return { kind: 'out', why: 'policy' }
   if (end.merged === line.head || (end.head === line.head && end.same === true))
     return { kind: 'match' }
-  // 같은 head인데 같은 변경을 모름(M4b null). 다른 head로 머지했거나 같은 변경이 아니면 더 커밋함(갈래는 M4e)
+  // 같은 head인데 같은 변경을 모름(M4b null). 다른 head로 머지했거나 같은 변경이 아니면 더 커밋함
   if (end.head === line.head && end.same === null) return { kind: 'miss', why: 'unknown_change' }
+  // 더 커밋한 갈래(M4e): 이 head 뒤 커밋에 사람 커밋이 하나라도 있으면 사람, 세션 커밋만이면 세션, 가르지 못했으면 모름
+  const after = end.head === line.head ? end.after : end.heads?.[line.head]
+  if (after && after.human > 0) return { kind: 'miss', why: 'more_human' }
+  if (after && after.session > 0) return { kind: 'miss', why: 'more_session' }
   return { kind: 'miss', why: 'more_unknown' }
 }
 
@@ -424,6 +435,9 @@ export function recordStats(
     changes: changes.reverse().slice(0, 5),
     unknown_epoch: { lines: lines.filter((e) => epochBase(e) === null).length, of: lines.length },
     broken: input.broken,
+    sessions: sessionStats(
+      input.entries.filter((e) => 'pool' in input.scope || e.project === input.scope.project),
+    ),
   }
 }
 

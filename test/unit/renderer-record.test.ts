@@ -10,6 +10,7 @@ import {
   conditionRest,
   epochText,
   footText,
+  sessionText,
   ratio,
   shadowLine,
 } from '../../src/renderer/src/record.ts'
@@ -109,8 +110,31 @@ test('조건 줄과 CLI 표에 할 일 글(진행 막대, M5까지, 남은 주)�
   const small = r.conditions[0]
   if (!small) throw new Error('small 없음')
   expect(conditionHead(small)).toBe('small (a1b2c3) · 일치 1/1 (하한 0.21)')
-  const all = [conditionHead(small), ...conditionRest(small), footText(r), ...recordText('p1', r)]
+  const all = [
+    conditionHead(small),
+    ...conditionRest(small),
+    footText(r),
+    sessionText(r.sessions),
+    ...recordText('p1', r),
+  ]
   for (const text of all) expect(text).not.toMatch(/M5|몇 건|남은|진행|%/)
+  // 세션 커밋 가르기(M4e): 앱의 줄과 CLI의 줄
+  expect(
+    sessionText({
+      ...r.sessions,
+      merges: 4,
+      corrected: 1,
+      commits: { session: 2, human: 1, relay: 0, base_update: 0 },
+      watched: 9,
+      trailered: 9,
+      works: 4,
+    }),
+  ).toBe(
+    '세션 커밋 · 내보낸 뒤 사람 교정 1/4 · 내보낸 뒤 커밋: 세션 2, 사람 1 · 집합과 트레일러가 다름 0 · 트레일러 덮임 9/9 (Work 4) · 훅 위임 사고 0',
+  )
+  expect(recordText('p1', r).at(-2)).toBe(
+    '세션 커밋 · 내보낸 뒤 사람 교정 0/0 · 내보낸 뒤 커밋: 없음 · 집합과 트레일러가 다름 0 · 집합만으로 가름 0 · 트레일러 덮임 0/0 (Work 0) · 훅 위임 사고 0',
+  )
   expect(footText(r)).toBe('판을 모르는 결론 줄 0/1 · 읽지 못한 장부 줄 1')
   expect(recordText('p1', r)[1]).toBe(
     '이 판: 모델 m, effort medium, Claude Code 2.4, 관문 판 1, 리뷰 프롬프트 4',

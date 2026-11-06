@@ -8,6 +8,7 @@ import type {
   ControlStats,
   EpochView,
   RecordStats,
+  SessionStats,
   ShadowEnd,
 } from '../../shared/api.ts'
 
@@ -110,4 +111,26 @@ export function conditionRest(s: ConditionStats): string[] {
 /** 표의 아래 줄: 판 칸을 모르는 결론 줄과 깨진 장부 줄 */
 export function footText(r: RecordStats): string {
   return `판을 모르는 결론 줄 ${r.unknown_epoch.lines}/${r.unknown_epoch.of} · 읽지 못한 장부 줄 ${r.broken}`
+}
+
+/**
+ * 세션 커밋 가르기(M4e)의 지표: '세션 커밋 · 내보낸 뒤 사람 교정 1/4 · 내보낸 뒤 커밋: 세션 2, 사람 1 · 집합과 트레일러가 다름 0 ·
+ * 트레일러 덮임 9/9 (Work 4) · 훅 위임 사고 0'. 사람 교정은 첫 내보내기 뒤 머지까지 사람 커밋이 있는 머지다(목표로 쓰지 않는다)
+ */
+export function sessionText(s: SessionStats): string {
+  const commits = parts(s.commits, {
+    session: '세션',
+    human: '사람',
+    relay: 'relay',
+    base_update: '기준 맞춤',
+  })
+  return [
+    '세션 커밋',
+    `내보낸 뒤 사람 교정 ${s.corrected}/${s.merges}`,
+    `내보낸 뒤 커밋: ${commits}`,
+    `집합과 트레일러가 다름 ${s.disagree}`,
+    ...(s.set_only > 0 ? [`집합만으로 가름 ${s.set_only}`] : []),
+    `트레일러 덮임 ${s.trailered}/${s.watched} (Work ${s.works})`,
+    `훅 위임 사고 ${s.incidents}`,
+  ].join(' · ')
 }

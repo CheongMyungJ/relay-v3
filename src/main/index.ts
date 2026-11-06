@@ -78,14 +78,21 @@ async function start(): Promise<void> {
     newId: () => randomUUID(),
   })
   const sessions = new SessionHost()
-  // 세션 기록(M4a): 훅 본문의 effort. 훅 서버가 보고 Works가 장부 줄에 읽는다
-  const sessionLog = new SessionLog()
+  // 세션 기록(M4a: 훅 본문의 effort, M4e: 세션 커밋 집합과 트레일러). 훅 서버가 보고 Works가 장부 줄에 읽는다
+  const sessionLog = new SessionLog({
+    store,
+    work: (id) => works?.find(id) ?? null,
+    note: (id, event) => works?.note(id, event),
+    // 훅 위임 사고(devices.md '세션 커밋 가르기' 끄는 조건 (가)): 그 프로젝트의 트레일러를 끈다
+    disableTrailer: async (project) => works?.updateSettings(project, { trailer: false }),
+    log,
+  })
   hooks = new HookServer({
     controlTokenFor: (id) => works?.controlToken(id) ?? null,
     tokenFor: (id) => works?.hookToken(id) ?? null,
     protectedBranches: (id) => works?.protectedBranches(id) ?? [],
     onHook: async (id, event, body) => (works ? works.onHook(id, event, body) : null),
-    noteHook: (id, event, body) => sessionLog.noteHook(id, event, body),
+    noteHook: (id, event, body, denied) => sessionLog.noteHook(id, event, body, denied),
     onControl: async (id, tool, args, signal) =>
       works
         ? works.onControl(id, tool, args, signal)

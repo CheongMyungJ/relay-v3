@@ -66,6 +66,8 @@ describe('한 Work의 생애', () => {
       question_mode: 'confirm_each',
       // V44: 지식 잇기는 M3 장기 평가 뒤 기본 끔
       m3: { knowledge: false, debt: true, tidy: true, promote: true },
+      // M4e(Q7): 세션 커밋 트레일러
+      trailer: true,
     })
 
     const created = await works.createWork({

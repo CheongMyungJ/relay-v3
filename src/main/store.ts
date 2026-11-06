@@ -8,9 +8,12 @@
 //   works/<id>/events.jsonl               훅과 사람의 동작 기록(한 줄에 하나)
 //   works/<id>/settings.json, instructions.md, mcp.json   세션에 주는 파일
 //   works/<id>/feedback/<n>.md            쉬는 세션에 준 되먹임(V24, 자료)
+//   works/<id>/session-commits.jsonl      세션 커밋 집합(M4e, works-session-log.ts: 띄움과 셸 도구 사이의 새 커밋)
+//   works/<id>/hooks.log                  세션 훅 심이 남긴 사고(M4e, 심이 쓴다. 앱은 읽기만)
 //   ledger.jsonl                          실적 장부(그림자. M4d의 머지 뒤 30일 after 줄과 이의 dispute 줄도)
 //   worktrees/<id>                        Work의 git worktree
 //   mirror/<레포 키>.git                  끝까지 따라가기의 앱 로컬 거울(M4b, adapters/mirror.ts. 이 파일은 쓰지 않는다)
+//   git-hooks/<훅 이름>                   세션 커밋 트레일러의 심(M4e, adapters/git-hooks.ts. 이 파일은 쓰지 않는다)
 // 파일을 통째로 쓸 때는 임시 파일에 쓴 뒤 rename한다(반쯤 쓴 파일이 남지 않게). 줄 기록은 끝에 덧붙인다.
 // 파일은 0600, 만드는 폴더는 0700이다(mcp.json의 control 토큰, 요청과 계약을 같은 기계의 다른 사용자가 읽지 못하게).
 // 시계와 id는 주입한다.
@@ -125,6 +128,8 @@ export type WorkFile =
   | 'settings.json'
   | 'instructions.md'
   | 'mcp.json'
+  | 'session-commits.jsonl'
+  | 'hooks.log'
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
@@ -336,7 +341,12 @@ export class Store {
 
   /** events.jsonl에 한 줄. ts는 시계에서 */
   appendEvent(id: string, event: Record<string, unknown>): Promise<void> {
-    const path = this.workPath(id, 'events.jsonl')
+    return this.appendLine(id, 'events.jsonl', event)
+  }
+
+  /** 줄 기록 파일(events.jsonl, session-commits.jsonl)에 JSON 한 줄. ts는 시계에서 */
+  appendLine(id: string, name: WorkFile, event: Record<string, unknown>): Promise<void> {
+    const path = this.workPath(id, name)
     const line = `${JSON.stringify({ ts: this.now(), ...event })}\n`
     return this.serial(path, async () => {
       await mkdir(dirname(path), { recursive: true, mode: DIR_MODE })

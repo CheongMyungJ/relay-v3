@@ -1,7 +1,8 @@
 // Work의 worktree와 세션 (docs/m2-modules.md 3절 works.ts의 createWork·resumeWork, docs/m2-app.md 3절).
 // worktree는 $RELAY_HOME/worktrees/<workId>, 작업 브랜치는 relay/<짧은 이름>-<4자>(git worktree add -b).
 // 세션은 PTY의 claude: --settings(훅), --append-system-prompt-file(지침), --mcp-config(relay 도구). 설정과 MCP 파일은
-// 포트·토큰이 앱 실행마다 바뀌므로 띄울 때마다 새로 쓴다. [변경]과 [빚]도 worktree에서 읽는다.
+// 포트·토큰이 앱 실행마다 바뀌므로 띄울 때마다 새로 쓴다. 세션 환경에는 세션 커밋 트레일러(M4e, works-session-log.ts)의
+// core.hooksPath 심을 더한다(core sessionEnv는 그대로). [변경]과 [빚]도 worktree에서 읽는다.
 
 import { randomBytes } from 'node:crypto'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
@@ -316,12 +317,14 @@ export async function launch(ctx: WorkCtx, rec: WorkRecord, wantResume: boolean)
     ...(deps.model ? { model: deps.model } : {}),
   })
   wire(ctx, id)
+  // 세션 커밋 트레일러(M4e, Q7): 세션 PTY 환경에만 core.hooksPath 심. 끄면 집합만 쓴다
+  const trailer = await deps.sessionLog?.prepareLaunch(rec, ctx.projectOf(rec).settings.trailer)
   try {
     sessions.start(id, {
       bin: deps.claudeBin,
       args,
       cwd: rec.worktree,
-      env: sessionEnv({ hookToken: rt.token, workId: id }),
+      env: { ...sessionEnv({ hookToken: rt.token, workId: id }), ...trailer?.env },
     })
   } catch (e) {
     rt.session = 'stopped'

@@ -1,6 +1,6 @@
 # M4 설계: 그림자 실적
 
-- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절)를 만들었다. M4e~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
+- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절), M4e(7.4절)를 만들었다. M4f~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
 - **사용자 결정(2026-11-06, ✅):**
   - Q10 자기 실행: **도구만 만들고 relay-v3 자기 실행은 나중에 따로 정한다.** quality.json PR, main 보호·필수 검사, 앱으로 relay-v3 개발하기는 하지 않는다. 그래서 M4h(10절)는 '나중'이고, M4의 숫자는 재생과 평가 자료로만 낸다.
   - Q2 M5 숫자: **12절의 안 그대로**(일치 ≥ 20, V3 그대로; 끝이 정해진 n ≥ 30; 일치율 ≥ 0.95; lift > 0; 창 30일; 창이 닫힌 이 조건의 머지 ≥ 20에서 귀속 0·미정 0; 결정론 5회 갈림 0; 지금 관문 판의 재생 거짓 자동 0). M5 규약이 이것을 그대로 쓴다.
@@ -352,6 +352,30 @@ interface AfterLine {
 ### 7.3 가르기 (순수 `classifyCommits`, `engine/track.ts`)
 
 끝 줄을 쓸 때 거울에서 그림자 head 뒤 머지된 head까지의 커밋(squash면 `refs/relay/pr/<N>`)을 넷으로 나눠 `after_commits`에 센다: `relay`(작성자 `relay@localhost`, V40), `base_update`(4.3의 깨끗한 기준 맞춤 머지), `session`(7.1 집합에 있거나 트레일러가 있음), `human`(나머지). 집합과 트레일러가 다르게 가르면 그 커밋은 `human`으로 셈하고(엄격), 다름의 수를 장치 지표로 남긴다.
+
+### 7.4 만든 것 (M4e, V51)
+
+- **셈(순수):** 새 파일 `engine/session-commits.ts`. 심의 글(`shimText`·`shimFiles`: githooks(5)의 이름 전부, prepare-commit-msg와 commit-msg만 트레일러), 세션 환경(`trailerEnv`), git 판(`trailerGitOk`, 2.31), 트레일러 읽기(`workTrailers`), 가르기(`classifyCommits`: relay, base_update, session, human, disagree), 세션 커밋 집합 파일 읽기(`parseSessionLog`, `sessionSummary`), 장치 지표(`sessionStats` → shared `SessionStats`, `RecordStats.sessions`).
+- **집합(7.1):** `main/works-session-log.ts` `SessionLog`가 deps(`store`, `work`, `note`, `disableTrailer`, `log`)를 받는다. 셸 도구의 PreToolUse에서 worktree HEAD·Work 브랜치·단위 브랜치의 끝을 읽고(창을 엶), 그 도구의 PostToolUse·PostToolUseFailure나 Stop에서 그 뒤 새로 닿은 커밋(기준 ref에서 닿는 것은 뺌, 500개까지)을 `works/<id>/session-commits.jsonl`에 적는다. 겹친 셸 도구는 한 창이고 바닥 막기가 거절한 도구는 창을 열지 않는다. `hooks.ts`는 `noteHook`을 기다리고 `denied`를 넘긴다. `adapters/git.ts`에 `refTips`, `newCommits`.
+- **트레일러(7.2, Q7):** 새 파일 `adapters/git-hooks.ts`(`writeShims`: `$RELAY_HOME/git-hooks`, `gitVersionText`, `gitCommonDir`). `SessionLog.prepareLaunch(work, 프로젝트 설정 trailer)`가 심을 쓰고 세션 환경을 만들며 띄움 줄을 쓴다. `works-worktree.ts launch`가 `{ ...sessionEnv(...), ...env }`로 PTY에 준다(core `sessionEnv`는 그대로). 집합에 든 커밋에 이 Work의 트레일러가 없으면 events.jsonl `trailer_missing`.
+- **끝 줄(7.3):** `engine/ledger.ts`에 `after_commits`, `after_heads`, `trailer`, `session_set`(isEntry가 모양을 본다). `works-record.ts mergedFields`가 거울의 사이 커밋(트레일러를 `BetweenCommit.trailers`로)을 가르고, `earlierAfter`가 앞 결론 줄의 head마다 가른다. 끝 줄마다 `sessionLedger`(works-record.ts의 따라가기 끝 줄, works-exports.ts `ledgerFate`). 앱의 [머지]·정책 머지는 `after_commits` 0과 worktree에서 가른 `after_heads`. `engine/follow.ts`에 `exportHeads`.
+- **불일치 갈래:** `engine/shadow.ts verdict`가 그 head의 갈래(끝 줄의 head면 `after_commits`, 아니면 `after_heads[head]`)로 `more_human`(사람 커밋이 있음), `more_session`(세션 커밋만), `more_unknown`(가르지 못함)을 가른다.
+- **끄는 조건 (가):** 심이 `works/<id>/hooks.log`에 사고를 남기면(원래 훅 자리를 찾지 못함 → 커밋을 그만둠, 트레일러를 더하지 못함 → 커밋은 감) 다음 셸 도구 끝이나 Stop에서 `hook_incident`를 적고 `works.updateSettings(project, { trailer: false })`. 다룬 줄 수를 session-commits.jsonl에 적어 앱을 다시 켜도 같은 사고로 다시 끄지 않는다. 프로젝트 설정 `trailer`(shared `ProjectSettings`, 기본 켬)와 설정 대화상자의 '세션 커밋 트레일러' 스위치(사람이 다시 켬). (나)·(다)의 숫자는 [실적]과 `relay record`의 '세션 커밋' 줄(내보낸 뒤 사람 교정 k/n, 갈래, 다름, 집합만, 덮임, 사고).
+- **녹화 칸:** `test/fixtures/recorded-fields.json`의 read에 훅 `tool_input.command`(녹화본 PreToolUse sample에 있음)와 `tool_use_id`. 가짜 claude와 가짜 gh는 고치지 않았다(가짜 claude의 bash 단계가 PTY 환경을 물려받아 심이 그대로 돈다).
+- **시험:** [단위] `session-commits.test.ts`, `renderer-record.test.ts`. [어댑터] `git-hooks.test.ts`(실제 git), `session-log.test.ts`, `hooks.test.ts`. [흐름] `works-session.test.ts`(셋), `works.test.ts`(설정 기본값). [스모크] `record.spec.ts`에 스위치와 세션 커밋 줄을 더해 찍어 봤다. `npm run test:replay` 그대로 지남. 이 환경의 git에는 이미 `GIT_CONFIG_COUNT=3`이 있어 '물려받은 설정 뒤에 붙임'이 실제로 쓰였다.
+- core는 고치지 않았다(4,850줄 그대로). `works.ts`(598)·`works-evidence.ts`(599)는 그대로다.
+
+### 7.5 설계와 다른 것 (M4e)
+
+- **집합은 work.json `session_commits[]`가 아니라 `works/<id>/session-commits.jsonl`(덧붙이기만)에 둔다.** Works가 work.json을 메모리에서 통째로 다시 쓰므로 세션 기록이 따로 쓰면 덮인다. works.ts에 줄을 더하지 않으려는 까닭도 있다.
+- **'앞에 읽은 끝에서 지금까지'가 아니라 셸 도구의 창(PreToolUse → PostToolUse)이다.** PostToolUse·Stop마다 앞 끝부터 세면 세션이 쉬는 사이 사람이 만든 커밋이 다음 도구 끝에 세션으로 셈해진다. 창으로 보면 '도구 경계에서 보지 못한 커밋은 세션 밖'(7.1)을 그대로 지킨다. 그래서 훅 서버가 세션 기록을 기다린다(도구가 돌기 전에 끝을 읽는다). Stop은 열린 창을 닫는다(끊긴 도구). worktree HEAD와 단위 브랜치도 본다.
+- **`RELAY_ORIG_HOOKS`를 두지 않는다.** 심이 부를 때마다 세션 환경의 그 설정을 뺀 git(`GIT_CONFIG_COUNT=<앞 설정 수>`)으로 원래 훅 자리를 구한다. 세션이 시험에서 만든 다른 레포의 커밋도 이 환경을 물려받으므로, 띄울 때 구한 한 자리로는 그 레포의 훅을 돌리지 못한다(relay-v3 자신의 [흐름] 시험이 그렇다). 세션 안에서 husky를 설치해도 따라간다. 물려받은 `GIT_CONFIG_*`가 있으면 그 뒤에 붙인다(이 환경이 그렇다). 트레일러는 이 Work의 레포(공통 git 폴더가 같음) 커밋에만 붙인다.
+- **commit-msg에서도 붙이고, 빈 메시지에는 붙이지 않는다.** prepare-commit-msg는 편집기 앞에 돌아 편집기로 쓴 메시지에는 붙일 수 없다. 빈 메시지(편집기를 열 커밋의 첫 메시지)에 트레일러를 붙이면 git이 그만둘 커밋을 트레일러만 든 메시지로 만든다(시험에서 봄). --no-verify는 commit-msg를 건너뛰지만 prepare-commit-msg가 붙인다.
+- **`after_heads`를 더했다.** 설계는 그림자 head 하나(`after_commits`)만 가른다. 그런데 사람이나 세션이 더 고쳐 push하면 앱이 다시 내보내 마지막 결론 줄의 head가 바뀌므로, 끝 줄의 head 뒤에는 대개 커밋이 없다. 앞 결론 줄의 head마다(최근 20개) 갈래를 적어야 '더 커밋'을 가르고 사람 교정(첫 내보내기 뒤 사람 커밋이 있는 머지)을 셀 수 있다.
+- **`after_commits`에 `disagree`(다름의 수)를 넣었다**(7.3의 '다름의 수를 장치 지표로 남긴다'). **`trailer: false`는 띄울 때가 아니라 끝 줄에 적는다**: 트레일러를 켜지 않고 띄운 세션이 하나라도 있으면 집합만으로 가른 끝 줄이다. 끈 까닭(setting, git, error)은 session-commits.jsonl의 띄움 줄에 있다. 끝 줄마다 `session_set`(덮임과 사고의 지표)을 적는다.
+- **`classifyCommits`는 `engine/track.ts`가 아니라 새 파일 `engine/session-commits.ts`에 있다**(sameChange와 같은 까닭: track.ts는 관문 판의 파일이다).
+- **끄는 조건 (가)는 심 자신의 사고만 센다.** 원래 훅이 스스로 커밋을 거절한 것과 '원래 훅이 돌지 않음'을 바깥에서 가를 길이 없어서다. 원래 훅 자리를 찾지 못하면 심은 커밋을 그만둔다(훅을 건너뛰고 커밋하면 바닥이 깨진다). 끄기는 다음에 띄우는 세션부터다(도는 세션의 환경은 바꾸지 못한다). 다시 켜는 길로 설정 대화상자에 스위치를 두었다(설계에 없음).
+- **M4e 앞의 Work(띄움 줄이 없음)는 가르지 않는다**(`after_commits`는 같은 SHA의 0만, `after_heads`·`session_set` 없음). PR 없이 끝나 로컬로 합친 Work(4.6)는 `after_commits` 0만 적는다.
 
 ## 8. M4f 관문 5회 반복 안정성 (측정, 앱 장치 아님)
 

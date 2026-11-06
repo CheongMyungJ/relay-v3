@@ -314,6 +314,23 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
             onChange={(e) => set('m3', { ...s.m3, promote: e.target.checked })}
           />
         </label>
+        <label className="switch-row">
+          <span>
+            <span className="switch-title">세션 커밋 트레일러</span>
+            <span className="help">
+              세션이 만든 커밋에 Relay-Work 트레일러를 붙여 사람 커밋과 가릅니다. 세션 프로세스에만
+              훅 자리를 주고 레포의 훅에 그대로 넘깁니다. 레포 설정과 훅 파일은 바꾸지 않습니다. 훅
+              위임 사고가 나면 relay가 끕니다. 다음에 띄우는 세션부터 적용됩니다.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            checked={s.trailer}
+            onChange={(e) => set('trailer', e.target.checked)}
+          />
+        </label>
         <RecordTable project={p.project} />
         <ErrorLine text={act.error} />
         <div className="row end">

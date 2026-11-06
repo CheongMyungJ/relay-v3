@@ -33,6 +33,7 @@ Electron main
   ├─ gate·ledger  core.gate, 실적 장부 $RELAY_HOME/ledger.jsonl
   ├─ record       끝까지 따라가기(M4b): 끝난 Work의 PR·PR 없이 끝남. 앱 시작, 새 Work, 6시간마다. 거울 $RELAY_HOME/mirror
   │              머지 뒤 30일(M4d, works-after.ts): 되돌림·main 실패를 같은 계기에. [실적]은 works-stats.ts(M4c)
+  ├─ session log  세션 기록(works-session-log.ts): 훅의 effort(M4a), 셸 도구 사이의 세션 커밋 집합과 트레일러 심(M4e)
   └─ gh           PR 찾기·읽기·머지 (gh CLI)
 Renderer (React)
   사이드바(프로젝트 → Work) │ 터미널(xterm) │ 패널: [계약] [증거] [변경] [빚]
@@ -54,6 +55,7 @@ claude --session-id <uuid>
 ```
 
 - `instructions.md`(v3 지침, 사실만): 계약을 먼저 쓰고 `submit_contract`로 제출(그 전에 코드를 읽고 돌려 보고 시험을 쓰고 커밋해도 되며, 승인 전에는 시험 밖을 바꾸지 않음), 계약이 요청을 설명한다는 것(V29: 틀린 동작을 알리는 요청이면 알린 증상마다 원인을 근거에, 설명하지 못한 증상은 더 찾거나 묻기, 이름 붙인 대상마다 끝까지 가는 줄과 예시, 증상 곁에서 바꾸지 않는 것은 지킴 줄, 요청 영역의 동작을 비목표로 두기 전에 묻기, 승인 뒤 다른 원인을 찾으면 계약 바꾸기), 사람만 아는 사실은 묻기(질문 방식은 결정마다 확인이 첫 기본값, philosophy 원칙 1), 승인 뒤에는 방식이 자유, 예시의 입력과 출력은 시험이 그대로 쓸 수 있는 JSON 값으로 쓰고 글로만 쓸 수 있는 것은 note에 둔다는 것(V34), 예시 자료 위치와 시험 이름의 `[<계약 id>:C1.1]` 태그(V11), 바뀜·지킴 시험은 기준에서도 돌아 지킴 시험은 기준에 있는 것만 쓴다는 것(V28에서 더함. 제출 때 기준 확인의 사실은 V32에서 뺐다), 한 요청은 한 Work이고 여러 부분은 줄의 단위로 묶어 Work 브랜치에 단위마다 커밋한다는 것과 증거는 Work 브랜치의 끝에서 잰다는 것(V21), `relay_check`로 증거를 당겨 볼 수 있음, 쉬는 동안 relay가 세션 몫의 사실과 지적(주장)을 파일과 한 줄로 줄 수 있음과 사람의 답은 AskUserQuestion으로 물음(V24), 막히는 동작 목록, 쓴 것을 끝에 터미널에 말하기. 리뷰·시험 '하라'는 지시는 넣지 않는다(증거 의무는 앱이 잰다).
+- 세션 환경(M4e, V51): 프로젝트 설정 `trailer`가 켜졌고 git이 2.31 이상이면 세션 PTY 환경에만 `GIT_CONFIG_COUNT`·`GIT_CONFIG_KEY_n=core.hooksPath`·`GIT_CONFIG_VALUE_n=$RELAY_HOME/git-hooks`(물려받은 GIT_CONFIG_* 뒤에)와 심이 쓰는 `RELAY_GIT_CONFIG_BASE`·`RELAY_HOOKS_DIR`·`RELAY_GIT_COMMON`·`RELAY_HOOK_LOG`를 더한다. 심은 레포의 원래 훅에 넘기고 세션 커밋에 `Relay-Work: <Work id>`를 붙인다. 사용자 레포의 설정·훅 파일은 바꾸지 않는다. 사람의 셸과 앱의 확인 실행기는 물려받지 않는다.
 - 재개: 앱이 꺼지거나 세션이 끝나면 `--resume <session-id>`로 같은 대화를 연다. 기다리던 `submit_contract`는 다시 부르게 안내한다.
 - 바닥의 막기(PreToolUse): v2 `core/git-guard.ts`를 옮긴다(지킬 브랜치·기준 브랜치 push, 강제 push, 원격 삭제, `gh pr merge`, `gh api` 머지). 모든 세션에 같은 두께.
 - PR 코멘트·이슈 같은 바깥 글은 v2 D566처럼 인용 파일로만 두고, 쉬는 세션에 한 줄. M2에서는 넣지 않고 M3에서 장치로 등록한다(증거 되먹임과 같은 장치군).

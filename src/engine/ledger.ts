@@ -3,6 +3,7 @@
 // Work의 PR과 PR 없이 끝남·버림도 따라가 끝 줄(ended, merge_commit, merged_at, same_change)을 쓴다(main/works-record.ts).
 // 실적은 조건마다 '자동이었으면 머지했을 head를 사람이 그대로 머지했나'다. 버전이 바뀌면 다시 잰다(philosophy 원칙 4).
 // 셈(trackRecord, shadowStats)은 engine/shadow.ts(M4c), 머지 뒤 30일의 after·dispute 줄은 engine/after-merge.ts(M4d)다.
+// M4e부터 끝 줄에 머지 뒤 커밋의 갈래(after_commits)와 세션 커밋 집합의 셈(session_set)을 더한다(engine/session-commits.ts).
 
 import type { Conclusion, RatchetResult } from '../core/types.ts'
 import { gateEpoch } from './gate-version.ts'
@@ -66,6 +67,38 @@ export interface LedgerEntry {
    * 맞춤 머지와 relay 빚 커밋만 더함, 또는 같은 patch-id). null은 모름(일치로 세지 않는다)
    */
   same_change?: boolean | null
+  // ── M4e(m4-design 7절): 끝 줄. 모두 선택 칸이고 M4e 앞의 줄에는 없다
+  /**
+   * 머지 뒤 커밋(이 끝 줄의 head..merged_head, 머지 전 기준에서 닿는 것은 뺌)의 갈래(engine/session-commits.ts classifyCommits).
+   * 같은 SHA면 모두 0. 가르지 못했으면(사이 커밋을 모름, M4e 앞의 Work) 없다
+   */
+  after_commits?: AfterCommits
+  /**
+   * 이 내보내기의 앞 결론 줄 head(끝 줄의 head가 아님)마다 그 head 뒤 머지된 head까지의 커밋 갈래(다시 내보내기 전에 세션이나
+   * 사람이 더 고친 것). merged_head의 조상이 아니거나 가르지 못한 head는 없다
+   */
+  after_heads?: Record<string, AfterCommits>
+  /** 거짓이면 트레일러 없이 세션 커밋 집합만으로 갈랐다(트레일러를 켜지 않고 띄운 세션이 있음) */
+  trailer?: boolean
+  /** 이 Work의 세션 커밋 집합 전체(트레일러 덮임과 훅 위임 사고의 지표). M4e 앞의 Work는 없다 */
+  session_set?: SessionSetSummary
+}
+
+/** 머지 뒤 커밋의 갈래(m4-design 7.3). disagree는 집합과 트레일러가 다르게 갈라 human으로 센 수 */
+export interface AfterCommits {
+  session: number
+  human: number
+  relay: number
+  base_update: number
+  disagree: number
+}
+
+/** Work의 세션 커밋 집합의 셈: 커밋 수, 트레일러를 켠 채 본 수, 그 가운데 트레일러가 있는 수, 훅 위임 사고 수 */
+export interface SessionSetSummary {
+  commits: number
+  watched: number
+  trailered: number
+  incidents: number
 }
 
 /** 판 열쇠의 재료(m4-design 3.2): 내보내기 결론 줄의 판 칸. 지금 판도 같은 꼴로 만든다(main/works-exports.ts) */
@@ -169,8 +202,28 @@ function isFateLine(e: Record<string, unknown>): boolean {
     optOf(e['ended'], ENDED) &&
     optString(e['merge_commit']) &&
     optString(e['merged_at']) &&
-    (same === undefined || same === null || typeof same === 'boolean')
+    (same === undefined || same === null || typeof same === 'boolean') &&
+    optCounts(e['after_commits'], AFTER_KEYS) &&
+    (e['after_heads'] === undefined ||
+      (typeof e['after_heads'] === 'object' &&
+        e['after_heads'] !== null &&
+        !Array.isArray(e['after_heads']) &&
+        Object.values(e['after_heads']).every(
+          (a) => a !== undefined && optCounts(a, AFTER_KEYS),
+        ))) &&
+    (e['trailer'] === undefined || typeof e['trailer'] === 'boolean') &&
+    optCounts(e['session_set'], ['commits', 'watched', 'trailered', 'incidents'])
   )
+}
+
+const AFTER_KEYS = ['session', 'human', 'relay', 'base_update', 'disagree'] as const
+
+/** M4e의 셈 칸: 없거나, 이름마다 0 이상의 정수인 객체 */
+function optCounts(v: unknown, keys: readonly string[]): boolean {
+  if (v === undefined) return true
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  return keys.every((k) => Number.isInteger(o[k]) && (o[k] as number) >= 0)
 }
 
 const strings = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === 'string')

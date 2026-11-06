@@ -4,7 +4,8 @@
 // unmerged로 쓴다. 진행 중 Work는 PR 확인(works-exports.ts fate)이 그대로 쓴다: 이 파일은 그것이 놓친 Work가 끝난 뒤의 끝을
 // 맡는다. 같은 변경(engine/follow.ts sameChange)의 사실은 $RELAY_HOME의 거울(adapters/mirror.ts)에서 읽는다. 사용자 레포는
 // 읽기만 한다(ref·설정·객체를 바꾸지 않는다). 계기: 앱 시작, 새 Work, 앱이 도는 동안 6시간마다. 프로젝트마다 한 번에 하나만.
-// 같은 계기에 머지 뒤 30일(M4d, works-after.ts)도 본다.
+// 같은 계기에 머지 뒤 30일(M4d, works-after.ts)도 본다. 끝 줄마다 세션 커밋 가르기(M4e)의 칸: 머지 뒤 커밋의 갈래(after_commits,
+// 앞 결론 줄 head마다 after_heads)와 세션 커밋 집합의 셈(works-session-log.ts).
 
 import {
   isAncestor,
@@ -28,6 +29,7 @@ import { readJson } from '../adapters/store.ts'
 import type { EvidenceBundle } from '../core/types.ts'
 import {
   fateResult,
+  exportHeads,
   lastConclusion,
   noPrExpired,
   sameChange,
@@ -36,7 +38,8 @@ import {
   type ChangeFacts,
   type Unsettled,
 } from '../engine/follow.ts'
-import type { LedgerEntry } from '../engine/ledger.ts'
+import type { AfterCommits, LedgerEntry } from '../engine/ledger.ts'
+import { NO_COMMITS, workTrailers } from '../engine/session-commits.ts'
 import {
   upgradeWork,
   type ExportRecord,
@@ -47,6 +50,8 @@ import {
 import { acceptedOf } from './works-debt.ts'
 import { followAfter } from './works-after.ts'
 import { ledgerEntry, type LedgerDeps } from './works-ledger.ts'
+import { afterOf, sessionLedger, sessionOf } from './works-session-log.ts'
+import type { SessionSet } from '../engine/session-commits.ts'
 import { isActive } from './works-types.ts'
 
 /** 앱이 도는 동안 따라가는 간격 */
@@ -67,8 +72,18 @@ export interface RecordDeps extends LedgerDeps {
   onChange?: (projectId: string) => void
 }
 
-/** 머지 끝 줄의 M4b 칸 */
-export type MergeFields = Pick<LedgerEntry, 'merge_commit' | 'merged_at' | 'same_change' | 'pr'>
+/** 머지 끝 줄의 M4b 칸과 M4e 칸(머지 뒤 커밋의 갈래, 세션 커밋 집합의 셈) */
+export type MergeFields = Pick<
+  LedgerEntry,
+  | 'merge_commit'
+  | 'merged_at'
+  | 'same_change'
+  | 'pr'
+  | 'after_commits'
+  | 'after_heads'
+  | 'trailer'
+  | 'session_set'
+>
 
 /**
  * 한 번의 따라가기에서 쓰는 거울(프로젝트 하나, 기준 브랜치 하나): 처음 쓸 때 만들고 기준을 받으며, PR ref와 Work 브랜치는
@@ -138,7 +153,12 @@ async function betweenOf(
   if (commits.length > BETWEEN_MAX) return null
   const out: BetweenCommit[] = []
   for (const c of commits)
-    out.push({ sha: c.sha, author: c.author, baseUpdate: await baseUpdate(dir, c, o.baseRef) })
+    out.push({
+      sha: c.sha,
+      author: c.author,
+      baseUpdate: await baseUpdate(dir, c, o.baseRef),
+      trailers: workTrailers(c.body),
+    })
   return out
 }
 
@@ -188,9 +208,46 @@ export async function changeFacts(
   return facts
 }
 
+/** 앞 결론 줄의 head를 이만큼까지 가른다(최근 것) */
+const EARLIER_MAX = 20
+
+/**
+ * 앞 결론 줄의 head마다 그 head 뒤 merged까지의 커밋 갈래(M4e after_heads: 다시 내보내기 전에 세션이나 사람이 더 고친 것). dir은
+ * 두 커밋이 다 있는 레포(거울, 같은 SHA의 머지면 Work의 worktree), exclude는 머지 전 기준. merged의 조상이 아니거나 읽지 못한
+ * head는 뺀다(모름). 세션 커밋 집합을 모르면 빈 것
+ */
+export async function earlierAfter(
+  dir: string,
+  baseRef: string,
+  o: {
+    heads: readonly string[]
+    merged: string
+    exclude: string
+    session: { set: SessionSet }
+    work: string
+  },
+): Promise<Record<string, AfterCommits>> {
+  const out: Record<string, AfterCommits> = {}
+  if (!o.session.set.launched) return out
+  for (const head of o.heads.filter((h) => h !== o.merged).slice(-EARLIER_MAX)) {
+    if (!(await hasCommit(dir, head)) || (await orNull(isAncestor(dir, head, o.merged))) !== true)
+      continue
+    const between = await orNull(
+      betweenOf(dir, { head, merged: o.merged, exclude: o.exclude, baseRef }),
+    )
+    const after = between && afterOf(o.session, o.work, between)
+    if (after) out[head] = after
+  }
+  return out
+}
+
+const heads = (h: Record<string, AfterCommits>) =>
+  Object.keys(h).length > 0 ? { after_heads: h } : {}
+
 /**
  * 머지 끝 줄의 M4b 칸(m4-design 4.1): 머지 커밋과 머지한 때(gh pr view), 내보낸 head와 머지된 head가 같은 변경인가(같은
- * SHA면 거울을 보지 않는다). 읽지 못한 칸은 비우고 같은 변경은 null(모름)이다
+ * SHA면 거울을 보지 않는다). 읽지 못한 칸은 비우고 같은 변경은 null(모름)이다. M4e 칸: 끝 줄의 head와 앞 결론 줄의 head(earlier)
+ * 뒤 머지된 head까지의 커밋 갈래, 세션 커밋 집합의 셈
  */
 export async function mergedFields(
   deps: RecordDeps,
@@ -201,6 +258,8 @@ export async function mergedFields(
     pr: PrInfo
     /** 내보낸 head(그 내보내기의 마지막 결론 줄) */
     last: LedgerEntry | undefined
+    /** 그 내보내기의 결론 줄 head(follow.ts exportHeads) */
+    earlier: readonly string[]
     mirror?: Mirror
   },
 ): Promise<MergeFields> {
@@ -209,7 +268,12 @@ export async function mergedFields(
   const mergeCommit = m.ok ? m.mergeCommit : null
   const mergedAt = (m.ok ? m.mergedAt : null) ?? pr.mergedAt
   const head = o.last?.head ?? pr.headRefOid
+  const session = await sessionOf(deps.store, rec.id)
   let same: boolean | null = head === pr.headRefOid ? true : null
+  // 머지 뒤 커밋의 갈래(M4e): 같은 SHA면 없음, 아니면 거울의 사이 커밋을 세션 커밋 집합과 트레일러로 가른다
+  let after: AfterCommits | null = same ? { ...NO_COMMITS } : null
+  let earlier: Record<string, AfterCommits> = {}
+  const job = { heads: o.earlier, merged: pr.headRefOid, session, work: rec.id }
   if (same === null) {
     const mirror = o.mirror ?? new Mirror(deps.store.home, project.path, rec.base, deps.log)
     const dir = await mirror.dir()
@@ -225,13 +289,19 @@ export async function mergedFields(
         return null
       })
       same = facts === null ? null : sameChange(facts)
+      if (facts?.between) after = afterOf(session, rec.id, facts.between)
+      const known = mergeCommit !== null && (await hasCommit(dir, mergeCommit))
+      const exclude = known ? `${mergeCommit}^1` : mirror.baseRef
+      earlier = await earlierAfter(dir, mirror.baseRef, { ...job, exclude })
     }
-  }
+  } else earlier = await earlierAfter(rec.worktree, rec.base_ref, { ...job, exclude: rec.base_ref })
   return {
     pr: pr.number,
     ...(mergeCommit ? { merge_commit: mergeCommit } : {}),
     ...(mergedAt ? { merged_at: mergedAt } : {}),
     same_change: same,
+    ...sessionLedger(session, after),
+    ...heads(earlier),
   }
 }
 
@@ -357,14 +427,20 @@ export class RecordFollower {
     if (!found.ok || (found.pr === null && x.pr !== null)) return
     const pr = found.pr
     if (pr !== null && pr.baseRefName !== rec.base) return
+    // 끝 줄마다 세션 커밋 집합의 셈(M4e). 머지 칸이 갈래를 가져오면 그것을 쓴다
+    const session = await sessionOf(this.deps.store, rec.id)
     const write = (extra: Partial<LedgerEntry>, head = u.last.head) =>
       this.deps.store.appendLedger(
-        ledgerEntry(this.deps, rec, x, project, head, fateResult(u.last), extra),
+        ledgerEntry(this.deps, rec, x, project, head, fateResult(u.last), {
+          ...sessionLedger(session, null),
+          ...extra,
+        }),
       )
     if (pr?.state === 'OPEN') return
     if (pr?.state === 'MERGED') {
       const last = lastConclusion(ledger, rec.id, x.unit)
-      const fields = await mergedFields(this.deps, { project, rec, x, pr, last, mirror })
+      const earlier = exportHeads(ledger, rec.id, x.unit)
+      const fields = await mergedFields(this.deps, { project, rec, x, pr, last, earlier, mirror })
       return write({
         by: 'human-override',
         merged_head: pr.headRefOid,
@@ -385,7 +461,13 @@ export class RecordFollower {
       return null
     })
     if (got)
-      return write({ by: 'human-override', merged_head: u.last.head, same_change: true, ...got })
+      return write({
+        by: 'human-override',
+        merged_head: u.last.head,
+        same_change: true,
+        after_commits: { ...NO_COMMITS },
+        ...got,
+      })
     if (got === false && noPrExpired(noPrAt, this.deps.now())) return write({ ended: 'unmerged' })
   }
 

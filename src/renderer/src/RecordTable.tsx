@@ -10,7 +10,14 @@ import {
   type ShadowEnd,
   type WorkView,
 } from '../../shared/api.ts'
-import { conditionHead, conditionRest, controlText, epochText, footText } from './record.ts'
+import {
+  conditionHead,
+  conditionRest,
+  controlText,
+  epochText,
+  footText,
+  sessionText,
+} from './record.ts'
 import { ErrorLine, useAction } from './ui.tsx'
 
 export function RecordTable(p: { project: ProjectView }) {
@@ -109,6 +116,9 @@ function Stats(p: { stats: RecordStats; project: string; onChange: () => void })
           판이 바뀜: {c.fields.join(', ')}
         </p>
       ))}
+      <p className="help" data-testid="record-sessions">
+        {sessionText(stats.sessions)}
+      </p>
       <p className="help" data-testid="record-foot">
         {footText(stats)}
       </p>

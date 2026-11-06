@@ -69,6 +69,24 @@ export function lastConclusion(
   )
 }
 
+/** 이 내보내기의 결론 줄 head(나온 차례, 겹치지 않게). 끝 줄의 앞 head 갈래(M4e after_heads)를 고른다 */
+export function exportHeads(
+  entries: readonly LedgerEntry[],
+  work: string,
+  unit: string | null,
+): string[] {
+  const out: string[] = []
+  for (const e of entries)
+    if (
+      e.work === work &&
+      (e.export ?? null) === unit &&
+      isConclusionLine(e) &&
+      !out.includes(e.head)
+    )
+      out.push(e.head)
+  return out
+}
+
 /** PR 없이 끝난 때(no_pr)에서 NO_PR_DAYS가 지났나. 때를 읽지 못하면 거짓(끝을 정하지 않는다) */
 export function noPrExpired(noPrAt: string, now: string): boolean {
   const from = Date.parse(noPrAt)
@@ -84,6 +102,8 @@ export interface BetweenCommit {
   author: string
   /** 깨끗한 기준 맞춤 머지: 부모 둘 가운데 하나가 기준 브랜치에 있고 tree가 `git merge-tree --write-tree`의 결과와 같다 */
   baseUpdate: boolean
+  /** 메시지의 Relay-Work 트레일러 값(M4e 커밋 가르기, engine/session-commits.ts) */
+  trailers?: string[]
 }
 
 /** 같은 변경을 가르는 사실(main/works-record.ts가 거울에서 읽는다). 못 읽은 칸은 null */

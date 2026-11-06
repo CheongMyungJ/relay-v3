@@ -128,6 +128,28 @@ describe('훅', () => {
     expect(seen.logs).toEqual(['세션 기록 실패 (w1 Stop)'])
   })
 
+  test('세션 기록(M4e)을 기다린 뒤 처리하고, 바닥 막기가 거절한 PreToolUse는 denied로 알린다', async () => {
+    const order: string[] = []
+    const { port } = await start({
+      noteHook: async (_w, event, body, denied) => {
+        await new Promise((r) => setTimeout(r, 20))
+        order.push(`note ${event} ${String(body.tool_input && denied)}`)
+      },
+      onHook: async (_w, event) => {
+        order.push(`hook ${event}`)
+        return null
+      },
+    })
+    await post(port, '/hook/w1/PreToolUse', bash('git push --force origin relay/x'), auth('tok-1'))
+    await post(port, '/hook/w1/PreToolUse', bash('ls'), auth('tok-1'))
+    expect(order).toEqual([
+      'note PreToolUse true',
+      'hook PreToolUse',
+      'note PreToolUse false',
+      'hook PreToolUse',
+    ])
+  })
+
   test('PreToolUse(Bash)의 막을 명령은 처리와 상관없이 deny로 답한다: 기준 브랜치와 main·master', async () => {
     const { port, seen } = await start({
       onHook: async () => {

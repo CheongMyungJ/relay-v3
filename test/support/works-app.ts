@@ -25,6 +25,8 @@ export interface TestApp {
   store: Store
   /** 끝까지 따라가기(M4b). 시험이 follow를 부른다(타이머는 걸지 않는다) */
   record: RecordFollower
+  /** 세션 기록(M4a effort, M4e 세션 커밋 집합) */
+  sessionLog: SessionLog
   port: number
   /** Works가 화면에 보낸 이벤트 */
   emitted: { event: string; payload: unknown }[]
@@ -66,13 +68,19 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
   const log = o.log ?? (() => {})
   // 훅 서버가 먼저 떠야 포트를 Works에 줄 수 있다
   const ref: { works?: Works } = {}
-  const sessionLog = new SessionLog()
+  const sessionLog = new SessionLog({
+    store,
+    work: (id) => ref.works?.find(id) ?? null,
+    note: (id, event) => ref.works?.note(id, event),
+    disableTrailer: async (project) => ref.works?.updateSettings(project, { trailer: false }),
+    log,
+  })
   const hooks = new HookServer({
     controlTokenFor: (id) => ref.works?.controlToken(id) ?? null,
     tokenFor: (id) => ref.works?.hookToken(id) ?? null,
     protectedBranches: (id) => ref.works?.protectedBranches(id) ?? [],
     onHook: async (id, event, body) => (ref.works ? ref.works.onHook(id, event, body) : null),
-    noteHook: (id, event, body) => sessionLog.noteHook(id, event, body),
+    noteHook: (id, event, body, denied) => sessionLog.noteHook(id, event, body, denied),
     onControl: async (id, tool, args, signal) =>
       ref.works ? ref.works.onControl(id, tool, args, signal) : null,
     log,
@@ -119,6 +127,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     sessions,
     store,
     record,
+    sessionLog,
     port,
     emitted,
     async close() {

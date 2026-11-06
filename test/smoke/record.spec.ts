@@ -72,11 +72,22 @@ test.beforeAll(async () => {
     line('w0', ['small'], { claude_version: '2.3.9 (Claude Code)', ts: ago(9) }),
     merged('w0'),
     line('w1', ['small']),
-    merged('w1', { merge_commit: M, merged_at: ago(2) }),
+    merged('w1', {
+      merge_commit: M,
+      merged_at: ago(2),
+      after_commits: { session: 0, human: 0, relay: 0, base_update: 0, disagree: 0 },
+      session_set: { commits: 1, watched: 1, trailered: 1, incidents: 0 },
+    }),
     line('w2', ['small']),
     merged('w2'),
     line('w3', ['small']),
-    merged('w3', { merged_head: 'b'.repeat(40), same_change: false }),
+    // M4e: 사람이 더 커밋해 머지함(세션 커밋 가르기)
+    merged('w3', {
+      merged_head: 'b'.repeat(40),
+      same_change: false,
+      after_commits: { session: 0, human: 1, relay: 0, base_update: 0, disagree: 0 },
+      session_set: { commits: 2, watched: 2, trailered: 2, incidents: 0 },
+    }),
     line('w4', ['small']),
     end('w4', { closed: true }),
     line('w5', ['small']),
@@ -143,7 +154,7 @@ test('[실적]: 조건 줄, 사람 경로 줄, 판, 모든 판, [귀속이 틀�
   const small = record.getByTestId('record-condition')
   // 지금 판(Claude Code 2.4): w0은 앞 판이라 판 다름
   await expect(small).toContainText('small (a1b2c3) · 일치 2/4 (하한 0.15)')
-  await expect(small).toContainText('불일치: 그 head 뒤에 더 커밋함 1, 닫음 1')
+  await expect(small).toContainText('불일치: 사람이 더 고침 1, 닫음 1')
   await expect(small).toContainText('분모 밖: 열림 1, 판 다름 1')
   await expect(small).toContainText(
     '머지 뒤(창 닫힘 0, 지켜보는 중 3): 되돌림 1, main 실패 귀속 0, 미정 0',
@@ -158,8 +169,17 @@ test('[실적]: 조건 줄, 사람 경로 줄, 판, 모든 판, [귀속이 틀�
   await expect(record.getByTestId('record-foot')).toHaveText(
     '판을 모르는 결론 줄 0/8 · 읽지 못한 장부 줄 1',
   )
+  // 세션 커밋 가르기(M4e)의 지표와 트레일러 스위치(기본 켬)
+  await expect(record.getByTestId('record-sessions')).toHaveText(
+    '세션 커밋 · 내보낸 뒤 사람 교정 1/2 · 내보낸 뒤 커밋: 사람 1 · 집합과 트레일러가 다름 0 · 트레일러 덮임 3/3 (Work 2) · 훅 위임 사고 0',
+  )
+  await expect(
+    page.getByRole('dialog').getByRole('switch', { name: /세션 커밋 트레일러/ }),
+  ).toBeChecked()
   await expect(record).not.toContainText('M5')
   await expect(page.getByRole('dialog').locator('progress')).toHaveCount(0)
+  await page.getByRole('dialog').getByText('세션 커밋 트레일러').scrollIntoViewIfNeeded()
+  await shot('trailer-switch')
   await record.scrollIntoViewIfNeeded()
   await shot('current')
 

@@ -8,7 +8,13 @@ import { repoRoot } from '../adapters/git.ts'
 import { readLedgerText, relayHome, repoKey } from '../adapters/store.ts'
 import { parseRecord } from '../engine/after-merge.ts'
 import { recordStats } from '../engine/shadow.ts'
-import type { AfterStats, ConditionStats, ControlStats, RecordStats } from '../shared/api.ts'
+import type {
+  AfterStats,
+  ConditionStats,
+  ControlStats,
+  RecordStats,
+  SessionStats,
+} from '../shared/api.ts'
 
 export interface RecordIo {
   cwd: string
@@ -88,6 +94,15 @@ function conditionLines(s: ConditionStats): string[] {
   ]
 }
 
+/** 세션 커밋 가르기(M4e)의 지표 한 줄 */
+function sessionLine(s: SessionStats): string {
+  return (
+    `세션 커밋 · 내보낸 뒤 사람 교정 ${s.corrected}/${s.merges} · 내보낸 뒤 커밋: ${nonZero(s.commits)}` +
+    ` · 집합과 트레일러가 다름 ${s.disagree} · 집합만으로 가름 ${s.set_only}` +
+    ` · 트레일러 덮임 ${s.trailered}/${s.watched} (Work ${s.works}) · 훅 위임 사고 ${s.incidents}`
+  )
+}
+
 /** 사람이 읽는 표 */
 export function recordText(name: string, r: RecordStats): string[] {
   const e = r.current
@@ -102,6 +117,7 @@ export function recordText(name: string, r: RecordStats): string[] {
     ...r.conditions.flatMap(conditionLines),
     `사람 경로(조건 못 채움) · ${controlLine(r.human)}`,
     ...r.changes.map((c) => `판이 바뀜(${c.ts}): ${c.fields.join(', ')}`),
+    sessionLine(r.sessions),
     `판을 모르는 결론 줄 ${r.unknown_epoch.lines}/${r.unknown_epoch.of} · 읽지 못한 장부 줄 ${r.broken}`,
   ]
 }

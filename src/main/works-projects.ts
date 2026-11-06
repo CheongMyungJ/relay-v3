@@ -41,6 +41,7 @@ export function settingsOf(raw: unknown): ProjectSettings {
     merge_method: pick('merge_method', (v) => v === 'merge' || v === 'squash' || v === 'rebase'),
     question_mode: pick('question_mode', (v) => v === 'confirm_each' || v === 'draft_first'),
     m3: m3Settings(s['m3']),
+    trailer: pick('trailer', (v) => typeof v === 'boolean'),
   }
 }
 

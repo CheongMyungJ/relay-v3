@@ -23,8 +23,16 @@ export interface HookServerOptions {
   /** 바닥 막기에 쓰는 이 Work의 지킬 브랜치(기준 브랜치. main·master는 guardCommand가 늘 더한다) */
   protectedBranches: (workId: string) => string[]
   onHook: (workId: string, event: HookEvent, body: Record<string, unknown>) => Promise<HookReply>
-  /** 본문을 onHook에 넘기기 전에 본다(M4a: 세션 기록 works-session-log.ts). 던져도 훅 처리는 이어 간다 */
-  noteHook?: (workId: string, event: HookEvent, body: Record<string, unknown>) => void
+  /**
+   * 본문을 onHook에 넘기기 전에 보고 기다린다(M4a: 세션 기록 works-session-log.ts. M4e: 셸 도구 앞뒤의 Work 브랜치 끝을 도구가
+   * 돌기 전에 읽는다). denied는 바닥 막기가 거절한 PreToolUse. 던져도 훅 처리는 이어 간다
+   */
+  noteHook?: (
+    workId: string,
+    event: HookEvent,
+    body: Record<string, unknown>,
+    denied: boolean,
+  ) => void | Promise<void>
   /** 돌려준 값을 JSON으로 답한다. 던지면 500과 { error } */
   onControl: (
     workId: string,
@@ -156,7 +164,7 @@ export class HookServer {
       this.log(`바닥 막기 실패 (${workId})`, e)
     }
     try {
-      this.o.noteHook?.(workId, event, body)
+      await this.o.noteHook?.(workId, event, body, reply !== null)
     } catch (e) {
       this.log(`세션 기록 실패 (${workId} ${event})`, e)
     }

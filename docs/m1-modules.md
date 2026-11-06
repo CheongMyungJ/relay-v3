@@ -122,11 +122,15 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `hasWord(repo, sha, word, exclude): Promise<boolean>` — sha의 파일에 낱말이 있나(`git grep -q -I -w -F`, exclude 아래와 바이너리는 뺀다. 못 찾음(종료 1)은 거짓, 다른 실패는 던진다). 지식 항목의 anchor(V38).
 - `changedPaths(repo, a, b): Promise<string[]>` — 두 커밋 사이 바뀐 파일(`diff --name-only --no-renames`: 옮김은 지움과 새로 생김). 기록 안 된 나빠짐(M3b).
 - 거울 읽기(M4b, m4-design 4.3·4.4. 앱 로컬 거울에서 쓴다): `logRange(repo, { from?, to, since?, until?, firstParent?, max?, exclude? }): Promise<LogCommit[]>`(`git log -z`, 필드 `%H %P %ae %T %ct %B`. since·until은 ISO를 `@<유닉스 초>`로 넘긴다: git의 날짜 읽기는 먼 해를 틀리게 읽는다. exclude는 `^ref`), `isAncestor(repo, a, b): Promise<boolean>`(`merge-base --is-ancestor`, 객체가 없으면 던짐), `mergeTree(repo, a, b): Promise<string | null>`(합친 트리, 충돌이면 null), `patchId(repo, from, to): Promise<string | null>`(`git diff`를 `git patch-id --stable`에. 바뀐 것이 없으면 null).
+- 세션 커밋 집합 읽기(M4e, m4-design 7.1, main/works-session-log.ts): `refTips(repo, refs): Promise<string[]>`(있는 ref의 커밋, 없으면 건너뜀), `newCommits(repo, { tips, not, max }): Promise<{ sha; body }[] | null>`(`git log -z` tips `^not…`, max가 넘으면 null).
 
 ### `src/adapters/git-write.ts` — git 쓰기 (M3b, V40)
 git.ts는 읽기만 한다. 앱이 레포에 쓰는 것은 빚 기록 하나다.
 - `commitFiles(repo, { branch, expect, files, message, author, worktree? }): Promise<string>` — 브랜치 끝이 expect일 때만 files(레포 기준 경로 → 내용)를 더한 커밋 하나를 만든다: 임시 index(`GIT_INDEX_FILE`)에 `read-tree`, `hash-object -w --stdin`, `update-index --add --cacheinfo`, `write-tree`, `commit-tree -p`(작성자·커미터 author), `update-ref <ref> <새> <옛>`(그사이 옮았으면 실패). 작업 트리와 다른 index는 건드리지 않는다. worktree가 그 브랜치를 checkout했으면 브랜치를 옮기기 **전에** 더한 파일만 그 worktree의 index(`update-index --add --cacheinfo`)와 작업 트리에 둔다(세션의 staged·unstaged 변경은 그대로): 옮긴 바로 뒤 세션의 커밋이 그 파일을 지우지 않고, index가 잠겼으면(세션의 git) 브랜치가 그대로인 채 던진다. update-ref가 실패하면 둔 것을 되돌린다(index는 그때 HEAD로, 새로 만든 파일은 HEAD에 없으면 지움). `onMoved`는 시험용(브랜치를 옮긴 바로 뒤). 경로는 상대이고 `.`·`..`·빈 조각이 없어야 한다.
 - `pushBranch(repo, branch, remote = 'origin')` — `git push <remote> refs/heads/<b>:refs/heads/<b>`(빨리 감기만).
+
+### `src/adapters/git-hooks.ts` — 세션 커밋 트레일러의 심 폴더 (M4e, V51)
+`hooksDir(home)`, `writeShims(home, files)`(글은 engine이 만들어 main이 넘긴다), `gitVersionText()`, `gitCommonDir(worktree)`. 약속은 [m2-modules.md](m2-modules.md) 2절. 사용자 레포의 설정·훅 파일은 읽지도 바꾸지도 않는다.
 
 ### `src/adapters/store.ts`
 - `relayHome(env)` — `RELAY_HOME` 또는 `~/.relay-v3`.
@@ -174,6 +178,9 @@ M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. `trackRecord
 
 ### `src/engine/shadow.ts`, `src/engine/after-merge.ts` — 조건별 실적의 숫자와 머지 뒤 30일 (M4c·M4d, V49·V50)
 순수 함수다(시계는 인자). `shadowStats`·`recordStats`·`shadowEnds`·`wilsonLow`·`trackRecord`(M4c에서 ledger.ts에서 옮김), `revertsOf`·`mainOf`·`windowEnd`·`parseRecord`·`afterStats`. 관문 판의 파일이 아니다(track.ts에 두면 GATE_VERSION을 올려야 한다). 화면과 CLI가 보이는 숫자의 모양(`RecordStats`, `ConditionStats`, `AfterStats`)은 `src/shared/api.ts`에 두고 이 파일들이 `import type`한다(렌더러가 engine을 가져가지 않게). 약속은 [m2-modules.md](m2-modules.md) 1a절.
+
+### `src/engine/session-commits.ts` — 세션 커밋 가르기의 순수한 셈 (M4e, V51)
+순수 함수다. `shimText`·`shimFiles`(심의 글), `trailerEnv`(세션 PTY 환경의 core.hooksPath), `trailerGitOk`, `workTrailers`, `classifyCommits`, `parseSessionLog`, `sessionSummary`, `sessionStats`. 관문 판의 파일이 아니다. 약속은 [m2-modules.md](m2-modules.md) 1a절.
 
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
 - `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).

@@ -10,13 +10,15 @@ import type { EvidenceBundle, GateResult, Policy } from '../core/types.ts'
 import type { LedgerEntry } from '../engine/ledger.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
 import { worseOf } from '../engine/debt-record.ts'
-import { lastConclusion } from '../engine/follow.ts'
+import { exportHeads, lastConclusion } from '../engine/follow.ts'
+import { NO_COMMITS } from '../engine/session-commits.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import { acceptedOf, debtable, recordDebt } from './works-debt.ts'
 import { epochLine, ledgerEntry, trackFor, type ExportJob } from './works-ledger.ts'
-import { mergedFields, mergeOf } from './works-record.ts'
+import { earlierAfter, mergedFields, mergeOf } from './works-record.ts'
+import { sessionLedger, sessionOf } from './works-session-log.ts'
 import { autoConditions } from './works-review.ts'
 import {
   delivered,
@@ -187,7 +189,23 @@ export class ExportDesk {
     const accepted = by === 'human' ? acceptedOf(bundle) : {}
     // 앱이 묶음의 head를 --match-head-commit으로 머지했다: 같은 변경이고, 머지 커밋과 때를 읽어 둔다(M4b)
     const merged = await mergeOf(this.ctx.deps, project.path, pr.number)
-    const fate = { by, merged_head: bundle.head, same_change: true, pr: pr.number, ...merged }
+    // 앞 결론 줄의 head 뒤 커밋의 갈래(M4e): 머지한 head는 Work 브랜치에 있으니 worktree에서 읽는다
+    const earlier = await earlierAfter(rec.worktree, rec.base_ref, {
+      heads: exportHeads(await this.ctx.deps.store.readLedger(), rec.id, x.unit),
+      merged: bundle.head,
+      exclude: rec.base_ref,
+      session: await sessionOf(this.ctx.deps.store, rec.id),
+      work: rec.id,
+    }).catch(() => ({}))
+    const fate = {
+      by,
+      merged_head: bundle.head,
+      same_change: true,
+      pr: pr.number,
+      after_commits: { ...NO_COMMITS },
+      ...(Object.keys(earlier).length > 0 ? { after_heads: earlier } : {}),
+      ...merged,
+    }
     await this.ledgerFate(rec, x, bundle.head, { ...fate, ...accepted })
     if (accepted.accepted) this.ctx.refreshQuality(project.id)
     x.pr = { ...pr, state: 'MERGED', mergedAt: this.ctx.deps.now() }
@@ -282,6 +300,8 @@ export class ExportDesk {
     fate: Partial<LedgerEntry>,
   ): Promise<void> {
     const conclusion = x.gate?.conclusion ?? 'human_merge'
+    // 세션 커밋 집합의 셈(M4e). 머지 칸이 갈래를 가져오면 그것을 쓴다
+    const session = sessionLedger(await sessionOf(this.ctx.deps.store, rec.id), null)
     const entry = ledgerEntry(
       this.ctx.deps,
       rec,
@@ -289,7 +309,7 @@ export class ExportDesk {
       this.ctx.projectOf(rec),
       head,
       { conclusion, condition: null, shadow: false },
-      fate,
+      { ...session, ...fate },
     )
     await this.ctx.deps.store.appendLedger(entry)
   }
@@ -325,9 +345,11 @@ export class ExportDesk {
       // 잰 head를 앱 밖에서 머지했으면 그 나빠진 래칫도 받아들였다(M3b: 빚으로 기록하지 못함)
       const b = this.ctx.runtime(rec.id).bundles.get(x.branch)
       const { deps } = this.ctx
-      const last = lastConclusion(await deps.store.readLedger(), rec.id, x.unit)
+      const ledger = await deps.store.readLedger()
+      const last = lastConclusion(ledger, rec.id, x.unit)
+      const earlier = exportHeads(ledger, rec.id, x.unit)
       const project = this.ctx.projectOf(rec)
-      const fields = await mergedFields(deps, { project, rec, x, pr, last })
+      const fields = await mergedFields(deps, { project, rec, x, pr, last, earlier })
       await this.ledgerFate(rec, x, last?.head ?? pr.headRefOid, {
         by: 'human-override',
         merged_head: pr.headRefOid,

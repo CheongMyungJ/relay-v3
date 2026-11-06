@@ -342,3 +342,38 @@ export async function patchId(repo: string, from: string, to: string): Promise<s
   const out = await git(['patch-id', '--stable'], repo, { input: diff })
   return out.trim().split(/\s+/)[0] || null
 }
+
+/**
+ * 있는 ref들의 커밋(M4e 세션 커밋 집합의 끝 모음). 없는 ref는 건너뛴다: 브랜치는 `refs/heads/<이름>`, 그 밖은 `git rev-parse
+ * --verify`로 읽는다
+ */
+export async function refTips(repo: string, refs: readonly string[]): Promise<string[]> {
+  const out = new Set<string>()
+  for (const ref of refs) {
+    checkRef(ref)
+    const sha = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], repo).catch(
+      () => '',
+    )
+    if (sha.trim()) out.add(sha.trim())
+  }
+  return [...out]
+}
+
+/**
+ * tips에서 닿고 not에서 닿지 않는 커밋과 그 메시지(새 것부터). max개가 넘으면 null(끝 모음을 모른 채 레포 이력 전부를 읽지
+ * 않게). tips가 비면 빈 것
+ */
+export async function newCommits(
+  repo: string,
+  o: { tips: readonly string[]; not: readonly string[]; max: number },
+): Promise<{ sha: string; body: string }[] | null> {
+  if (o.tips.length === 0) return []
+  for (const ref of [...o.tips, ...o.not]) checkRef(ref)
+  const args = ['log', '-z', '--format=%H%x1f%B', '--no-color', `--max-count=${String(o.max + 1)}`]
+  args.push(...o.tips, ...o.not.map((r) => `^${r}`), '--')
+  const out = splitNul(await git(args, repo)).map((record) => {
+    const [sha = '', ...body] = record.split('\x1f')
+    return { sha: sha.trim(), body: body.join('\x1f') }
+  })
+  return out.length > o.max ? null : out
+}

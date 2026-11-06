@@ -31,6 +31,12 @@ export interface ProjectSettings {
    * RELAY_M3이 있으면 그것이 덮는다(engine/m3.ts)
    */
   m3: M3Switches
+  /**
+   * 세션 커밋 트레일러(M4e, 사용자 결정 Q7): 세션 프로세스의 환경에만 core.hooksPath 심을 주어 세션 커밋에 `Relay-Work: <Work
+   * id>`를 붙인다. 다음에 띄우는 세션부터 적용된다. 훅 위임 사고가 나면 앱이 끈다(devices.md 끄는 조건 (가)). 세션 커밋 집합은
+   * 끄지 않는다
+   */
+  trailer: boolean
 }
 
 /** 설정 바꾸기의 입력: 준 칸만 바뀐다. m3은 준 장치만(V39) */
@@ -44,6 +50,7 @@ export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   question_mode: 'confirm_each',
   // engine/m3.ts M3_DEFAULT와 같다. 지식 잇기는 M3 장기 평가(2026-11-06) 뒤 기본 끔(V44)
   m3: { knowledge: false, debt: true, tidy: true, promote: true },
+  trailer: true,
 }
 
 /**
@@ -424,6 +431,30 @@ export interface RecordStats {
   unknown_epoch: { lines: number; of: number }
   /** 장부에서 읽지 못한 줄 */
   broken: number
+  /** 세션 커밋 가르기의 장치 지표(M4e). 판과 상관없이 이 범위의 끝 줄 전부 */
+  sessions: SessionStats
+}
+
+/** 세션 커밋 가르기(M4e, devices.md)의 지표. 사람 교정률을 에이전트의 목표로 쓰지 않는다(philosophy 8.1) */
+export interface SessionStats {
+  /** 첫 내보내기('준비됨') 뒤 머지까지의 커밋을 가른 머지(끝 줄의 after_commits나 after_heads) */
+  merges: number
+  /** 그 가운데 사람 커밋이 하나라도 있는 머지(사람 교정, philosophy 8.1) */
+  corrected: number
+  /** 그 커밋의 갈래 합 */
+  commits: { session: number; human: number; relay: number; base_update: number }
+  /** 세션 커밋 집합과 트레일러가 다르게 가른 커밋(사람으로 셈) */
+  disagree: number
+  /** 트레일러 없이 집합만으로 가른 머지 */
+  set_only: number
+  /** 세션 커밋 집합을 아는 Work(마지막 끝 줄의 session_set) */
+  works: number
+  session_commits: number
+  /** 트레일러를 켠 채 본 세션 커밋과 그 가운데 트레일러가 있는 것(덮임) */
+  watched: number
+  trailered: number
+  /** 훅 위임 사고(심이 원래 훅 자리를 찾지 못함, 트레일러를 더하지 못함) */
+  incidents: number
 }
 
 /** 내보내기 하나의 그림자 표본의 끝(Q6: 끝이 정해질 때까지 [증거]의 그림자 줄을 가린다) */
