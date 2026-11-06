@@ -142,6 +142,29 @@ describe('instructionsText', () => {
     for (const g of ['code', 'request', 'knowledge', 'guess']) expect(t).toContain(`type: "${g}"`)
   })
 
+  test('지식 잇기(V38): 켜면 읽기·근거·쓰기와 v2 형식을 담고, 끄면 지식 폴더를 말하지 않는다', () => {
+    const on = instructionsText({ ...base, questionMode: 'confirm_each', knowledge: true })
+    for (const s of [
+      'If `docs/knowledge/` exists, read the entries related to the request before you write the contract',
+      '`{type: "knowledge", id}` (id: the path of a knowledge entry)',
+      'relay checks code, request and knowledge grounds',
+      "Of the contract's `human_rules`, save the ones later work will also need as knowledge entries in this Work",
+      'do not save scope instructions that only apply to this Work',
+      '`kind: rule | fact | history | pitfall`',
+      '`source: human | investigation`',
+      '`## 규칙` (for a rule) or `## 내용` (otherwise)',
+      '`## 아직 규칙을 따르지 않는 곳`',
+      'an entry with a format error sends the change to the human',
+    ])
+      expect(on, s).toContain(s)
+    // 한글은 v2 형식의 절 이름(코드 표기) 안에만 있다
+    expect(on.replace(/`[^`]*`/g, '')).not.toMatch(/[가-힣]/)
+    const off = instructionsText({ ...base, questionMode: 'confirm_each' })
+    expect(off).not.toContain('docs/knowledge')
+    expect(off).toContain('relay checks code and request grounds')
+    expect(instructionsText({ ...base, questionMode: 'confirm_each', knowledge: false })).toBe(off)
+  })
+
   test('질문 방식: 결정마다 확인은 입출력 예시와 오류 동작을 따로, 초안 우선은 초안을 먼저', () => {
     const each = instructionsText({ ...base, questionMode: 'confirm_each' })
     expect(each).toContain('one decision per question')

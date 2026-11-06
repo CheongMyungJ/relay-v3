@@ -9,6 +9,7 @@ import { claudeVersion, findClaude } from '../adapters/claude.ts'
 import * as gh from '../adapters/gh.ts'
 import { relayHome } from '../adapters/store.ts'
 import { check } from '../engine/check.ts'
+import { m3Switches } from '../engine/m3.ts'
 import { HookServer } from './hooks.ts'
 import { registerIpc } from './ipc.ts'
 import { SessionHost } from './sessions.ts'
@@ -84,6 +85,9 @@ async function start(): Promise<void> {
   const debounceMs = Number(process.env['RELAY_DEBOUNCE_MS'] ?? '')
   // RELAY_ABLATE=review: 평가에서 리뷰를 뺀 쪽(docs/experiments/m2/protocol.md). 제품 설정이 아니다
   const reviewDisabled = (process.env['RELAY_ABLATE'] ?? '').split(',').includes('review')
+  // RELAY_M3: 평가가 M3 장치를 모두 끄거나 고른 것만 켠다(V38). 있으면 프로젝트 설정을 덮는다
+  const m3 = process.env['RELAY_M3']
+  for (const e of m3Switches(undefined, m3).errors) log(e)
   const w = new Works({
     store,
     sessions,
@@ -98,6 +102,7 @@ async function start(): Promise<void> {
     check,
     review: claudeReview({ bin: claudeBin, log }),
     reviewDisabled,
+    ...(m3 === undefined ? {} : { m3 }),
     gh,
     now: () => new Date().toISOString(),
     newId: () => randomUUID(),

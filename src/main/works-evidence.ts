@@ -9,9 +9,7 @@
 // 한 Work의 증거 재기는 한 번에 하나이고, 기다리는 요청은 하나로 합친다. 재기가 끝나면 다음 재기 전에 [끝내기]의 걸린 끝을
 // 다시 본다. 리뷰는 결정론적 증거와 관문을 먼저 보인 뒤 돌고 끝나면 다시 정한다(리뷰는 사람을 막지 않는다, V4). 장부 줄,
 // exported_head, 정책 머지는 내보내기 계기에서만 생긴다(V23). exported_head는 지금 묶음이 내보내기로 잰 묶음일 때만 그
-// head다: 다른 재기가 묶음을 바꾸면 비운다(같은 head로 되돌아와 다시 잰 묶음이 내보내기로 보이지 않게). 머지와 PR 따라가기는
-// works-exports.ts. 엔진 check는 in-process로 부른다. Stop 뒤 몰아 두기 끝과 재기가 끝날 때마다 되먹임(V24,
-// works-feedback.ts)을 본다(세션이 쉴 때만 보낸다).
+// head다(다른 재기가 묶음을 바꾸면 비운다). 머지·PR은 works-exports.ts, 되먹임(V24)은 몰아 두기 끝과 재기 끝마다 본다.
 
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
 import { gate, openItems } from '../core/gate.ts'
@@ -356,6 +354,7 @@ export class EvidenceRunner {
         requestPath: deps.store.workPath(rec.id, 'request.md'),
         home: deps.store.home,
         now: deps.now(),
+        knowledge: rec.m3.knowledge,
       })
       if (!isActive(rec.state) || rt.abort.signal.aborted) return null
       rt.bundles.set(rec.branch, bundle)
@@ -557,6 +556,7 @@ export class EvidenceRunner {
       requestPath: deps.store.workPath(rec.id, 'request.md'),
       home: deps.store.home,
       now: deps.now(),
+      knowledge: rec.m3.knowledge,
     })
     if (carry && before?.review && before.head === bundle.head && sameContract(before, contract))
       return { ...bundle, review: before.review }

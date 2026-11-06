@@ -76,6 +76,8 @@ export interface WorksDeps {
    * 않고 status 'skipped'로 두며, 화면은 '리뷰가 꺼져 있음(평가 설정)'으로 보인다
    */
   reviewDisabled?: boolean
+  /** 환경 변수 RELAY_M3(V38, engine/m3.ts). 있으면 프로젝트 설정 m3을 덮는다: 장기 평가의 relay3-m2 쪽은 off */
+  m3?: string
 }
 
 /** Work마다 메모리에만 두는 것 */

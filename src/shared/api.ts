@@ -8,6 +8,7 @@ import type {
   EvidenceBundle,
   GateResult,
   GroundingCheck,
+  M3Switches,
   ReviewFinding,
 } from '../core/types.ts'
 
@@ -25,6 +26,11 @@ export interface ProjectSettings {
   merge_method: 'merge' | 'squash' | 'rebase'
   /** 세션이 묻는 방식: 결정마다 확인(첫 기본값, philosophy 원칙 1) 또는 초안 먼저 */
   question_mode: 'confirm_each' | 'draft_first'
+  /**
+   * M3 장치(docs/m3-design.md, V38)를 장치마다 켜고 끈다. 새로 만드는 Work에 적용되고 Work는 만들 때의 값을 지닌다. 환경 변수
+   * RELAY_M3이 있으면 그것이 덮는다(engine/m3.ts)
+   */
+  m3: M3Switches
 }
 
 export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
@@ -33,6 +39,7 @@ export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   review: 'all',
   merge_method: 'squash',
   question_mode: 'confirm_each',
+  m3: { knowledge: true },
 }
 
 /**

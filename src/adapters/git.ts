@@ -143,6 +143,27 @@ export async function lsTree(repo: string, sha: string): Promise<string[]> {
   return splitNul(await git(['ls-tree', '-r', '--name-only', '-z', '--full-tree', sha], repo))
 }
 
+/**
+ * sha의 파일에 낱말 word가 있나(`git grep -w -F`, 바이너리와 exclude 아래는 뺀다). 지식 항목의 anchor가 코드에 있는지 본다
+ * (V38). repo는 레포 루트다(경로 조각이 그 기준)
+ */
+export async function hasWord(
+  repo: string,
+  sha: string,
+  word: string,
+  exclude: string,
+): Promise<boolean> {
+  checkRef(sha)
+  const args = ['grep', '-q', '-I', '-w', '-F', '-e', word, sha, '--', '.', `:(exclude)${exclude}`]
+  try {
+    await git(args, repo)
+    return true
+  } catch (e) {
+    if (e instanceof GitError && e.exit === 1) return false
+    throw e
+  }
+}
+
 /** 파일 목록의 모든 조상 디렉터리. 루트('')는 넣지 않는다 */
 export function dirsOf(files: string[]): Set<string> {
   const dirs = new Set<string>()

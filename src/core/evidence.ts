@@ -56,6 +56,8 @@ export function summarize(e: EvidenceBundle): string[] {
   if (e.examples_file) out.push(examplesFileText(e.examples_file))
   for (const r of e.ratchets) out.push(`래칫 ${r.id}: ${label(RATCHET, r.status)} (${r.detail})`)
   out.push(...signalsText(e.signals))
+  const k = e.knowledge
+  if (k) out.push(`지식: 바뀐 파일 ${k.changed.length} · 문제 ${k.issues.length}`)
   if (e.review !== null) out.push(reviewText(e.review))
   const missing = [...e.missing]
   if (e.quality.from === 'none' && !missing.includes('quality.json'))

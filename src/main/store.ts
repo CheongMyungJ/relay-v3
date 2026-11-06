@@ -19,8 +19,9 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'nod
 import { dirname, join } from 'node:path'
 import { readJson, relayHome } from '../adapters/store.ts'
 import { parseLedger, type LedgerEntry } from '../core/ledger.ts'
-import type { Contract, GateResult, GroundingCheck } from '../core/types.ts'
+import type { Contract, GateResult, GroundingCheck, M3Switches } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
+import { M3_OFF } from '../engine/m3.ts'
 import type { EndMemo, EndPending, FeedbackRound, PrInfo, ProjectSettings } from '../shared/api.ts'
 
 export interface ProjectRecord {
@@ -99,6 +100,8 @@ export interface WorkRecord {
    * 보낸 파일마다 한 줄(사람의 [세션에 넘기기]도). 옛 기록에는 없다(읽을 때 빈 것)
    */
   feedback: { rounds: number; sent: FeedbackRound[] }
+  /** M3 장치의 스위치(V38). Work를 만들 때 정해 끝까지 지닌다. 옛 기록(M3 앞)에는 없다(읽을 때 모두 끔) */
+  m3: M3Switches
 }
 
 export type WorkFile =
@@ -184,6 +187,7 @@ export function upgradeWork(raw: WorkRecord): WorkRecord {
     feedback: rec.feedback ?? { rounds: 0, sent: [] },
     exports,
     integration_path: rec.integration_path ?? null,
+    m3: { ...M3_OFF, ...rec.m3 },
   }
 }
 

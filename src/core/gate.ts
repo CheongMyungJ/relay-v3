@@ -120,6 +120,7 @@ function humanFacts(
     ...bundleContractFacts(e, contract),
     ...lineFacts(e.lines, contract),
     ...examplesFileFacts(e.examples_file),
+    ...knowledgeFacts(e.knowledge),
     ...(review ? reviewFacts(e.review) : []),
     ...e.missing.map((name) => `없는 증거: ${name}`),
     ...(e.quality.from === 'base' || e.quality.from === 'head' ? [] : ['품질 기준 없음']),
@@ -189,6 +190,12 @@ function ratchetFacts(e: EvidenceBundle): string[] {
     ...worse.map((r) => `래칫 나빠짐: ${r.id} (${clip(r.detail)})`),
     ...unknown.map((r) => `래칫을 재지 못함: ${r.id} (${clip(r.detail)})`),
   ]
+}
+
+/** 지식 형식 오류(V38). anchor와 아직 따르지 않는 곳은 알림이라 사실이 아니다 */
+function knowledgeFacts(k: EvidenceBundle['knowledge']): string[] {
+  const format = (k?.issues ?? []).filter((i) => i.kind === 'format')
+  return format.map((i) => `지식 형식 오류: ${i.path} (${clip(i.detail)})`)
 }
 
 function contractFacts(contract: Contract | null): string[] {

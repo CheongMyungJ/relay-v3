@@ -223,6 +223,7 @@ export function evidenceFacts(e: Omit<EvidenceBundle, 'review'>): string[] {
     )
   if (e.signals.length === 0) out.push('signals: none')
   for (const s of e.signals) out.push(`signal ${s.kind}${s.path ? `: ${s.path}` : ''}`)
+  for (const i of e.knowledge?.issues ?? []) out.push(`knowledge ${i.kind} issue: ${i.path}`)
   const missing = [...e.missing]
   if (e.quality.from === 'none' && !missing.includes('quality.json'))
     missing.unshift('quality.json')

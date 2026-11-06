@@ -183,6 +183,16 @@ const FACTS: Fact[] = [
     { examples_file: { path: 'e.json', status: 'weird' as never, diffs: [] } },
     '예시 자료를 견준 결과를 모름: e.json',
   ],
+  [
+    '지식 형식 오류(V38)',
+    {
+      knowledge: {
+        changed: ['docs/knowledge/a.md'],
+        issues: [{ path: 'docs/knowledge/a.md', kind: 'format', detail: '첫 `# ` 제목 줄 없음' }],
+      },
+    },
+    '지식 형식 오류: docs/knowledge/a.md (첫 `# ` 제목 줄 없음)',
+  ],
   ['리뷰 없음', { review: null }, '리뷰 없음'],
   ['리뷰 실패', { review: { status: 'failed', findings: [] } }, '리뷰 실패'],
   ['리뷰 건너뜀', { review: { status: 'skipped', findings: [] } }, '리뷰를 건너뜀'],
@@ -292,6 +302,15 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
     const same = { path: 'e.json', status: 'same' as const, diffs: [] }
     for (const examples_file of [same, null, undefined])
       expect(run({ examples_file }).conclusion).toBe('auto_merge_candidate')
+  })
+
+  test('지식의 anchor·아직 따르지 않는 곳은 알림이고, 끈 장치(null)와 M3 앞의 묶음(칸 없음)은 사실이 없다(V38)', () => {
+    const issues = [
+      { path: 'docs/knowledge/a.md', kind: 'anchor' as const, detail: 'x' },
+      { path: 'docs/knowledge/b.md', kind: 'not_yet' as const, detail: 'y' },
+    ]
+    for (const knowledge of [{ changed: [], issues }, null, undefined])
+      expect(run({ knowledge }).conclusion).toBe('auto_merge_candidate')
   })
 
   test('예시 자료 사실은 줄 판정 다음, 리뷰 앞이다(V27)', () => {

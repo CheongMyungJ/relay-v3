@@ -6,6 +6,7 @@ import {
   defaultBase,
   diffRaw,
   dirsOf,
+  hasWord,
   lineCounts,
   lsTree,
   mergeBase,
@@ -281,6 +282,25 @@ describe('lsTree', () => {
     const sha = await repo.commit('빈')
     expect(await lsTree(repo.dir, sha)).toEqual([])
     await expect(lsTree(repo.dir, MISSING_SHA)).rejects.toThrow()
+  })
+})
+
+describe('hasWord', () => {
+  test('낱말 단위로 찾고, exclude 아래와 바이너리는 보지 않는다(V38 anchor)', async () => {
+    const repo = await makeRepo({
+      files: {
+        'src/a.js': 'export function totalOf(o) {}\n',
+        'docs/knowledge/x.md': 'onlyInDocs\n',
+        'bin/x.dat': new Uint8Array([0, 98, 105, 110, 87, 111, 114, 100, 0]),
+      },
+    })
+    const sha = await repo.sha()
+    const has = (w: string) => hasWord(repo.dir, sha, w, 'docs/knowledge')
+    expect(await has('totalOf')).toBe(true)
+    expect(await has('total')).toBe(false)
+    expect(await has('onlyInDocs')).toBe(false)
+    expect(await has('binWord')).toBe(false)
+    await expect(hasWord(repo.dir, MISSING_SHA, 'x', 'docs')).rejects.toThrow()
   })
 })
 

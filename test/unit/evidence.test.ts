@@ -109,6 +109,14 @@ describe('요약', () => {
     )
   })
 
+  test('지식 확인(V38)은 바뀐 파일과 문제 수를 한 줄로, 끈 장치(null)는 줄이 없다', () => {
+    const issues = [{ path: 'docs/knowledge/a.md', kind: 'format' as const, detail: 'x' }]
+    expect(summarize(evidence({ knowledge: { changed: ['a', 'b'], issues } }))).toContain(
+      '지식: 바뀐 파일 2 · 문제 1',
+    )
+    expect(summarize(evidence({ knowledge: null })).some((l) => l.startsWith('지식'))).toBe(false)
+  })
+
   test('래칫마다 상태와 detail을 쓴다', () => {
     const ratchets = [
       { id: 'tests', status: 'worse' as const, base: 3, head: 2, detail: '시험 수 3 → 2' },

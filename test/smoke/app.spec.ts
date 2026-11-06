@@ -1,11 +1,7 @@
 // [스모크] 빌드한 앱 (docs/m2-modules.md 5절). Playwright _electron으로 out/의 앱을 띄워 화면을 누른다.
-// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 쉬면 미리 리뷰(V23)가 돌고, PR을 열면 그 리뷰로 내보낸다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin.
-// 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른 Work로 갔다 와도 남음) → [그래도 끝내기](V25). 메모를 남기고 끝난 Work는 그 메모를 접어 보인다(V37).
-// 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
-// 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내도 제출 때 기준에서 돌리지 않는다(V32: V28을 뺌). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
-// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다. 상자의 넘기기는 끝을 다시 건다(V35).
-// 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것. 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
-//
+// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 쉬면 미리 리뷰(V23)가 돌고, PR을 열면 그 리뷰로 내보낸다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin. 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른 Work로 갔다 와도 남음) → [그래도 끝내기](V25). 메모를 남기고 끝난 Work는 그 메모를 접어 보인다(V37).
+// 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다. 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내도 제출 때 기준에서 돌리지 않는다(V32: V28을 뺌). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
+// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다. 상자의 넘기기는 끝을 다시 건다(V35). 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것. 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다. 첫 프로젝트의 기준에는 지식 항목이 있어(V38) 증거의 '지식'에 아직 따르지 않는 곳이 알림으로 보이고(관문 사실이 아님), 설정에 지식 잇기 스위치가 켜져 있다.
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
 import { readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -76,7 +72,7 @@ test('위로 넘는 값은 hi로 [{contractId}:C1.1]', () => {
   assert.equal(clamp(...input), output)
 })
 `
-
+const KNOWLEDGE = `---\nkind: rule\nsource: human\nanchor: clamp\n---\n# clamp는 hi로 자른다\n\n## 규칙\n\n- 위로 넘으면 hi다.\n\n## 아직 규칙을 따르지 않는 곳\n\n- \`src/calc.js\`: lo를 돌려준다\n`
 const SCENARIO = {
   start: [
     { do: 'print', text: '요청과 코드를 읽었습니다. 계약을 냅니다.' },
@@ -172,6 +168,7 @@ test.beforeAll(async () => {
       '.relay/quality.json': QUALITY_TEXT,
       'src/calc.js': calc('lo'),
       'test/calc.test.js': TESTS_BASE,
+      'docs/knowledge/calc/clamp.md': KNOWLEDGE,
     },
   })
   await repo.git('remote', 'add', 'origin', origin)
@@ -339,6 +336,8 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   // PR이 없으면 다음 할 일을 말한다
   await expect(evidence.getByTestId('next-step')).toContainText('PR이 열리면')
   await expect(evidence.getByText('줄 판정')).toBeVisible()
+  await evidence.locator('summary', { hasText: /^지식/ }).click()
+  await expect(evidence.getByText('아직 따르지 않는 곳', { exact: true })).toBeVisible()
   await shot('evidence')
 
   // 터미널에서 Enter → 세션이 push하고 PR을 연다 → 내보내기 증거(미리 리뷰를 다시 쓴다), 그림자
@@ -536,7 +535,8 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   // 프로젝트 설정
   await page.getByRole('button', { name: /설정$/ }).first().click()
   const settings = page.getByRole('dialog')
-  await expect(settings.getByRole('switch')).not.toBeChecked()
+  await expect(settings.getByRole('switch', { name: /^자동 머지/ })).not.toBeChecked()
+  await expect(settings.getByRole('switch', { name: /^지식 잇기/ })).toBeChecked()
   await expect(settings.getByRole('radio', { name: '결정마다 확인' })).toHaveAttribute(
     'aria-checked',
     'true',

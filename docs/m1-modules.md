@@ -86,7 +86,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ### `src/core/gate.ts`
 - `gate(evidence: EvidenceBundle, contract: Contract | null, policy: Policy, head: string | null, whole?: Integration): GateResult` — V5. head는 지금 브랜치 끝의 SHA(모르면 null). whole은 단위 브랜치를 내보낼 때(V22)의 통합 증거 `{ evidence: EvidenceBundle | null; contract; head; facts?: string[] }`(Work 브랜치를 계약 전체로 잰 결정론 증거, 지금 Work 브랜치의 끝, 앱이 본 통합의 사실: 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치)다. 순서:
   1. `contract_change_requested` → recontract.
-  2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe('줄 C2 증거 없음: <detail>'. detail은 100자로 자르되, 끝에 고칠 길(V33 `lineFixText`)이 붙었으면 그 앞만 자르고 고칠 길은 그대로 둔다), 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 커밋된 예시 자료(`examples_file`, V27)가 없음('예시 자료 파일이 커밋되지 않음: <경로>')·다름('예시 자료가 승인본과 다름: C1.2 output (기대 10, 실제 8)', 차이는 셋까지)·읽지 못함(same이거나 null·없는 칸이면 사실이 아니다), 리뷰 status가 done이 아님, done인데 리뷰가 요청을 보지 않음(`review.request`가 참이 아님, V30이 V15를 넓힘: '리뷰가 요청을 보지 않음'), 리뷰 지적 중 올림인 것(review.ts `raises`, V26: structure/low와 raise가 없는 지적은 메모라 사실이 아니다), `missing`이 빈 배열이 아님, quality.from이 none.
+  2. 사람 머지로 보내는 사실을 모두 모은다(엄격한 것부터): 낡은 증거(묶음의 head ≠ head, head가 null이면 '확인하지 못함', V6), 사람 경로·지킴 파일·시험 약화 신호, 구조 변경 신호, 모르는 종류의 신호, 명령 fail, 명령 unstable·not_run, 래칫 worse, 계약 없음, 묶음의 계약(`contract`의 id·hash)이 넘겨받은 계약과 다름, 줄 not_met·missing_evidence·human·observe('줄 C2 증거 없음: <detail>'. detail은 100자로 자르되, 끝에 고칠 길(V33 `lineFixText`)이 붙었으면 그 앞만 자르고 고칠 길은 그대로 둔다), 줄 판정이 계약 줄과 맞지 않음(줄 id·kind·예시 id 집합), 커밋된 예시 자료(`examples_file`, V27)가 없음('예시 자료 파일이 커밋되지 않음: <경로>')·다름('예시 자료가 승인본과 다름: C1.2 output (기대 10, 실제 8)', 차이는 셋까지)·읽지 못함(same이거나 null·없는 칸이면 사실이 아니다), 지식 형식 오류(V38: `knowledge.issues` 가운데 kind format마다 '지식 형식 오류: <경로> (<detail>)'. anchor·not_yet은 알림이라 사실이 아니고, knowledge가 null이거나 칸이 없으면 사실이 없다), 리뷰 status가 done이 아님, done인데 리뷰가 요청을 보지 않음(`review.request`가 참이 아님, V30이 V15를 넓힘: '리뷰가 요청을 보지 않음'), 리뷰 지적 중 올림인 것(review.ts `raises`, V26: structure/low와 raise가 없는 지적은 메모라 사실이 아니다), `missing`이 빈 배열이 아님, quality.from이 none.
   3. 하나라도 있으면 human_merge, decisive는 첫 사실, reasons는 전부, condition null, shadow false. whole이 있으면 이어서 통합 증거의 열린 것(`integrationFacts(whole)`)을 보고, 있으면 같은 꼴의 human_merge다.
   4. 없으면 policy.conditions에서 처음 채운 조건(diff에 대한 술어: max_changed_lines, paths, no_new_dependencies, no_new_modules, require_all_lines_tested)을 찾는다. whole이 있으면 같은 조건을 Work 전체 diff(통합 증거)로도 채워야 한다(못 채운 까닭 앞에 'Work 전체'). 그래서 브랜치를 나눠도 한 diff로 낼 때보다 자동 조건을 쉽게 채우지 못한다. `hasRealLimit`이 거짓인 조건은 채우지 못한다. max_changed_lines는 `diff.binary`가 비어 있어야 채운다(바이너리는 줄 수로 크기를 잴 수 없다). 없으면 human_merge('채운 자동 조건 없음').
   5. 채웠으면: auto_merge_enabled, server(branch_protected && required_checks && (merge_queue || up_to_date_required)), track_record_ok[id] 셋이 모두 참이면 auto_merge_candidate(shadow false). 하나라도 거짓이면 human_merge이고 shadow true, decisive는 막은 것('프로젝트에서 자동 머지가 꺼져 있음' 등), condition은 그 id.
@@ -101,7 +101,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `vanished(items: DebtItem[], exists: (path: string) => boolean): DebtItem[]`.
 
 ### `src/core/evidence.ts`
-- `summarize(e: EvidenceBundle): string[]` — 사람이 읽는 몇 줄(diff 머리와 바이너리 수, 명령마다 결과, 줄 판정 수, 예시 자료(V27: 승인본과 같음·커밋되지 않음·다름(예시 id)·읽지 못함), 래칫, 신호, 리뷰(상태, 지적 수, 올림 수: review.ts `raises`, V26), 없는 증거).
+- `summarize(e: EvidenceBundle): string[]` — 사람이 읽는 몇 줄(diff 머리와 바이너리 수, 명령마다 결과, 줄 판정 수, 예시 자료(V27: 승인본과 같음·커밋되지 않음·다름(예시 id)·읽지 못함), 래칫, 신호, 리뷰(상태, 지적 수, 올림 수: review.ts `raises`, V26), 지식 확인(V38: '지식: 바뀐 파일 n · 문제 m', 껐으면 없음), 없는 증거).
 - `isStale(e: EvidenceBundle, head: string): boolean`.
 
 ## adapters
@@ -119,6 +119,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `lsTree(repo, sha): Promise<string[]>` — 파일 목록(`ls-tree -r --name-only -z`).
 - `dirsOf(files: string[]): Set<string>` — 모든 조상 디렉터리.
 - `lineCounts(repo, sha, paths): Promise<Map<string, number | null>>` — 없으면 null, 바이너리는 건너뜀.
+- `hasWord(repo, sha, word, exclude): Promise<boolean>` — sha의 파일에 낱말이 있나(`git grep -q -I -w -F`, exclude 아래와 바이너리는 뺀다. 못 찾음(종료 1)은 거짓, 다른 실패는 던진다). 지식 항목의 anchor(V38).
 
 ### `src/adapters/store.ts`
 - `relayHome(env)` — `RELAY_HOME` 또는 `~/.relay-v3`.
@@ -135,15 +136,29 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ## engine
 
 ### `src/engine/check.ts`
-- `check(opts: { repo: string; base?: string; head?: string; contractPath?: string; examplesContractPath?: string; requestPath?: string; home: string; now: string; rerun?: boolean; lockWaitMs?: number }): Promise<EvidenceBundle>` — examplesContractPath는 예시 자료(V27)를 얹고 커밋된 것과 견줄 계약이다(없으면 contractPath). 앱이 단위 브랜치(V22)를 조각으로 잴 때 계약 전체를 준다: 세션이 커밋하는 예시 자료는 앱이 계약 전체에서 쓴 파일 하나다.
+- `check(opts: { repo: string; base?: string; head?: string; contractPath?: string; examplesContractPath?: string; requestPath?: string; home: string; now: string; rerun?: boolean; lockWaitMs?: number; knowledge?: boolean }): Promise<EvidenceBundle>` — knowledge(V38, 기본 꺼짐)가 참이면 근거 knowledge를 확인하고 7에서 묶음의 `knowledge`를 채운다(꺼짐이면 null). examplesContractPath는 예시 자료(V27)를 얹고 커밋된 것과 견줄 계약이다(없으면 contractPath). 앱이 단위 브랜치(V22)를 조각으로 잴 때 계약 전체를 준다: 세션이 커밋하는 예시 자료는 앱이 계약 전체에서 쓴 파일 하나다.
   1. repo 루트, head(기본 HEAD), base(기본 `mergeBase(defaultBase, head)`).
   2. quality.json: base에 있으면 base 것, 없으면 head 것, 둘 다 없으면 from none(V9).
   3. diff, 신호(base 디렉터리, 매니페스트 base·head 내용).
   4. worktree 잠금(`lockWorktrees`, 기본 30분 기다림. 못 잡으면 missing에 적고 명령은 not_run). head checkout + setup, fast 명령마다 run → 실패면 한 번 다시 → 두 번 실패면 base checkout에서 그 명령(캐시) → classify. JUnit 자리를 준비하지 못하면(폴더이거나 worktree 밖을 가리키는 링크) 명령은 돌리되 시험 결과는 없다. 계약에 예시가 있으면 acceptance의 head 실행(다시 돌 때도)에는 정규 예시 자료(`examplesFile(examples_dir, 계약 id)`에 `examplesFileText`)를 `writeInside`로 얹고 실행 뒤 되돌린다(V27. 못 되돌리면 head worktree를 다음에 다시 준비한다). fast 명령과 얹지 않은 base 실행(test_count 래칫, V7의 base)은 커밋된 그대로 돈다. 얹지 못하면 missing에 `예시 자료 얹기(<slot>) <경로>: <까닭>`을 적고 커밋된 그대로 돈다.
-  5. 계약이 있고 acceptance가 있으면: head의 acceptance 결과(JUnit). change·keep 줄이 있으면 base checkout에 시험 파일(test_globs에 맞는 바뀐 파일)과 examples_dir를 head에서 얹고 그 위에 정규 예시 자료를 써서 acceptance. judgeLines. 바뀜 줄의 예시가 base에서 failed면 얹은 base를 한 번 더 돌려 `confirmFailures`로 합친 뒤 다시 판정한다. 줄 판정은 이렇게 승인된 자료로 돈다. 계약과 품질 기준이 있고 계약에 예시가 있으면 head에 커밋된 예시 자료를 `checkExamplesFile`로 견줘 `examples_file`(`{ path, status, diffs, error? }`)에 둔다(acceptance가 없어도. git이 실패하면 missing). 자료가 달라도 줄 판정은 바꾸지 않는다(관문의 사람 머지 사실). 근거 확인(groundings).
+  5. 계약이 있고 acceptance가 있으면: head의 acceptance 결과(JUnit). change·keep 줄이 있으면 base checkout에 시험 파일(test_globs에 맞는 바뀐 파일)과 examples_dir를 head에서 얹고 그 위에 정규 예시 자료를 써서 acceptance. judgeLines. 바뀜 줄의 예시가 base에서 failed면 얹은 base를 한 번 더 돌려 `confirmFailures`로 합친 뒤 다시 판정한다. 줄 판정은 이렇게 승인된 자료로 돈다. 계약과 품질 기준이 있고 계약에 예시가 있으면 head에 커밋된 예시 자료를 `checkExamplesFile`로 견줘 `examples_file`(`{ path, status, diffs, error? }`)에 둔다(acceptance가 없어도. git이 실패하면 missing). 자료가 달라도 줄 판정은 바꾸지 않는다(관문의 사람 머지 사실). 근거 확인(groundings: `checkGroundings(root, head, contract, request, knowledge)`. knowledge는 켜졌을 때만 `docs/knowledge/`의 그 항목이 head에 있는지 본다. id는 항목 경로이고 앞의 `docs/knowledge/`와 끝의 `.md`는 없어도 된다. 꺼졌으면 '지식 잇기가 꺼져 있어 확인하지 못함').
   6. 래칫: file_lines(바뀐 파일의 base·head 줄 수. 남은 파일의 줄 수를 못 읽으면 NaN), test_count(acceptance JUnit base·head. base는 얹지 않은 base에서 돌린 것), command(base·head).
-  7. 잠금을 풀고 묶음을 만들어 `evidencePath`에 쓴다. `contract`는 `{ id, hash: contractHash }`(계약이 없으면 null), `diff.binary`는 바이너리 파일 경로, `examples_file`은 5의 견줌(견주지 않았으면 null). review는 null(M2), claims null.
+  7. 잠금을 풀고(지식 잇기가 켜졌으면 `checkKnowledge(root, diff)`: git만 읽는다. 실패하면 missing `지식 확인: …`이고 knowledge null) 묶음을 만들어 `evidencePath`에 쓴다. `contract`는 `{ id, hash: contractHash }`(계약이 없으면 null), `diff.binary`는 바이너리 파일 경로, `examples_file`은 5의 견줌(견주지 않았으면 null). review는 null(M2), claims null.
 - 어떤 단계든 실패하면 묶음에 `missing`으로 적고 다음으로 간다(명령·래칫·줄 판정이 던져도). 묶음은 늘 나온다.
+
+### `src/engine/knowledge-format.ts`, `src/engine/knowledge.ts` — 지식 잇기 (M3a, V38)
+v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 옮겼다. knowledge-format.ts는 순수 함수지만 src/core 상한 때문에 engine에 둔다(Node 내장·adapters를 가져오지 않는다).
+- `isKnowledgePath(p)` — `docs/knowledge/<이름>.md`나 `docs/knowledge/<영역>/<이름>.md`(영역은 영어 소문자·숫자·`-`, README.md는 뺀다). `entryPathOf(id): string | null` — 근거 id를 항목 경로로.
+- `checkEntryFormat(text): string[]` — v2 checkEntryFormat: 머리글(`---` 사이의 `key: value` 줄. YAML이 아니다: 값의 앞뒤 따옴표를 벗기고 빈 값은 칸이 없는 것, `#` 줄은 주석)의 `kind`(rule·fact·history·pitfall)·`source`(human·investigation)·선택 `anchor`(식별자나 점으로 이은 식별자), 첫 `# ` 제목, 본문 절(rule은 `## 규칙`, 나머지는 `## 내용`), 알려진 절만(`## 아직 규칙을 따르지 않는 곳`·`## 아직 정하지 않은 것`은 rule에만, `## 바뀐 이력`). 코드 펜스 안은 보지 않는다. 문제마다 한국어 한 줄.
+- `anchorOf`, `entryTitle`, `notYetPaths`(`## 아직 규칙을 따르지 않는 곳`의 경로와 목록 줄 맨 앞의 맨 위 파일), `termsOf`, `pathsIn`, `identifiersIn`.
+- `rankEntries(entries, { text, paths, identifiers })` — v2 rankEntries(같은 anchor 5, 같은 파일 4·같은 폴더 2, 영역 2, 낱말 3×겹친 무게/항목 무게). v2의 머지 전 항목 0.5는 없다.
+- `relatedListText(entries, request): string` — request.md 끝의 `## 관련 지식 (relay가 고름)`: 요청 글의 낱말·경로·코드 이름으로 점수가 있는 항목을 `PICK_LIMIT`(15)개까지 '- 제목 — `경로`'로. 본문은 넣지 않는다. 항목이 없으면 빈 글, 겹치는 것이 없으면 한 줄.
+- knowledge.ts(git): `readEntries(root, sha)`, `relatedKnowledge(root, ref, request)`(새 Work), `checkKnowledgeGround(id, fileAt)`, `checkKnowledge(root, diff): Promise<{ changed: string[]; issues: KnowledgeIssue[] }>` — changed는 이 diff가 바꾼(더함·고침·옮김·지움) 지식 폴더의 .md(README 빼고). issues: 바꾼 파일이 지식 경로가 아니면 format, 바꾼 항목마다 `checkEntryFormat`(format)과 anchor의 마지막 조각이 head의 코드(지식 폴더 밖)에 없으면 anchor. 바꾸지 않은 항목은 `## 아직 규칙을 따르지 않는 곳`의 경로를 이 diff가 바꿨으면 not_yet(v2 D296), anchor를 이 diff가 지운 줄에 있고 head에 없으면 anchor.
+
+### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
+- `M3_DEVICES`, `M3_ON`(프로젝트 설정의 기본), `M3_OFF`(M3 앞의 Work 기록).
+- `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 켬.
+- `m3Switches(project, env: string | undefined): { switches; errors }` — env(RELAY_M3)가 비었으면 프로젝트 설정, `off`·`0`·`none`·`false`는 모두 끔, `on`·`1`·`all`·`true`는 모두 켬, 쉼표로 이은 장치 이름은 그것만 켬(모르는 이름은 errors). CLI `relay check`는 프로젝트가 없어 env만 본다(없으면 켬).
 
 ### `src/engine/init.ts` — 품질 기준 초안 (V19, V20)
 - `draftFor(root): Promise<QualityConfig>` — `git ls-files -z --cached --others --exclude-standard`의 파일 목록과 작업 트리의 `package.json`으로 `draftQuality`.
@@ -153,7 +168,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ## cli (`src/cli/main.ts`, bin `relay`)
 
 - `relay init [--write]` — 초안을 출력. `--write`면 `.relay/quality.json`이 없을 때만 쓴다.
-- `relay check [--base <ref>] [--head <ref>] [--contract <file>] [--request <file>] [--json]` — 요약 줄을 찍고 묶음 경로를 알린다. `--json`이면 묶음 JSON.
+- `relay check [--base <ref>] [--head <ref>] [--contract <file>] [--request <file>] [--json]` — 요약 줄을 찍고 묶음 경로를 알린다. `--json`이면 묶음 JSON. 지식 잇기(V38)는 환경 변수 `RELAY_M3`(V39)만 보고 정한다(없으면 켬, `off`면 끔. 모르는 장치 이름은 stderr에 알린다).
 - `relay gate [--evidence <file>] [--contract <file>] [--head <ref>] [--auto-merge] [--json]` — 결론과 decisive, reasons. 묶음의 레포에서 `--head`(기본 HEAD)를 읽어 gate에 넘긴다(못 읽으면 null). 서버 보호는 M1에서 null(그래서 자동 조건을 채워도 그림자다. 다만 M1 묶음은 리뷰가 없어 그 전에 '리뷰 없음'으로 사람 머지다).
 - `relay debt list|scan` — 목록, 사라진 anchor.
 - 종료 코드: 0 성공(결론과 상관없이), 1 사용 오류, 2 내부 오류. SIGINT·SIGTERM·SIGHUP(Windows는 SIGBREAK도)을 받으면 돌던 레포 명령의 프로세스 묶음을 끝내고 128+신호 번호로 끝난다(명령은 자기 묶음에서 돌아 터미널의 신호를 받지 않는다).

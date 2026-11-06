@@ -1,6 +1,6 @@
 // [증거] 패널 (docs/m2-modules.md 4절): 맨 위 결론 한 줄(그림자면 '자동이었으면 머지했을 것'), 그 아래 결론을 정한 사실.
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
-// 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(올림과
+// 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 지식(V38), 리뷰 지적(올림과
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
 // 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다), 끝난 Work는 끝낼 때의
 // 메모(V37, 접힘). 결론 아래 되먹임 상태 한
@@ -13,6 +13,7 @@ import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
 import { EndArmed, EndBox, EndMemos } from './EndPanels.tsx'
 import { exportSection, integrationText } from './exports.ts'
 import {
+  KNOWLEDGE_ISSUE,
   LINE_STATUS,
   OUTCOME,
   RATCHET,
@@ -398,6 +399,24 @@ function FindingGroups(p: { findings: ReviewFinding[]; view: WorkView; unit?: st
   )
 }
 
+/** 지식 확인(V38): 바뀐 지식 파일 수와 문제마다 한 줄. 장치를 껐으면(null) 칸이 없다 */
+function Knowledge(p: { k: NonNullable<EvidenceBundle['knowledge']> }) {
+  return (
+    <Fold title="지식" count={p.k.issues.length}>
+      <p className="muted">바뀐 지식 파일 {p.k.changed.length}개</p>
+      <ul className="fact-list">
+        {p.k.issues.map((i, n) => (
+          <li key={n}>
+            <Tag tone={KNOWLEDGE_ISSUE[i.kind].tone}>{KNOWLEDGE_ISSUE[i.kind].label}</Tag>
+            <code>{i.path}</code>
+            <span className="muted">{i.detail}</span>
+          </li>
+        ))}
+      </ul>
+    </Fold>
+  )
+}
+
 /** 펼침. unit은 지적의 내보내기(V22), integration은 통합 증거(리뷰 없음: 리뷰 지적을 보이지 않는다) */
 function Details(p: { view: WorkView; e: EvidenceBundle; unit?: string; integration?: boolean }) {
   const { e, view } = p
@@ -478,6 +497,7 @@ function Details(p: { view: WorkView; e: EvidenceBundle; unit?: string; integrat
           ))}
         </ul>
       </Fold>
+      {e.knowledge ? <Knowledge k={e.knowledge} /> : null}
       {p.integration ? null : (
         <Fold title="리뷰 지적" count={findings.length}>
           {review ? (

@@ -11,6 +11,7 @@ import { repoKey } from '../adapters/store.ts'
 import { parseQuality } from '../core/quality.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import { writeDraft } from '../engine/init.ts'
+import { m3Settings } from '../engine/m3.ts'
 import {
   DEFAULT_SETTINGS,
   EVENTS,
@@ -37,6 +38,7 @@ export function settingsOf(raw: unknown): ProjectSettings {
     review: pick('review', (v) => v === 'all' || v === 'auto_only'),
     merge_method: pick('merge_method', (v) => v === 'merge' || v === 'squash' || v === 'rebase'),
     question_mode: pick('question_mode', (v) => v === 'confirm_each' || v === 'draft_first'),
+    m3: m3Settings(s['m3']),
   }
 }
 
@@ -152,10 +154,11 @@ export class ProjectDesk {
   async updateSettings(projectId: string, s: Partial<ProjectSettings>): Promise<ProjectView> {
     const p = this.records.get(projectId)
     if (!p) throw new Error(`프로젝트가 없음: ${projectId}`)
-    const merged = { ...p.settings, ...s }
+    // m3은 장치마다 덮는다(준 장치만 바뀐다). 모르는 장치나 참·거짓이 아닌 값은 잘못된 값이다
+    const merged = { ...p.settings, ...s, m3: { ...p.settings.m3, ...s.m3 } }
     const checked = settingsOf(merged)
     const bad = (Object.keys(s) as (keyof ProjectSettings)[]).filter(
-      (k) => k in checked && checked[k] !== merged[k],
+      (k) => k in checked && JSON.stringify(checked[k]) !== JSON.stringify(merged[k]),
     )
     if (bad.length > 0) throw new Error(`설정 값이 잘못됨: ${bad.join(', ')}`)
     p.settings = checked

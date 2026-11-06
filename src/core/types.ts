@@ -294,6 +294,19 @@ export interface FeedbackFact {
   text: string
 }
 
+// ── M3 장치 (docs/m3-design.md) ──────────────────────────────────────────────
+
+/** M3 장치. 프로젝트 설정 m3과 환경 변수 RELAY_M3(engine/m3.ts)가 켜고 끈다. 장치를 더하면 이름을 더한다 */
+export type M3Device = 'knowledge'
+export type M3Switches = Record<M3Device, boolean>
+
+/** 지식 확인 문제(V38). format은 형식 오류(사람 머지 사실), anchor·not_yet은 알림 */
+export interface KnowledgeIssue {
+  path: string
+  kind: 'format' | 'anchor' | 'not_yet'
+  detail: string
+}
+
 // ── 증거 묶음 ────────────────────────────────────────────────────────────────
 
 export interface EvidenceBundle {
@@ -336,6 +349,8 @@ export interface EvidenceBundle {
     prompt_version?: number
     request?: boolean
   } | null
+  /** 지식 확인(M3a, V38): 이 diff가 바꾼 지식 파일과 문제. 장치를 껐거나 M3 앞의 묶음은 null이거나 칸이 없다 */
+  knowledge?: { changed: string[]; issues: KnowledgeIssue[] } | null
   /** 세션이 PR 본문 등에 쓴 주장. 관문에 들어가지 않는다 */
   claims: string | null
   contract_change_requested: boolean

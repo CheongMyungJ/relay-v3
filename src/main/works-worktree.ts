@@ -22,6 +22,8 @@ import {
 import { parseQuality } from '../core/quality.ts'
 import type { DebtItem, QualityConfig } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
+import { relatedKnowledge } from '../engine/knowledge.ts'
+import { m3Switches } from '../engine/m3.ts'
 import { EVENTS, type NewWorkInput } from '../shared/api.ts'
 import { branchExport, type ProjectRecord, type WorkRecord } from './store.ts'
 import { message, type WorkCtx, type WorksDeps, workHead } from './works-types.ts'
@@ -205,9 +207,17 @@ export async function newWork(
     end_pending: null,
     end_memos: [],
     feedback: { rounds: 0, sent: [] },
+    m3: m3Switches(project.settings.m3, deps.m3).switches,
   }
   const text = hint ? `${request}\n\n## 일의 성격 제안\n\n${hint}\n` : `${request}\n`
-  await store.writeText(id, 'request.md', text)
+  // 지식 잇기(V38): 기준의 docs/knowledge/에서 요청과 겹치는 항목의 제목과 경로. 읽지 못해도 Work는 만든다
+  const related = rec.m3.knowledge
+    ? await relatedKnowledge(project.path, ref, request).catch((e: unknown) => {
+        deps.log?.('관련 지식을 고르지 못함', e)
+        return ''
+      })
+    : ''
+  await store.writeText(id, 'request.md', text + related)
   await store.writeText(
     id,
     'instructions.md',
@@ -218,6 +228,7 @@ export async function newWork(
       baseBranch: base,
       workBranch: branch,
       questionMode: project.settings.question_mode,
+      knowledge: rec.m3.knowledge,
     }),
   )
   return rec

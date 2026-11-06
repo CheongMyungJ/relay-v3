@@ -361,7 +361,7 @@ export class ContractDesk {
     try {
       const head = await workHead(rec)
       const request = await this.ctx.deps.store.readText(rec.id, 'request.md')
-      return await checkGroundings(rec.worktree, head, contract, request)
+      return await checkGroundings(rec.worktree, head, contract, request, rec.m3.knowledge)
     } catch (e) {
       this.ctx.log(`근거 확인 실패 (${rec.id})`, e)
       return null

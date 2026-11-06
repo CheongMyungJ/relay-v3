@@ -245,6 +245,22 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
           ]}
           help="새로 만드는 Work의 세션에 적용됩니다."
         />
+        <label className="switch-row">
+          <span>
+            <span className="switch-title">지식 잇기</span>
+            <span className="help">
+              요청에 관련된 docs/knowledge/ 항목의 목록을 세션에 주고, 바뀐 지식 파일의 형식을
+              증거에서 확인합니다. 새로 만드는 Work에 적용됩니다.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            checked={s.m3.knowledge}
+            onChange={(e) => set('m3', { ...s.m3, knowledge: e.target.checked })}
+          />
+        </label>
         <ErrorLine text={act.error} />
         <div className="row end">
           <button type="button" className="ghost" onClick={p.onClose}>

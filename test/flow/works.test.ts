@@ -62,6 +62,7 @@ describe('한 Work의 생애', () => {
       review: 'all',
       merge_method: 'squash',
       question_mode: 'confirm_each',
+      m3: { knowledge: true },
     })
 
     const created = await works.createWork({

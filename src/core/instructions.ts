@@ -66,7 +66,13 @@ export interface InstructionsInput {
   baseBranch: string
   workBranch: string
   questionMode: 'confirm_each' | 'draft_first'
+  /** 지식 잇기(M3a, V38)가 켜졌나 */
+  knowledge?: boolean
 }
+
+/** 지식 잇기(V38)의 읽기와 쓰기. v2의 지식 형식(D293, D296, D299)이다 */
+const KNOWLEDGE_READ = ` If \`docs/knowledge/\` exists, read the entries related to the request before you write the contract; the request file may end with a list of related entries that relay picked (titles and paths).`
+const KNOWLEDGE_WRITE = `\n\nKnowledge: \`docs/knowledge/[<area>/]<name>.md\` keeps facts for later Works, one entry per file (area: lowercase letters, digits, \`-\`). Of the contract's \`human_rules\`, save the ones later work will also need as knowledge entries in this Work and commit them; do not save scope instructions that only apply to this Work ("leave X alone this time"): code that does not follow a rule yet goes under \`## 아직 규칙을 따르지 않는 곳\` of that rule's entry. An entry starts with a front matter between \`---\` lines: \`kind: rule | fact | history | pitfall\`, \`source: human | investigation\`, and optionally \`anchor: <the code name the entry is about>\`. Then a \`# \` title and \`## 규칙\` (for a rule) or \`## 내용\` (otherwise); optional sections are \`## 아직 규칙을 따르지 않는 곳\` and \`## 아직 정하지 않은 것\` (rule only; what the human said is not decided yet) and \`## 바뀐 이력\`. When a rule changes, edit its entry and add a line to \`## 바뀐 이력\`. relay checks the knowledge on the head: an entry with a format error sends the change to the human; an anchor that is not in the head and an entry whose \`## 아직 규칙을 따르지 않는 곳\` lists a file you changed without editing the entry are shown to the human.`
 
 const QUESTIONS: Record<InstructionsInput['questionMode'], string> = {
   confirm_each: `Ask before you submit. Ask one decision per question: the scope (what is in, what is out) and each decision point separately. For each thing to build or change, ask separately (a) what goes in and what comes out, with a concrete example the human can confirm or correct, and (b) what happens on bad input or errors. A question about scope alone gets only a list back; output formats and error rules stay unknown.`,
@@ -83,13 +89,14 @@ export function instructionsText(o: InstructionsInput): string {
   const tag = `[${o.contractId}:C1.1]`
   const examplesFile = `${o.examplesDir.replace(/\/+$/, '')}/${o.contractId}.json`
   const guarded = [...new Set([o.baseBranch, 'main', 'master'])].map((b) => `\`${b}\``)
+  const k = o.knowledge === true
   return `# relay Work ${o.workId}
 
 You work on one relay Work in this repository. Work branch: \`${o.workBranch}\`. Base branch: \`${o.baseBranch}\`. The request is in the file the first prompt names. relay is the app that shows your terminal to the human, next to the contract and the evidence.
 
 ## 1. Contract first
 
-Before you change code, write a contract and submit it with \`${TOOL_SUBMIT}\` (MCP server \`${MCP_SERVER}\`). Before that, read the code, the debt items in \`.relay/debt/\` and \`.relay/quality.json\` as you need. You may also run the code and write and commit tests, but change no file other than tests until the contract is approved.
+Before you change code, write a contract and submit it with \`${TOOL_SUBMIT}\` (MCP server \`${MCP_SERVER}\`). Before that, read the code, the debt items in \`.relay/debt/\` and \`.relay/quality.json\` as you need.${k ? KNOWLEDGE_READ : ''} You may also run the code and write and commit tests, but change no file other than tests until the contract is approved.
 
 The contract is JSON:
 - \`version\`: 1. \`id\`: \`${o.contractId}\`.
@@ -98,7 +105,7 @@ The contract is JSON:
   - \`id\`: \`C1\`, \`C2\`, …
   - \`kind\`: \`change\` (an existing behavior changes), \`new\` (a new behavior), \`keep\` (a behavior that must stay as it is), \`remove\` (a behavior or code goes away), \`observe\` (docs or screens a human looks at), \`human\` (only a human can judge).
   - \`text\`.
-  - \`grounds\`: why the line holds, one or more of \`{type: "code", path, line, name?}\` (a path:line at the head), \`{type: "request", quote}\` (words copied exactly from the request), \`{type: "knowledge", id}\`, \`{type: "guess"}\`. relay checks code and request grounds and shows a ground it cannot confirm as a guess.
+  - \`grounds\`: why the line holds, one or more of \`{type: "code", path, line, name?}\` (a path:line at the head), \`{type: "request", quote}\` (words copied exactly from the request), \`{type: "knowledge", id}\`${k ? ' (id: the path of a knowledge entry)' : ''}, \`{type: "guess"}\`. relay checks code${k ? ', request and knowledge' : ' and request'} grounds and shows a ground it cannot confirm as a guess.
   - \`examples\`: example ids (\`C1.1\`, \`C1.2\`, …).
   - \`check\`: \`test\`, \`observe\` or \`human\`. A \`human\` line has \`check: "human"\`. A \`test\` line of kind change, new or keep needs at least one example. relay also runs the tests of change and keep lines on the base, so a keep test can use only what the base already has.
   - \`unit\` (optional): the part of the request the line belongs to; see Units below.
@@ -126,7 +133,7 @@ Ask the human with \`AskUserQuestion\` for facts only the human knows. Do not as
 
 ## 4. After approval
 
-How you do the work is up to you. relay writes the contract's examples to \`${examplesFile}\` in this worktree, as an object from example id to \`{input, output?, error?, note?}\`: a draft when \`${TOOL_SUBMIT}\` accepts the contract, and the approved version when the human approves it or approves a contract change. Do not edit this file. Commit it with your tests, and have the tests read the examples from it. relay runs the acceptance tests with the approved file in place; a committed file that is missing or differs from the approved one sends the change to the human. Put the tag \`${tag}\` in the name of a test (or of its describe block) that shows example C1.1: relay matches tests to contract lines by these tags only.
+How you do the work is up to you. relay writes the contract's examples to \`${examplesFile}\` in this worktree, as an object from example id to \`{input, output?, error?, note?}\`: a draft when \`${TOOL_SUBMIT}\` accepts the contract, and the approved version when the human approves it or approves a contract change. Do not edit this file. Commit it with your tests, and have the tests read the examples from it. relay runs the acceptance tests with the approved file in place; a committed file that is missing or differs from the approved one sends the change to the human. Put the tag \`${tag}\` in the name of a test (or of its describe block) that shows example C1.1: relay matches tests to contract lines by these tags only.${k ? KNOWLEDGE_WRITE : ''}
 
 ## 5. Evidence
 

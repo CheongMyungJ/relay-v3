@@ -61,3 +61,22 @@ test('품질 기준 상태(V20): 기본 브랜치에 없으면 missing, [초안 
   expect(shown()).toMatchObject({ quality: 'present', qualityDraft: false })
   await expect(works.draftQuality('없는 프로젝트')).rejects.toThrow(/프로젝트가 없음/)
 })
+
+test('M3 장치 설정(V38): 장치마다 덮고, 모르는 장치나 참·거짓이 아닌 값은 거절하며 저장된다', async () => {
+  const home = await makeTempDir('relay-home-')
+  const app = await kit.openApp(home)
+  const project = await app.works.addProject(kit.repo.dir)
+  expect(project.settings.m3).toEqual({ knowledge: true })
+  const off = await app.works.updateSettings(project.id, { m3: { knowledge: false } })
+  expect(off.settings).toMatchObject({ m3: { knowledge: false }, auto_merge: false })
+  await expect(
+    app.works.updateSettings(project.id, { m3: { knowledge: 'no' } as never }),
+  ).rejects.toThrow(/m3/)
+  await expect(
+    app.works.updateSettings(project.id, { m3: { debt: true } as never }),
+  ).rejects.toThrow(/m3/)
+  await app.close()
+  kit.forget(app)
+  const again = await kit.openApp(home)
+  expect(again.works.list().projects[0]?.settings.m3).toEqual({ knowledge: false })
+})

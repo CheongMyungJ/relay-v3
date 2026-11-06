@@ -43,6 +43,8 @@ export interface OpenAppOptions {
   check?: typeof check
   /** 사람이 터미널에 입력한 뒤 되먹임을 보내지 않는 시간(V24). 기본 앱 그대로(60초) */
   humanQuietMs?: number
+  /** 환경 변수 RELAY_M3(V38)처럼 M3 장치를 덮는다 */
+  m3?: string
   log?: (message: string, error?: unknown) => void
 }
 
@@ -83,6 +85,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     prPollMs: o.prPollMs ?? 60_000,
     ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
     ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
+    ...(o.m3 !== undefined ? { m3: o.m3 } : {}),
     log,
   })
   await works.init()

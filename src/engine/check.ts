@@ -46,6 +46,7 @@ import {
   judgeContract,
   testsOf,
 } from './judge.ts'
+import { checkKnowledge } from './knowledge.ts'
 import { message, workspace, type Workspace } from './workspace.ts'
 
 /** 품질 기준 파일의 자리(레포 루트 기준) */
@@ -73,6 +74,8 @@ export interface CheckOptions {
   rerun?: boolean
   /** 다른 check가 이 레포의 worktree를 쓰고 있을 때 기다리는 시간(밀리초). 기본 30분 */
   lockWaitMs?: number
+  /** 지식 잇기(M3a, V38): 지식 확인(묶음의 knowledge)과 근거 knowledge 확인. 기본 꺼짐(knowledge null) */
+  knowledge?: boolean
 }
 
 /** worktree 잠금을 기다리는 기본 시간 */
@@ -163,11 +166,18 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
       )
       if (q !== null && whole !== null)
         examplesFile = await committedExamples(root, head, q, whole, missing)
-      groundings = await checkGroundings(root, head, contract, request)
+      groundings = await checkGroundings(root, head, contract, request, opts.knowledge === true)
     }
   } finally {
     await release?.().catch(() => {})
   }
+  const knowledge =
+    opts.knowledge === true
+      ? await checkKnowledge(root, diff).catch((e) => {
+          missing.push(`지식 확인: ${message(e)}`)
+          return null
+        })
+      : null
 
   const bundle: EvidenceBundle = {
     version: 1,
@@ -181,6 +191,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
     lines,
     examples_file: examplesFile,
     groundings,
+    knowledge,
     ratchets,
     signals: report.signals,
     diff: diffSummary(diff, report),

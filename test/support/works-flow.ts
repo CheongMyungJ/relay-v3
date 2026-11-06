@@ -133,7 +133,7 @@ export interface FlowKit {
     home: string,
     o?: Pick<
       OpenAppOptions,
-      'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check' | 'humanQuietMs'
+      'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check' | 'humanQuietMs' | 'm3'
     >,
   ): Promise<TestApp>
   /** 시험이 열고 스스로 닫은 앱을 목록에서 뺀다 */
@@ -228,6 +228,7 @@ export function flowKit(): FlowKit {
         ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
         ...(o.check ? { check: o.check } : {}),
         ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
+        ...(o.m3 !== undefined ? { m3: o.m3 } : {}),
       })
       apps.push(app)
       return app

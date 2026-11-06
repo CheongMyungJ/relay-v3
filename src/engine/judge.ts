@@ -25,6 +25,7 @@ import type {
   TestCase,
 } from '../core/types.ts'
 import { showFile } from '../adapters/git.ts'
+import { checkKnowledgeGround } from './knowledge.ts'
 import { message, type OverlayFile, type Workspace } from './workspace.ts'
 
 /** JUnit을 읽은 실행들의 testcase를 모은다. 하나도 없으면 null */
@@ -120,11 +121,13 @@ function overlayPaths(diff: DiffFacts, q: QualityConfig): string[] {
   return [...paths]
 }
 
+/** 계약 줄의 근거 확인. knowledge가 참이면(지식 잇기, V38) 근거 knowledge의 항목이 head에 있는지 본다 */
 export async function checkGroundings(
   root: string,
   head: string,
   contract: Contract,
   request: string | null,
+  knowledge = false,
 ): Promise<GroundingCheck[]> {
   const files = new Map<string, Promise<string | null>>()
   const fileAt = (path: string): Promise<string | null> => {
@@ -138,7 +141,11 @@ export async function checkGroundings(
   const out: GroundingCheck[] = []
   for (const line of contract.lines) {
     for (const ground of line.grounds) {
-      out.push({ line: line.id, ground, ...(await checkGround(ground, fileAt, request)) })
+      out.push({
+        line: line.id,
+        ground,
+        ...(await checkGround(ground, fileAt, request, knowledge)),
+      })
     }
   }
   return out
@@ -148,6 +155,7 @@ async function checkGround(
   ground: Grounding,
   fileAt: (path: string) => Promise<string | null>,
   request: string | null,
+  knowledge: boolean,
 ): Promise<{ ok: boolean; detail: string }> {
   switch (ground.type) {
     case 'code':
@@ -158,7 +166,8 @@ async function checkGround(
         ? { ok: true, detail: '요청에 그 구절이 있음' }
         : { ok: false, detail: '요청에 그 구절이 없음' }
     case 'knowledge':
-      return { ok: false, detail: '지식 저장소가 없어 확인하지 못함' }
+      if (knowledge) return checkKnowledgeGround(ground.id, fileAt)
+      return { ok: false, detail: '지식 잇기가 꺼져 있어 확인하지 못함' }
     case 'guess':
       return { ok: false, detail: '추측: 확인할 근거가 없음' }
   }

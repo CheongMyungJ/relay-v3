@@ -22,6 +22,7 @@ import { repoRoot, revParse, showFile } from '../adapters/git.ts'
 import { evidencePath, readJson, relayHome, repoKey } from '../adapters/store.ts'
 import { check, CheckInputError, QUALITY_PATH } from '../engine/check.ts'
 import { draftFor, draftText, writeDraft } from '../engine/init.ts'
+import { m3Switches } from '../engine/m3.ts'
 
 export interface Io {
   cwd: string
@@ -138,6 +139,9 @@ async function checkCommand(io: Io, args: string[]): Promise<number> {
     strict: true,
   })
   const home = relayHome(io.env)
+  // M3 장치(V38): CLI에는 프로젝트 설정이 없어 RELAY_M3만 본다(없으면 모두 켬)
+  const m3 = m3Switches(undefined, io.env['RELAY_M3'])
+  for (const e of m3.errors) io.err(e)
   const bundle = await check({
     repo: io.cwd,
     ...(values.base === undefined ? {} : { base: values.base }),
@@ -147,6 +151,7 @@ async function checkCommand(io: Io, args: string[]): Promise<number> {
     home,
     now: io.now().toISOString(),
     rerun: values.rerun === true,
+    knowledge: m3.switches.knowledge,
   })
   if (values.json === true) {
     io.out(JSON.stringify(bundle, null, 2))

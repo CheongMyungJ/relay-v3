@@ -82,7 +82,10 @@ describe('upgradeWork', () => {
       end_pending: null,
       end_memos: [],
       feedback: { rounds: 0, sent: [] },
+      // M3 앞의 Work는 M3 장치가 모두 꺼진 것이다(V38)
+      m3: { knowledge: false },
     })
+    expect(upgradeWork({ ...old, m3: { knowledge: true } }).m3).toEqual({ knowledge: true })
   })
 
   test('뺀 장치의 칸은 버린다: V28(제출 때 기준 확인, V32에서 뺌)의 probe', () => {
