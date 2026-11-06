@@ -221,6 +221,8 @@ export async function newWork(
         return ''
       })
     : ''
+  // 끝난 Work의 끝을 따라간다(M4b). 기다리지 않는다
+  deps.follow?.(project.id)
   // 기록 안 된 나빠짐(M3b): 장부의 앞 기록 뒤로 기준에 나빠진 채 들어온 래칫. 찾지 못해도 Work는 만든다
   if (rec.m3.debt)
     rec.unrecorded = await unrecordedRegressions({

@@ -121,6 +121,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `lineCounts(repo, sha, paths): Promise<Map<string, number | null>>` — 없으면 null, 바이너리는 건너뜀.
 - `hasWord(repo, sha, word, exclude): Promise<boolean>` — sha의 파일에 낱말이 있나(`git grep -q -I -w -F`, exclude 아래와 바이너리는 뺀다. 못 찾음(종료 1)은 거짓, 다른 실패는 던진다). 지식 항목의 anchor(V38).
 - `changedPaths(repo, a, b): Promise<string[]>` — 두 커밋 사이 바뀐 파일(`diff --name-only --no-renames`: 옮김은 지움과 새로 생김). 기록 안 된 나빠짐(M3b).
+- 거울 읽기(M4b, m4-design 4.3·4.4. 앱 로컬 거울에서 쓴다): `logRange(repo, { from?, to, since?, until?, firstParent?, max?, exclude? }): Promise<LogCommit[]>`(`git log -z`, 필드 `%H %P %ae %T %ct %B`. since·until은 ISO를 `@<유닉스 초>`로 넘긴다: git의 날짜 읽기는 먼 해를 틀리게 읽는다. exclude는 `^ref`), `isAncestor(repo, a, b): Promise<boolean>`(`merge-base --is-ancestor`, 객체가 없으면 던짐), `mergeTree(repo, a, b): Promise<string | null>`(합친 트리, 충돌이면 null), `patchId(repo, from, to): Promise<string | null>`(`git diff`를 `git patch-id --stable`에. 바뀐 것이 없으면 null).
 
 ### `src/adapters/git-write.ts` — git 쓰기 (M3b, V40)
 git.ts는 읽기만 한다. 앱이 레포에 쓰는 것은 빚 기록 하나다.
@@ -166,6 +167,9 @@ M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. 순수 함�
 
 ### `src/engine/gate-version.ts`, `src/engine/track.ts` — 관문 판과 그림자 실적의 셈 (M4a)
 순수 함수다. `GATE_VERSION`·`GATE_EPOCHS`·`gateEpoch`, `conditionsMet`(조건마다 core `gate`를 따로 부름)·`condHashes`(core `stableJson`, `qualityHash`). 약속은 [m2-modules.md](m2-modules.md) 1a절. core `contract.ts`의 `stableJson`을 내놓았다(모양은 그대로).
+
+### `src/engine/follow.ts` — 끝까지 따라가기의 순수한 셈 (M4b, V48)
+순수 함수다. `unsettled`, `lastConclusion`, `noPrExpired`, `sameChange`, `fateResult`. 관문 판의 파일이 아니다. 약속은 [m2-modules.md](m2-modules.md) 1a절. 거울은 `src/adapters/mirror.ts`(m2-modules 2절).
 
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
 - `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).

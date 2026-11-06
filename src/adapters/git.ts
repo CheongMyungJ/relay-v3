@@ -231,3 +231,114 @@ export async function lineCounts(
   }
   return out
 }
+
+// ── 거울에서 읽기 (M4b, m4-design 4.3·4.4). 모두 읽기만 한다(merge-tree는 트리 객체만 쓴다) ──
+
+/** logRange의 커밋 하나 */
+export interface LogCommit {
+  sha: string
+  parents: string[]
+  /** 작성자 이메일 */
+  author: string
+  tree: string
+  /** 커미터 시각(유닉스 초) */
+  time: number
+  /** 메시지 전체 */
+  body: string
+}
+
+/** ISO 때를 git이 그대로 읽는 `@<유닉스 초>`로(git의 날짜 읽기는 먼 해를 틀리게 읽는다). 읽지 못하면 던진다 */
+function gitTime(iso: string): string {
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) throw new Error(`때를 읽지 못함: '${iso}'`)
+  return `@${String(Math.floor(ms / 1000))}`
+}
+
+/** 필드 사이(US)와 커밋 사이(-z의 NUL) */
+const LOG_FORMAT = '--format=%H%x1f%P%x1f%ae%x1f%T%x1f%ct%x1f%B'
+
+/**
+ * from..to의 커밋(새 것부터, `git log -z`). from이 없으면 to의 조상 전부. since·until은 커미터 시각(ISO), firstParent는
+ * `--first-parent`, max는 `--max-count`, exclude는 그 ref들에서 닿는 커밋을 뺀다
+ */
+export async function logRange(
+  repo: string,
+  o: {
+    from?: string
+    to: string
+    since?: string
+    until?: string
+    firstParent?: boolean
+    max?: number
+    /** 이 ref들에서 닿는 커밋은 뺀다(`^<ref>`) */
+    exclude?: string[]
+  },
+): Promise<LogCommit[]> {
+  checkRef(o.to)
+  if (o.from !== undefined) checkRef(o.from)
+  for (const ref of o.exclude ?? []) checkRef(ref)
+  const args = ['log', '-z', LOG_FORMAT, '--no-color']
+  if (o.firstParent) args.push('--first-parent')
+  if (o.since) args.push(`--since=${gitTime(o.since)}`)
+  if (o.until) args.push(`--until=${gitTime(o.until)}`)
+  if (o.max !== undefined) args.push(`--max-count=${String(o.max)}`)
+  args.push(o.from === undefined ? o.to : `${o.from}..${o.to}`)
+  for (const ref of o.exclude ?? []) args.push(`^${ref}`)
+  args.push('--')
+  const out: LogCommit[] = []
+  for (const record of splitNul(await git(args, repo))) {
+    const [sha = '', parents = '', author = '', tree = '', time = '', ...body] =
+      record.split('\x1f')
+    out.push({
+      sha: sha.trim(),
+      parents: parents.split(' ').filter(Boolean),
+      author,
+      tree,
+      time: Number(time),
+      body: body.join('\x1f'),
+    })
+  }
+  return out
+}
+
+/** a가 b의 조상인가(같으면 참). 객체가 없거나 다른 실패는 던진다 */
+export async function isAncestor(repo: string, a: string, b: string): Promise<boolean> {
+  checkRef(a)
+  checkRef(b)
+  try {
+    await git(['merge-base', '--is-ancestor', a, b], repo)
+    return true
+  } catch (e) {
+    if (e instanceof GitError && e.exit === 1) return false
+    throw e
+  }
+}
+
+/** a와 b를 합친 트리(`git merge-tree --write-tree`, git 2.38부터). 충돌하면 null. 다른 실패는 던진다 */
+export async function mergeTree(repo: string, a: string, b: string): Promise<string | null> {
+  checkRef(a)
+  checkRef(b)
+  try {
+    const [tree] = (await git(['merge-tree', '--write-tree', a, b], repo)).split('\n')
+    return tree?.trim() || null
+  } catch (e) {
+    if (e instanceof GitError && e.exit === 1) return null
+    throw e
+  }
+}
+
+/**
+ * from..to 변경의 `git patch-id --stable`(같은 변경을 옮겨 심은 커밋은 같다). 바뀐 것이 없으면 null. blob이 없는 거울은
+ * git이 그때 받는다
+ */
+export async function patchId(repo: string, from: string, to: string): Promise<string | null> {
+  checkRef(from)
+  checkRef(to)
+  const diff = await git(
+    ['diff', ...DIFF_FIXED, '--full-index', '--src-prefix=a/', '--dst-prefix=b/', from, to, '--'],
+    repo,
+  )
+  if (diff.trim() === '') return null
+  const out = await git(['patch-id', '--stable'], repo, { input: diff })
+  return out.trim().split(/\s+/)[0] || null
+}

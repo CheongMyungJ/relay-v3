@@ -1,7 +1,16 @@
+import { readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
-import { findPr, ghAvailable, mergePr, prStatus, serverProtection } from '../../src/adapters/gh.ts'
+import {
+  findPr,
+  ghAvailable,
+  listPr,
+  mergePr,
+  prMerge,
+  prStatus,
+  serverProtection,
+} from '../../src/adapters/gh.ts'
 import { runFile } from '../../src/adapters/pty.ts'
 import { FAKE_GH } from '../support/fakes.ts'
 import { cleanupAll, makeRepo, makeTempDir, runGit, type TestRepo } from '../support/repo.ts'
@@ -142,6 +151,54 @@ describe('findPr', () => {
     } finally {
       await repo.checkout(BRANCH)
     }
+  })
+})
+
+describe('listPr와 prMerge (M4b)', () => {
+  test('listPr는 PR이 없음과 읽지 못함을 가른다', async () => {
+    expect(await listPr(repo.dir, BRANCH)).toEqual({ ok: true, pr: null })
+    await setState({ prs: [pr({ number: 3 })] })
+    expect(await listPr(repo.dir, BRANCH)).toMatchObject({ ok: true, pr: { number: 3 } })
+    await setState({ prs: [pr({ number: 3 })], fail: ['pr list'] })
+    expect(await listPr(repo.dir, BRANCH)).toMatchObject({ ok: false })
+  })
+
+  test('prMerge: 머지 커밋(mergeCommit.oid)과 머지한 때. 머지되지 않았으면 둘 다 null', async () => {
+    const oid = 'a'.repeat(40)
+    await setState({
+      prs: [
+        pr({ number: 4, state: 'MERGED', mergedAt: '2026-11-07T10:00:00Z', mergeCommit: { oid } }),
+        pr({ number: 5 }),
+      ],
+    })
+    expect(await prMerge(repo.dir, 4)).toEqual({
+      ok: true,
+      state: 'MERGED',
+      headRefOid: head,
+      mergeCommit: oid,
+      mergedAt: '2026-11-07T10:00:00Z',
+    })
+    expect(await prMerge(repo.dir, 5)).toMatchObject({
+      ok: true,
+      mergeCommit: null,
+      mergedAt: null,
+    })
+    const calls = (await logged()).map((c) => c.args)
+    expect(calls).toContainEqual([
+      'pr',
+      'view',
+      '4',
+      '--json',
+      'mergeCommit,mergedAt,state,headRefOid',
+    ])
+    // 부르는 칸은 relay-v2 녹화본의 prView에 있다(test/fixtures/recorded-fields.json)
+    const recorded = JSON.parse(
+      readFileSync(new URL('../fixtures/recorded-fields.json', import.meta.url), 'utf8'),
+    ) as { gh: { prView: string[] } }
+    for (const f of ['mergeCommit', 'mergeCommit.oid', 'mergedAt', 'state', 'headRefOid'])
+      expect(recorded.gh.prView).toContain(f)
+    expect(await prMerge(repo.dir, 9)).toMatchObject({ ok: false })
+    expect(await prMerge(repo.dir, 0)).toMatchObject({ ok: false })
   })
 })
 

@@ -17,9 +17,11 @@ import { SessionHost } from './sessions.ts'
 import { Store } from './store.ts'
 import { claudeReview, Works } from './works.ts'
 import { SessionLog } from './works-session-log.ts'
+import { RecordFollower } from './works-record.ts'
 
 let win: BrowserWindow | null = null
 let works: Works | null = null
+let follower: RecordFollower | null = null
 let hooks: HookServer | null = null
 let quitting = false
 
@@ -102,6 +104,18 @@ async function start(): Promise<void> {
   // RELAY_M3: 평가가 M3 장치를 모두 끄거나 고른 것만 켠다(V38). 있으면 프로젝트 설정을 덮는다
   const m3 = process.env['RELAY_M3']
   for (const e of m3Switches(undefined, m3).errors) log(e)
+  const now = () => new Date().toISOString()
+  const relayVersion = app.getVersion()
+  // 끝까지 따라가기(M4b): 끝난 Work의 PR과 PR 없이 끝남을 앱 시작, 새 Work, 6시간마다 따라간다
+  const record = new RecordFollower({
+    store,
+    gh,
+    now,
+    relayVersion,
+    ...(version ? { claudeVersion: version } : {}),
+    log,
+  })
+  follower = record
   const w = new Works({
     store,
     sessions,
@@ -119,14 +133,15 @@ async function start(): Promise<void> {
     ...(m3 === undefined ? {} : { m3 }),
     sessionLog,
     ...(relayBuild ? { relayBuild } : {}),
+    follow: (projectId) => void record.follow(projectId),
     gh,
-    now: () => new Date().toISOString(),
+    now,
     newId: () => randomUUID(),
     emit: (event, payload) => {
       for (const bw of BrowserWindow.getAllWindows())
         if (!bw.isDestroyed()) bw.webContents.send(event, payload)
     },
-    relayVersion: app.getVersion(),
+    relayVersion,
     // 스모크 시험이 Stop 뒤 5초를 기다리지 않게 줄일 수 있다
     ...(debounceMs > 0 ? { debounceMs } : {}),
     ...(version ? { claudeVersion: version } : {}),
@@ -134,6 +149,7 @@ async function start(): Promise<void> {
   })
   await w.init()
   works = w
+  record.start()
   registerIpc({ works: w, sessions, window: () => win })
   createWindow()
 }
@@ -164,6 +180,7 @@ app.on('before-quit', (e) => {
   e.preventDefault()
   void (async () => {
     try {
+      follower?.stop()
       await works?.shutdown()
       await hooks?.close()
     } catch (err) {

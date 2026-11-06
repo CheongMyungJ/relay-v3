@@ -1,7 +1,8 @@
-// 장부의 판과 내보내기 결론 줄의 M4a 칸 (docs/m4-design.md 3절). works-exports.ts(정책, 장부 줄)와 works-review.ts(리뷰 뒤
-// 실적 다시 읽기)가 쓴다. 판 열쇠(engine/ledger.ts epochKey)의 재료는 조건 hash, 리뷰가 본 모델, 세션의 effort, Claude Code
-// major.minor, 관문 판, 리뷰 프롬프트 판이다. 지금 판은 정책을 만들 때 그 묶음으로 만든다: 리뷰 앞의 묶음은 리뷰 모델을 모르므로
-// 실적이 어떤 판과도 같지 않고(엄격), 리뷰가 끝나면 그 모델로 다시 읽는다(refreshTrack).
+// 장부의 판과 내보내기 결론 줄의 M4a 칸 (docs/m4-design.md 3절), 장부 한 줄(ledgerEntry). works-exports.ts(정책, 장부 줄),
+// works-review.ts(리뷰 뒤 실적 다시 읽기), works-record.ts(끝까지 따라가기, M4b)가 쓴다. 판 열쇠(engine/ledger.ts epochKey)의
+// 재료는 조건 hash, 리뷰가 본 모델, 세션의 effort, Claude Code major.minor, 관문 판, 리뷰 프롬프트 판이다. 지금 판은 정책을
+// 만들 때 그 묶음으로 만든다: 리뷰 앞의 묶음은 리뷰 모델을 모르므로 실적이 어떤 판과도 같지 않고(엄격), 리뷰가 끝나면 그
+// 모델로 다시 읽는다(refreshTrack).
 
 import { REVIEW_PROMPT_VERSION } from '../core/review.ts'
 import type { Contract, EvidenceBundle, GateResult, Integration, Policy } from '../core/types.ts'
@@ -10,6 +11,46 @@ import { trackRecord, type EpochSource, type LedgerEntry } from '../engine/ledge
 import { condHashes, conditionsMet } from '../engine/track.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { WorkCtx, WorksDeps } from './works-types.ts'
+
+/** 장부 줄을 쓰는 데 드는 의존(Works와 끝까지 따라가기, works-record.ts) */
+export type LedgerDeps = Pick<WorksDeps, 'now' | 'model' | 'claudeVersion' | 'relayVersion'>
+
+/** 장부 줄마다 적는 버전: 모델(deps.model), Claude Code, relay. 판 열쇠는 내보내기 결론 줄의 M4a 칸이다 */
+export function versions(deps: LedgerDeps): {
+  model?: string
+  claude_version?: string
+  relay_version: string
+} {
+  return {
+    ...(deps.model ? { model: deps.model } : {}),
+    ...(deps.claudeVersion ? { claude_version: deps.claudeVersion } : {}),
+    relay_version: deps.relayVersion,
+  }
+}
+
+/** 장부 한 줄. 단위 브랜치의 내보내기는 그 단위를 적는다(V22: 실적은 Work를 조건마다 한 건으로 센다) */
+export function ledgerEntry(
+  deps: LedgerDeps,
+  rec: Pick<WorkRecord, 'id'>,
+  x: Pick<ExportRecord, 'unit'>,
+  project: Pick<ProjectRecord, 'id'>,
+  head: string,
+  result: Pick<GateResult, 'conclusion' | 'condition' | 'shadow'>,
+  extra: Partial<LedgerEntry> = {},
+): LedgerEntry {
+  return {
+    ts: deps.now(),
+    project: project.id,
+    work: rec.id,
+    head,
+    conclusion: result.conclusion,
+    condition: result.condition,
+    shadow: result.shadow,
+    ...(x.unit === null ? {} : { export: x.unit }),
+    ...versions(deps),
+    ...extra,
+  }
+}
 
 /** 내보내기 결론 줄 하나를 만드는 재료(works-evidence.ts의 리뷰 일감과 같은 꼴) */
 export interface ExportJob {

@@ -1,8 +1,9 @@
 {
-  "about": "relay-v3에는 test/contract가 없다. 가짜 claude(test/support/fake-claude)가 쓰는 칸과 앱이 읽는 칸은 relay-v2 녹화본에 있어야 한다(m4-design 14절). 녹화본에 없는 칸은 지어내지 않는다.",
+  "about": "relay-v3에는 test/contract가 없다. 가짜 claude(test/support/fake-claude)·가짜 gh가 쓰는 칸과 앱이 읽는 칸은 relay-v2 녹화본에 있어야 한다(m4-design 14절). 녹화본에 없는 칸은 지어내지 않는다.",
   "source": {
     "stream": "relay-v2 app/test/contract/fixtures/claude.json stream.shapes (2.1.312 (Claude Code), 2026-10-28)",
-    "hooks": "relay-v2 app/test/contract/fixtures/claude.json events.<이벤트>.shape (2.1.308 (Claude Code), 2026-10-22)"
+    "hooks": "relay-v2 app/test/contract/fixtures/claude.json events.<이벤트>.shape (2.1.308 (Claude Code), 2026-10-22)",
+    "gh": "relay-v2 app/test/contract/fixtures/gh.json shapes.prView (gh version 2.101.0, 2026-10-05)"
   },
   "stream": {
     "assistant": [
@@ -136,8 +137,28 @@
       "transcript_path"
     ]
   },
+  "gh": {
+    "prView": [
+      "baseRefName",
+      "headRefName",
+      "headRefOid",
+      "isDraft",
+      "mergeCommit",
+      "mergeCommit.oid",
+      "mergeStateStatus",
+      "mergeable",
+      "mergedAt",
+      "number",
+      "reviewDecision",
+      "state",
+      "statusCheckRollup",
+      "url"
+    ]
+  },
   "read": {
     "stream.assistant.message.model": "adapters/claude.ts streamOutput (M4a model_observed)",
-    "hooks.<PreToolUse|PostToolUse|PostToolUseFailure|Stop>.effort.level": "main/works-session-log.ts (M4a effort, 녹화본 sample: 'medium')"
+    "hooks.<PreToolUse|PostToolUse|PostToolUseFailure|Stop>.effort.level": "main/works-session-log.ts (M4a effort, 녹화본 sample: 'medium')",
+    "gh.prView.mergeCommit.oid": "adapters/gh.ts prMerge (M4b merge_commit)",
+    "gh.prView.mergedAt": "adapters/gh.ts prMerge (M4b merged_at)"
   }
 }

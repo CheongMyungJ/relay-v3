@@ -160,7 +160,15 @@ export interface FlowKit {
     home: string,
     o?: Pick<
       OpenAppOptions,
-      'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check' | 'humanQuietMs' | 'm3' | 'relayBuild'
+      | 'prPollMs'
+      | 'claudeBin'
+      | 'reviewDisabled'
+      | 'check'
+      | 'humanQuietMs'
+      | 'm3'
+      | 'relayBuild'
+      | 'recordNow'
+      | 'follow'
     >,
   ): Promise<TestApp>
   /** 시험이 열고 스스로 닫은 앱을 목록에서 뺀다 */
@@ -170,6 +178,18 @@ export interface FlowKit {
   gh(edit: (state: Entry & { prs?: Entry[] }) => void): Promise<void>
   /** 이 시험에서 가짜 리뷰가 낼 지적. 시험이 끝나면 기본(NOTE_FINDINGS)으로 돌아간다 */
   review(findings: Entry[]): Promise<void>
+  /**
+   * GitHub 쪽이나 사람의 다른 clone(M4b): origin의 새 clone. g는 그 clone의 git, write는 파일 하나를 쓰고 커밋해 SHA를
+   * 돌려준다
+   */
+  github(): Promise<GithubSide>
+  /** GitHub가 PR의 head를 origin의 refs/pull/<n>/head로 둔다(M4b 거울이 받는다) */
+  pullRef(n: number, sha: string): Promise<void>
+}
+
+export interface GithubSide {
+  g: (...args: string[]) => Promise<string>
+  write: (file: string, text: string, message: string) => Promise<string>
 }
 
 export function flowKit(): FlowKit {
@@ -257,6 +277,8 @@ export function flowKit(): FlowKit {
         ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
         ...(o.m3 !== undefined ? { m3: o.m3 } : {}),
         ...(o.relayBuild ? { relayBuild: o.relayBuild } : {}),
+        ...(o.recordNow ? { recordNow: o.recordNow } : {}),
+        ...(o.follow ? { follow: true } : {}),
       })
       apps.push(app)
       return app
@@ -278,6 +300,27 @@ export function flowKit(): FlowKit {
       const file = join(tmp, `review-${++scenarios}.json`)
       await writeFile(file, JSON.stringify({ findings }))
       vi.stubEnv('FAKE_CLAUDE_REVIEW', file)
+    },
+    async github() {
+      const dir = join(await makeTempDir('relay-github-'), 'gh')
+      await runGit(tmp, ['clone', '--quiet', join(tmp, 'origin.git'), dir])
+      const g = (...args: string[]) => runGit(dir, args)
+      for (const [k, v] of [
+        ['user.name', 'someone'],
+        ['user.email', 'someone@example.com'],
+        ['commit.gpgsign', 'false'],
+      ] as const)
+        await g('config', k, v)
+      const write = async (file: string, text: string, message: string) => {
+        await writeFile(join(dir, file), text)
+        await g('add', '--all')
+        await g('commit', '--quiet', '--no-verify', '-m', message)
+        return g('rev-parse', 'HEAD')
+      }
+      return { g, write }
+    },
+    async pullRef(n, sha) {
+      await runGit(join(tmp, 'origin.git'), ['update-ref', `refs/pull/${String(n)}/head`, sha])
     },
   }
   return kit

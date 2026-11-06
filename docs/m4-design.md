@@ -1,6 +1,6 @@
 # M4 설계: 그림자 실적
 
-- 상태: **만드는 중**(2026-11-06). M4-0(2.1절)과 M4a(3.4절)를 만들었다. M4b~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
+- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절)를 만들었다. M4c~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
 - **사용자 결정(2026-11-06, ✅):**
   - Q10 자기 실행: **도구만 만들고 relay-v3 자기 실행은 나중에 따로 정한다.** quality.json PR, main 보호·필수 검사, 앱으로 relay-v3 개발하기는 하지 않는다. 그래서 M4h(10절)는 '나중'이고, M4의 숫자는 재생과 평가 자료로만 낸다.
   - Q2 M5 숫자: **12절의 안 그대로**(일치 ≥ 20, V3 그대로; 끝이 정해진 n ≥ 30; 일치율 ≥ 0.95; lift > 0; 창 30일; 창이 닫힌 이 조건의 머지 ≥ 20에서 귀속 0·미정 0; 결정론 5회 갈림 0; 지금 관문 판의 재생 거짓 자동 0). M5 규약이 이것을 그대로 쓴다.
@@ -193,6 +193,32 @@ interface LedgerEntry {
 - 비용: blob 없이 받으므로 커밋과 tree만. patch-id가 부르는 blob만 그때 받는다.
 - 읽는 adapter(`git.ts`에 더함): `logRange(repo, ref, since, until)`(`-z`, `%H %P %ae %ct %B`), `isAncestor`, `mergeTree`, `patchId`. 모두 실제 git으로 [어댑터] 시험을 둔다.
 - 거울을 허락하지 않으면(Q5에서 다른 길): 같은 변경은 1번만 보고 나머지는 모름, 되돌림은 사용자 레포의 `origin/<기준>`을 fetch 없이 읽고, 읽은 ref의 마지막 커밋 시각이 창 끝보다 이르면 '아직 못 봄'(깨끗함이 아님)으로 둔다.
+
+### 4.5 만든 것 (M4b, V48)
+
+- **끝 줄의 칸(4.1):** `engine/ledger.ts` `LedgerEntry`에 `ended`(`no_pr`·`discarded`·`unmerged`), `merge_commit`, `merged_at`, `same_change`. 머지·닫힘 끝 줄에는 M4a의 `pr`도 적는다. `isEntry`는 칸이 없으면 옛 줄로 읽고 모양이 다르면 버린다. `trackRecord`는 끝 줄의 head가 그 head이고 `same_change`가 참이면 일치로, `discarded`·`unmerged`는 닫힘처럼 불일치로, `no_pr`만 있으면 아직 열림으로 센다(머지는 뒤의 끝 줄에 지지 않는다). `exportKey`를 내놓았다.
+- **같은 변경(4.3):** 새 파일 `engine/follow.ts`의 순수 `sameChange`(다섯 경우), 끝이 정해지지 않은 내보내기 `unsettled`, `lastConclusion`, `noPrExpired`(90일), `fateResult`. 사실은 `main/works-record.ts` `changeFacts`가 거울에서 읽는다: 사이 커밋(`head..merged`에서 머지 전 기준에서 닿는 것은 뺌, 200개까지), 깨끗한 기준 맞춤 머지(부모 하나가 기준의 조상이고 `mergeTree(부모들) === tree`), patch-id(head 쪽은 결론 줄의 `base_sha`부터, 머지 쪽은 머지 커밋 첫 부모와의 공통 조상부터).
+- **거울(4.4):** 새 파일 `adapters/mirror.ts`(`ensureMirror`: `$RELAY_HOME/mirror/<레포 키>.git`에 `git clone --bare --filter=blob:none --no-tags`, `fetchBase`, `fetchPr`: `refs/pull/<N>/head` → `refs/relay/pr/<N>`, `fetchWork`: 사용자 레포의 Work 브랜치 → `refs/relay/work/<브랜치>`, `hasCommit`, `originUrl`). `adapters/git.ts`에 `logRange`, `isAncestor`, `mergeTree`, `patchId`.
+- **따라가기(4.2):** 새 파일 `main/works-record.ts` `RecordFollower`(프로젝트마다 한 번에 하나, `follow`/`followAll`/`start`/`stop`). 끝난 Work의 내보내기마다 `gh.listPr`(새 함수: PR 없음과 읽지 못함을 가름. `findPr`은 이것을 감쌈)로 PR을 읽어, 머지됨은 `{ by: 'human-override', merged_head, merge_commit?, merged_at?, same_change, pr, accepted? }`(`gh.prMerge`: 새 함수, `gh pr view --json mergeCommit,mergedAt,state,headRefOid`), 닫힘은 `{ closed, pr }`, PR이 없으면 [버림]은 `discarded`, [끝내기]는 `no_pr`. no_pr의 head가 거울에서 기준의 조상이 되거나 같은 patch-id의 기준 커밋(로컬 squash)이 생기면 `{ by: 'human-override', merged_head: head, same_change: true, merge_commit? }`, 닿지 않고 90일이 지나면 `unmerged`. 계기: `index.ts`가 `works.init()` 뒤 `start()`(6시간마다)와 끝날 때 `stop()`, 새 Work는 `WorksDeps.follow`(`works-worktree.ts newWork`, 기다리지 않음).
+- **진행 중 Work의 끝 줄(works-exports.ts):** 앱의 [머지]·정책 머지는 `{ same_change: true, pr, merge_commit?, merged_at? }`를 더하고(`mergeOf`: 머지 뒤 gh pr view 한 번), 앱 밖 머지(`fate`)는 끝 줄의 head를 마지막 결론 줄의 head로 두고 `mergedFields`(같은 SHA가 아니면 거울)를 더한다. 닫힘에 `pr`. `versions`·`ledgerEntry`는 `works-ledger.ts`로 옮겼다(따라가기도 쓴다).
+- **녹화 칸:** `test/fixtures/recorded-fields.json`에 gh `prView`의 칸(relay-v2 `gh.json` shapes.prView)과 읽는 칸(`mergeCommit.oid`, `mergedAt`). 가짜 gh는 고치지 않았다(상태 파일의 `mergeCommit`을 그대로 돌려준다).
+- **시험:** [단위] `follow.test.ts`(sameChange 다섯 경우, unsettled, 90일, trackRecord의 M4b 끝 줄, parseLedger의 M4b 칸). [어댑터] `mirror.test.ts`(거울이 $RELAY_HOME에만 생기고 사용자 레포의 ref·설정·remote가 그대로, 기준·PR ref·Work 브랜치 받기, origin 없음, logRange·isAncestor·mergeTree·patchId, changeFacts의 Update branch·빚 커밋·rebase·더 커밋·충돌을 손으로 푼 맞춤 머지·모르는 merged), `gh.test.ts`(listPr, prMerge, 녹화 칸). [흐름] `works-record.test.ts`(끝난 뒤 Update branch를 거쳐 머지된 PR, 더 커밋한 squash 머지, no_pr과 가짜 시계의 90일 뒤 unmerged, [버림]의 discarded, 새 Work가 따라가기를 부름), `works-record-local.test.ts`(PR 없이 끝난 Work의 로컬 squash와 merge), `works.test.ts`(앱의 [머지]와 앱 밖 머지 끝 줄의 M4b 칸). 렌더러를 바꾸지 않아 [스모크]는 새로 두지 않았고, 메인(`index.ts`가 따라가기를 띄움)이 바뀌어 있는 [스모크] 5개를 돌려 지났다. `npm run test:replay` 그대로 지남.
+- core 4,850줄 그대로(core를 고치지 않았다).
+
+### 4.6 설계와 다른 것 (M4b)
+
+- **`sameChange`는 `engine/track.ts`가 아니라 새 파일 `engine/follow.ts`에 있다.** track.ts는 관문 판의 파일이라(3.3) 고치면 `GATE_VERSION`을 올려야 한다. 같은 변경은 결론을 바꾸지 않고 끝 줄만 쓰므로 관문 판에 넣지 않았다.
+- **`ended`에 셋째 값 `unmerged`를 더했다.** no_pr의 90일을 읽을 때 시계로 가르지 않고, 따라가기가 90일이 지난 때 한 줄을 쓴다. 그래서 `trackRecord`는 시계가 없어도 된다(no_pr는 열림, unmerged는 불일치). [버림](`discarded`)과 갈래가 따로 남는다(Q8).
+- **`same_change`는 끝 줄의 head에 대해서다.** 끝 줄의 head를 그 내보내기의 마지막 결론 줄의 head로 둔다(앱 밖 머지의 끝 줄은 전에는 PR head였다). `trackRecord`의 일치는 `merged_head === head`이거나 끝 줄의 head가 그 head이고 `same_change`가 참일 때다. 앞 head(마지막이 아닌 결론 줄)는 SHA가 같아야 일치다(엄격).
+- **거울은 사용자 레포의 Work 브랜치도 받는다(`fetchWork`, 읽기만).** 내보낸 head는 PR ref에 없을 수 있고(force push), PR 없이 끝난 Work는 origin에 없다. 사용자 레포의 ref·설정·객체는 바꾸지 않는다.
+- **사이 커밋은 머지 전 기준에서 닿는 커밋을 뺀다.** `head..merged`에는 맞춤 머지가 들여온 기준 커밋도 들어서다. 머지 전 기준은 머지 커밋의 첫 부모이고, 머지 커밋을 모르면 기준 브랜치다. 머지 커밋을 모르는데 merged가 이미 기준에 있으면 사이와 머지 쪽 patch-id를 모름으로 둔다(엄격).
+- **PR 없이 끝난 Work의 로컬 머지:** 같은 변경은 head가 기준의 조상이거나, 첫 결론 줄 하루 앞부터의 기준 first-parent 커밋 100개 가운데 같은 patch-id(로컬 squash)로만 본다. squash면 `merge_commit`을 적고, 조상이면 `merge_commit`·`merged_at`이 없다(M4d에서 필요하면 거울에서 구한다).
+- **따르지 않는 것:** 진행 중 Work는 따라가지 않는다(PR 확인이 쓴다). [버림]한 Work에 PR이 있으면 그 PR을 따라간다(버림이 아니라 PR의 끝). PR의 기준이 Work와 다르거나, work.json에 PR이 있었는데 gh가 보이지 않거나, gh를 읽지 못하면 그때는 끝을 정하지 않는다(그대로 남아 M4c에서 낡음·추적 잃음으로 보인다). 분모 밖 갈래(14일 낡음, 90일 추적 잃음)의 셈은 M4c다.
+- **PR 없이 끝난 head를 거울에서 읽지 못하면(사용자 레포에서 Work 브랜치를 지움 등) no_pr로 남는다.** 닿았는지 모르므로 90일이 지나도 unmerged로 쓰지 않는다(표본은 열림으로 빠진다. M4c의 추적 잃음).
+- **앱의 [머지]도 머지 뒤 `gh pr view`를 한 번 더 부른다**(머지 커밋과 때. M4d가 모든 머지의 `merge_commit`을 쓴다). 앱 밖 머지의 같은 변경은 PR 확인 안에서 거울을 받으므로 그 확인이 길어질 수 있다.
+- **새 Work의 계기는 `WorksDeps.follow`다**(works.ts 598줄에 줄을 더하지 않으려고 `works-worktree.ts newWork`가 부른다). [흐름]의 앱은 기본으로 이것을 걸지 않는다(`follow: true`일 때만): 다른 시험의 장부에 끝 줄이 끼지 않게.
+- **`logRange`의 since·until은 `@<유닉스 초>`로 넘긴다.** git의 날짜 읽기는 2100년 무렵 이후의 해를 틀리게 읽는다(시험에서 봄).
+- **하지 않은 것:** `after_commits`(M4e, 7절), `by: 'human-preapproved'`(Q9: 다시 녹화 전). 녹화되지 않은 gh 칸(autoMergeRequest, mergedBy, PR commits API)은 쓰지 않았다.
 
 ## 5. M4c 조건별 실적 숫자와 보이기
 

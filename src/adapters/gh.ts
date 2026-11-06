@@ -1,4 +1,4 @@
-// gh CLI (docs/m2-modules.md 2절): PR 찾기·읽기·머지와 서버 쪽 브랜치 보호 읽기.
+// gh CLI (docs/m2-modules.md 2절): PR 찾기·읽기·머지와 서버 쪽 브랜치 보호 읽기, 머지된 PR의 머지 커밋(M4b).
 // gh는 셸 없이 인자 배열로 부르고(runFile), repoDir에서 돌려 gh가 그 레포의 원격으로 OWNER/REPO를 고르게 한다.
 // 실패는 던지지 않고 결과로 돌려준다. 실행 파일은 RELAY_GH_BIN(시험의 가짜 gh), 없으면 PATH의 gh다.
 
@@ -92,6 +92,18 @@ const PR_LIST_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergedAt
 
 /** branch를 head로 하는 가장 최근 PR(열림·닫힘·머지됨 모두). 없거나 읽지 못하면 null */
 export async function findPr(repoDir: string, branch: string): Promise<PrInfo | null> {
+  const r = await listPr(repoDir, branch)
+  return r.ok ? r.pr : null
+}
+
+/**
+ * findPr과 같되 PR이 없음(pr null)과 읽지 못함(ok 거짓)을 가른다(M4b 끝까지 따라가기: PR 없이 끝남은 gh가 '없음'이라고 할
+ * 때만 적는다)
+ */
+export async function listPr(
+  repoDir: string,
+  branch: string,
+): Promise<{ ok: true; pr: PrInfo | null } | { ok: false; error: string }> {
   const r = await gh(repoDir, [
     'pr',
     'list',
@@ -102,22 +114,61 @@ export async function findPr(repoDir: string, branch: string): Promise<PrInfo | 
     '--json',
     PR_LIST_FIELDS,
   ])
-  if (!r.ok) return null
+  if (!r.ok) return r
   const list = parseJson(r.stdout)
-  if (!Array.isArray(list)) return null
+  if (!Array.isArray(list))
+    return { ok: false, error: `gh pr list의 출력을 읽지 못함: ${r.stdout.slice(0, 200)}` }
   const prs = list.filter(isObject).filter((p) => typeof p.number === 'number' && p.url)
   // gh는 최근 것부터 준다. 그래도 번호가 가장 큰 것을 고른다
   prs.sort((a, b) => Number(b.number) - Number(a.number))
   const p = prs[0]
-  if (!p) return null
+  if (!p) return { ok: true, pr: null }
   return {
-    number: Number(p.number),
-    url: str(p.url),
-    state: prState(p.state),
-    headRefOid: str(p.headRefOid),
-    baseRefName: str(p.baseRefName),
-    isDraft: p.isDraft === true,
-    mergedAt: typeof p.mergedAt === 'string' && p.mergedAt !== '' ? p.mergedAt : null,
+    ok: true,
+    pr: {
+      number: Number(p.number),
+      url: str(p.url),
+      state: prState(p.state),
+      headRefOid: str(p.headRefOid),
+      baseRefName: str(p.baseRefName),
+      isDraft: p.isDraft === true,
+      mergedAt: typeof p.mergedAt === 'string' && p.mergedAt !== '' ? p.mergedAt : null,
+    },
+  }
+}
+
+/** 머지된 PR의 머지 커밋과 때(`gh pr view --json mergeCommit,mergedAt,state,headRefOid`, relay-v2 녹화본 prView에 있음) */
+export type PrMerge =
+  | {
+      ok: true
+      state: PrState
+      headRefOid: string
+      mergeCommit: string | null
+      mergedAt: string | null
+    }
+  | { ok: false; error: string }
+
+/** PR의 머지 커밋(mergeCommit.oid)과 머지한 때(M4b 끝 줄). 머지되지 않았으면 둘 다 null. 읽지 못하면 `{ ok: false }` */
+export async function prMerge(repoDir: string, number: number): Promise<PrMerge> {
+  if (!isPrNumber(number)) return { ok: false, error: `PR 번호가 아님: ${String(number)}` }
+  const r = await gh(repoDir, [
+    'pr',
+    'view',
+    String(number),
+    '--json',
+    'mergeCommit,mergedAt,state,headRefOid',
+  ])
+  if (!r.ok) return r
+  const j = parseJson(r.stdout)
+  if (!isObject(j))
+    return { ok: false, error: `gh pr view의 출력을 읽지 못함: ${r.stdout.slice(0, 200)}` }
+  const oid = isObject(j.mergeCommit) ? str(j.mergeCommit.oid) : ''
+  return {
+    ok: true,
+    state: prState(j.state),
+    headRefOid: str(j.headRefOid),
+    mergeCommit: /^[0-9a-f]{40,64}$/.test(oid) ? oid : null,
+    mergedAt: str(j.mergedAt) || null,
   }
 }
 

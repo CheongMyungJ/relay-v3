@@ -10,11 +10,13 @@ import type { EvidenceBundle, GateResult, Policy } from '../core/types.ts'
 import type { LedgerEntry } from '../engine/ledger.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
 import { worseOf } from '../engine/debt-record.ts'
+import { lastConclusion } from '../engine/follow.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import { acceptedOf, debtable, recordDebt } from './works-debt.ts'
-import { epochLine, trackFor, type ExportJob } from './works-ledger.ts'
+import { epochLine, ledgerEntry, trackFor, type ExportJob } from './works-ledger.ts'
+import { mergedFields, mergeOf } from './works-record.ts'
 import { autoConditions } from './works-review.ts'
 import {
   delivered,
@@ -56,43 +58,6 @@ export function blockingChecks(checks: PrCheck[]): { failed: string[]; pending: 
   const names = (b: PrCheck['bucket'][]) =>
     checks.filter((c) => b.includes(c.bucket)).map((c) => c.name || c.state)
   return { failed: names(['fail', 'cancel']), pending: names(['pending']) }
-}
-
-/** 장부 줄마다 적는 버전: 모델(deps.model), Claude Code, relay. 판 열쇠는 내보내기 결론 줄의 M4a 칸이다(works-ledger.ts) */
-export function versions(deps: WorksDeps): {
-  model?: string
-  claude_version?: string
-  relay_version: string
-} {
-  return {
-    ...(deps.model ? { model: deps.model } : {}),
-    ...(deps.claudeVersion ? { claude_version: deps.claudeVersion } : {}),
-    relay_version: deps.relayVersion,
-  }
-}
-
-/** 장부 한 줄. 단위 브랜치의 내보내기는 그 단위를 적는다(V22: 실적은 Work를 조건마다 한 건으로 센다) */
-export function ledgerEntry(
-  deps: WorksDeps,
-  rec: WorkRecord,
-  x: ExportRecord,
-  project: ProjectRecord,
-  head: string,
-  result: Pick<GateResult, 'conclusion' | 'condition' | 'shadow'>,
-  extra: Partial<LedgerEntry> = {},
-): LedgerEntry {
-  return {
-    ts: deps.now(),
-    project: project.id,
-    work: rec.id,
-    head,
-    conclusion: result.conclusion,
-    condition: result.condition,
-    shadow: result.shadow,
-    ...(x.unit === null ? {} : { export: x.unit }),
-    ...versions(deps),
-    ...extra,
-  }
 }
 
 /**
@@ -220,7 +185,10 @@ export class ExportDesk {
     const r = await gh.mergePr(project.path, pr.number, bundle.head, project.settings.merge_method)
     if (!r.ok) return fail(r.error ?? 'gh pr merge 실패')
     const accepted = by === 'human' ? acceptedOf(bundle) : {}
-    await this.ledgerFate(rec, x, bundle.head, { by, merged_head: bundle.head, ...accepted })
+    // 앱이 묶음의 head를 --match-head-commit으로 머지했다: 같은 변경이고, 머지 커밋과 때를 읽어 둔다(M4b)
+    const merged = await mergeOf(this.ctx.deps, project.path, pr.number)
+    const fate = { by, merged_head: bundle.head, same_change: true, pr: pr.number, ...merged }
+    await this.ledgerFate(rec, x, bundle.head, { ...fate, ...accepted })
     if (accepted.accepted) this.ctx.refreshQuality(project.id)
     x.pr = { ...pr, state: 'MERGED', mergedAt: this.ctx.deps.now() }
     rec.error = null
@@ -303,12 +271,15 @@ export class ExportDesk {
 
   // ── 장부 ───────────────────────────────────────────────────────────────────
 
-  /** 머지·닫힘을 장부에 남긴다. 실적에 다시 세지 않게 condition은 비우고 shadow는 거짓이다 */
+  /**
+   * 머지·닫힘을 장부에 남긴다. 실적에 다시 세지 않게 condition은 비우고 shadow는 거짓이다. head는 내보낸 head(같은 변경을 그
+   * head에 대해 적는다, M4b)
+   */
   async ledgerFate(
     rec: WorkRecord,
     x: ExportRecord,
     head: string,
-    fate: Pick<LedgerEntry, 'by' | 'merged_head' | 'closed' | 'accepted'>,
+    fate: Partial<LedgerEntry>,
   ): Promise<void> {
     const conclusion = x.gate?.conclusion ?? 'human_merge'
     const entry = ledgerEntry(
@@ -344,15 +315,23 @@ export class ExportDesk {
     return pr ?? x.pr
   }
 
-  /** 앱 밖에서 머지되거나 닫힌 PR을 장부와 기록에 남긴다 */
+  /**
+   * 앱 밖에서 머지되거나 닫힌 PR을 장부와 기록에 남긴다. 끝난 Work는 끝까지 따라가기(works-record.ts)가 맡는다. 머지 끝 줄의
+   * head는 그 내보내기의 마지막 결론 줄의 head이고, 머지 커밋·때와 같은 변경을 함께 적는다(M4b)
+   */
   private async fate(rec: WorkRecord, x: ExportRecord, pr: PrInfo): Promise<void> {
     if (!isActive(rec.state)) return
     if (pr.state === 'MERGED') {
       // 잰 head를 앱 밖에서 머지했으면 그 나빠진 래칫도 받아들였다(M3b: 빚으로 기록하지 못함)
       const b = this.ctx.runtime(rec.id).bundles.get(x.branch)
-      await this.ledgerFate(rec, x, pr.headRefOid, {
+      const { deps } = this.ctx
+      const last = lastConclusion(await deps.store.readLedger(), rec.id, x.unit)
+      const project = this.ctx.projectOf(rec)
+      const fields = await mergedFields(deps, { project, rec, x, pr, last })
+      await this.ledgerFate(rec, x, last?.head ?? pr.headRefOid, {
         by: 'human-override',
         merged_head: pr.headRefOid,
+        ...fields,
         ...(b?.head === pr.headRefOid ? acceptedOf(b) : {}),
       })
       this.ctx.note(rec.id, {
@@ -362,7 +341,7 @@ export class ExportDesk {
         ...unitOf(x),
       })
     } else if (pr.state === 'CLOSED') {
-      await this.ledgerFate(rec, x, pr.headRefOid, { closed: true })
+      await this.ledgerFate(rec, x, pr.headRefOid, { closed: true, pr: pr.number })
       this.ctx.note(rec.id, { type: 'pr_closed', pr: pr.number, ...unitOf(x) })
     }
   }

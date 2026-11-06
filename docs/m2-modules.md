@@ -87,8 +87,12 @@ interface LedgerEntry {
   model_observed?: string          // 그 head 리뷰 출력의 assistant message.model(묶음 review.model)
   effort?: string                  // 세션 훅 본문 effort.level의 마지막 값(main/works-session-log.ts)
   relay_build?: string             // 앱 checkout의 git commit(감사용, 판 열쇠 아님)
-  pr?: number; base_sha?: string   // 내보내기의 PR 번호, 묶음의 base(공통 조상)
+  pr?: number; base_sha?: string   // 내보내기의 PR 번호, 묶음의 base(공통 조상). pr은 M4b 머지·닫힘 끝 줄에도
   approved_by?: 'human' | 'caller' // 계약 승인 주체
+  // M4b(m4-design 4.1, V48): 끝 줄. 모두 선택 칸
+  ended?: 'no_pr' | 'discarded' | 'unmerged'  // PR 없이 [끝내기](아직 모름) / [버림] / no_pr 뒤 90일 동안 기준에 닿지 않음
+  merge_commit?: string; merged_at?: string     // gh pr view mergeCommit.oid, mergedAt
+  same_change?: boolean | null                  // 끝 줄의 head(마지막 결론 줄의 head)와 merged_head가 같은 변경인가. null은 모름
 }
 type EpochSource = Pick<LedgerEntry, 'conds' | 'model_observed' | 'effort' | 'claude_version' | 'gate_version' | 'review_prompt'>
 function epochKey(e: EpochSource, condition: string): string | null
@@ -99,7 +103,7 @@ function trackRecord(entries: LedgerEntry[], project: string, minShadow: number,
 - 판 열쇠(M4a, V47, m4-design 3.2): `epochKey`는 조건 hash(`conds[조건]`), `model_observed`, `effort`, Claude Code major.minor(`claudeMinor`), 관문 판의 epoch(`gateEpoch(gate_version)`), `review_prompt`의 JSON이다. 하나라도 모르면 null이고 어떤 판과도 같지 않다(엄격: 양쪽이 다 몰라도). relay_build, relay_version, Claude Code patch, model_requested는 넣지 않는다. M4a 앞의 줄은 gate_version이 없어 늘 판 모름이다.
 - 조건마다, 같은 project이고 결론 줄의 `epochKey(e, e.condition)`이 지금 판(`current`, main이 그 묶음으로 만듦: `works-ledger.ts epochOf`)의 것과 같은 기록만 센다(philosophy 원칙 4: 판이 바뀌면 다시 잰다). 머지·닫힘 줄의 판은 보지 않는다.
 - 센 것(V22): 조건을 채운 결론이 있는 (Work, 조건) 하나에 한 건이다(내보내기가 여럿이어도, 같은 head를 여러 번 재도). 조건은 아직 `condition`(첫 조건)으로 고른다(`met`으로 세는 것은 M4c `shadowStats`). 머지·닫힘은 내보내기(`work`, `export`)마다 읽는다.
-- 일치: 그 조건을 채운 내보내기가 모두 조건을 채운(그림자 shadow true 또는 auto_merge_candidate) head를 사람이 고치지 않고 그대로 머지함(`merged_head === head`). 불일치: 그 head 뒤에 더 커밋해 머지했거나(중간 head가 조건을 채웠어도) 닫음. 그 조건을 채운 내보내기가 아직 열렸거나 정책이 머지했으면 세지 않는다.
+- 일치: 그 조건을 채운 내보내기가 모두 조건을 채운(그림자 shadow true 또는 auto_merge_candidate) head를 사람이 고치지 않고 그대로 머지함(`merged_head === head`, 또는 M4b: 끝 줄의 head가 그 head이고 `same_change === true`). 불일치: 그 head 뒤에 더 커밋해 머지했거나(중간 head가 조건을 채웠어도), 같은 변경인지 모르거나(`same_change` null·false), 닫음, 버림(`ended: 'discarded'`), PR 없이 끝나 90일 동안 기준에 닿지 않음(`'unmerged'`). 그 조건을 채운 내보내기가 아직 열렸거나, PR 없이 끝나 아직 끝을 모르거나(`'no_pr'`), 정책이 머지했으면 세지 않는다. 내보내기의 끝은 마지막 끝 줄이고 머지는 뒤의 닫힘 줄에 지지 않는다. `parseLedger`는 M4b 칸의 모양이 다른 줄(ended가 셋이 아님, merge_commit·merged_at이 글이 아님, same_change가 참·거짓·null이 아님)도 버린다. `exportKey(e)`(내보내기의 열쇠 `[work, export]`)를 내놓는다.
 - 일치 수 ≥ minShadow이고 일치율 ≥ 95%이면 true.
 - `parseLedger(text: string): LedgerEntry[]` — 줄마다 JSON, 깨진 줄은 건너뜀.
 
@@ -110,7 +114,25 @@ function trackRecord(entries: LedgerEntry[], project: string, minShadow: number,
 ### `src/engine/track.ts` — 그림자 실적의 순수한 셈 (M4a)
 - `conditionsMet(evidence, contract, policy, head, whole?): string[]` — 조건마다 그 조건 하나만 둔 정책으로 core `gate`를 불러 condition이 그 조건인 것을 정책의 차례로. 계약 다시나 사람에게 보낼 사실이 있으면 빈다. 스위치·서버 보호·실적은 바꾸지 않는다.
 - `condHashes(conditions): Record<id, string>` — 조건 정의의 core `stableJson` → `qualityHash`(contractHash와 같은 hash) 앞 12자. 칸 차례와 상관없고 정의가 바뀌면 다르다.
-- 이 파일은 관문 판의 파일이다(바꾸면 GATE_VERSION을 올린다). M4b·M4c의 `sameChange`, `shadowStats`, `classifyCommits`도 여기 온다.
+- 이 파일은 관문 판의 파일이다(바꾸면 GATE_VERSION을 올린다). M4c의 `shadowStats`, `classifyCommits`도 여기 온다. M4b의 `sameChange`는 관문 판을 올리지 않게 `engine/follow.ts`에 두었다(결론을 바꾸지 않는다).
+
+### `src/engine/follow.ts` — 끝까지 따라가기의 순수한 셈 (M4b, V48, m4-design 4절)
+```ts
+const NO_PR_DAYS = 90
+function isFateLine(e: LedgerEntry): boolean        // merged_head, closed, ended 가운데 하나
+function isConclusionLine(e: LedgerEntry): boolean  // 끝 줄도 받아들임 줄(accepted)도 아님
+interface Unsettled { work: string; export: string | null; last: LedgerEntry; since: string; noPrAt: string | null }
+function unsettled(entries: LedgerEntry[], project: string): Unsettled[]   // 결론 줄이 있고 끝이 정해지지 않은 내보내기
+function lastConclusion(entries, work, unit): LedgerEntry | undefined
+function noPrExpired(noPrAt: string, now: string): boolean                 // 90일이 지났나(때를 못 읽으면 거짓)
+interface BetweenCommit { sha: string; author: string; baseUpdate: boolean }
+interface ChangeFacts { head: string; merged: string; ancestor: boolean | null; between: BetweenCommit[] | null;
+  patch: { head: string | null; merged: string | null } }
+function sameChange(f: ChangeFacts): boolean | null
+function fateResult(last): { conclusion; condition: null; shadow: false }  // 끝 줄의 결론 칸
+```
+- `unsettled`: 끝 줄이 `ended: 'no_pr'`뿐인 내보내기는 남기고 그 때(`noPrAt`)를 준다. 머지·닫힘·discarded·unmerged 줄이 있으면 빠진다. `since`는 첫 결론 줄의 때, `last`는 마지막 결론 줄이다(끝 줄의 head).
+- `sameChange`(m4-design 4.3): (1) 같은 SHA. (2) head가 merged의 조상이고 사이 커밋이 모두 relay 빚 커밋(작성자 `relay@localhost`, V40)이거나 깨끗한 기준 맞춤 머지(`baseUpdate`). (3) patch-id가 같음. (4) 사이에 다른 커밋이 있거나(사이를 읽었는데 2가 아님) patch-id가 둘 다 있고 다르면 거짓. (5) 그 밖은 null.
 
 ## 2. adapters
 
@@ -128,8 +150,17 @@ v2 `app/src/adapters/pty.ts`를 옮긴다(`startPty(opts): PtySession`, DA1 답,
 - `findPr(repoDir, branch): Promise<PrInfo | null>` — `gh pr list --head <branch> --state all --json number,url,state,headRefOid,baseRefName,isDraft,mergedAt`.
 - `prStatus(repoDir, number): Promise<PrStatus>` — `gh pr view --json mergeable,mergeStateStatus,statusCheckRollup,headRefOid,state`.
 - `mergePr(repoDir, number, headSha, method: 'merge'|'squash'|'rebase'): Promise<{ ok: boolean; error?: string }>` — `--match-head-commit`.
+- `listPr(repoDir, branch): Promise<{ ok: true; pr: PrInfo | null } | { ok: false; error: string }>` (M4b) — findPr과 같은 명령이지만 PR이 없음과 읽지 못함을 가른다. findPr은 이것을 감싼다.
+- `prMerge(repoDir, number): Promise<{ ok: true; state; headRefOid; mergeCommit: string | null; mergedAt: string | null } | { ok: false; error }>` (M4b) — `gh pr view <n> --json mergeCommit,mergedAt,state,headRefOid`(relay-v2 녹화본 prView의 칸, `test/fixtures/recorded-fields.json`). mergeCommit은 40~64자 16진수일 때만.
 - `serverProtection(repoDir, baseBranch): Promise<ServerProtection | null>` — `gh api repos/{owner}/{repo}/branches/<b>`(protected, required_status_checks, strict)와 `gh api repos/{owner}/{repo}/rules/branches/<b>`(required_status_checks, merge_queue, pull_request 규칙)를 합친다. 못 읽으면 null.
 - 가짜 gh: `test/support/fake-gh/gh.mjs`. 위 명령만, 상태는 `FAKE_GH_STATE` JSON 파일, 받은 인자는 `FAKE_GH_LOG`에 한 줄씩.
+
+### `src/adapters/mirror.ts` — 앱 로컬 거울 (M4b, V48, m4-design 4.4, 설계자 결정 Q5 (가))
+- `mirrorDir(home, repo): string` — `$RELAY_HOME/mirror/<repoKey(repo)>.git`.
+- `originUrl(repo): Promise<string | null>` — 사용자 레포의 `git remote get-url origin`(읽기만). 로컬 상대 경로는 그 레포 기준 절대 경로로. 없으면 null.
+- `ensureMirror(home, repo): Promise<string>` — 없으면 `git clone --bare --filter=blob:none --no-tags <origin>`(임시 자리에 받은 뒤 이름을 바꾼다). origin이 없으면 던진다.
+- `fetchBase(dir, base)`(실패하면 던진다), `fetchPr(dir, n): Promise<boolean>`(`+refs/pull/<n>/head:refs/relay/pr/<n>`), `fetchWork(dir, repo, branch): Promise<boolean>`(사용자 레포의 Work 브랜치를 `refs/relay/work/<branch>`로. 사용자 레포는 읽기만), `hasCommit(dir, sha)`, `prRef(n)`, `workRef(branch)`.
+- 사용자 레포의 ref, 설정, 객체, 훅을 바꾸지 않는다([어댑터] `test/adapters/mirror.test.ts`). 사용자의 git 자격을 그대로 쓰고 묻지 않는다(`GIT_TERMINAL_PROMPT=0`).
 
 ## 3. main (Node에서 시험할 수 있게)
 
@@ -210,7 +241,17 @@ class Works {
 - `epochOf(deps, rec, bundle, conditions): EpochSource` — 지금 판: `condHashes(conditions)`, `GATE_VERSION`, `REVIEW_PROMPT_VERSION`, 묶음의 `review.model`(model_observed), `deps.sessionLog.effort(rec.id)`, `deps.claudeVersion`. 모르는 칸은 없다.
 - `trackFor(ctx, rec, project, conditions, bundle)` — 장부를 읽어 `trackRecord(…, epochOf(…))`. `policyFor`(works-exports.ts)의 `track_record_ok`다. 리뷰 앞의 묶음은 리뷰 모델을 몰라 실적이 어떤 판과도 같지 않다(엄격).
 - `refreshTrack(ctx, rec, project, policy, bundle)` — 리뷰가 끝난 묶음의 판으로 정책의 `track_record_ok`를 다시 읽어 그 정책을 고친다(works-review.ts의 리뷰 끝. 그 재기의 관문과 내보내기가 같은 정책을 쓴다).
+- `versions(deps)`, `ledgerEntry(deps, rec, x, project, head, result, extra)`(M4b에서 works-exports.ts에서 옮김: 끝까지 따라가기도 쓴다. deps는 `LedgerDeps = Pick<WorksDeps, 'now' | 'model' | 'claudeVersion' | 'relayVersion'>`).
 - `epochLine(deps, job, result): Partial<LedgerEntry>` — 내보내기 결론 줄의 M4a 칸. `met`은 관문이 조건을 채웠을 때만 `conditionsMet(묶음, 계약, 정책, 묶음의 head, 통합 증거를 그 head로)`이고 아니면 빈 것. `model_requested`는 `deps.model ?? 'default'`, `pr`은 내보내기의 PR이 있을 때, `base_sha`는 묶음의 base, `approved_by`는 내보내기 계약의 것. `exportLine(deps, job, result)`(works-exports.ts)이 나빠진 래칫(M3b)과 함께 붙인다. 머지·닫힘 줄(`ledgerFate`)과 [그래도 끝내기]의 받아들임 줄에는 붙이지 않는다.
+
+### `src/main/works-record.ts` — 끝까지 따라가기 (M4b, V48, m4-design 4.2)
+- `RecordFollower(deps: RecordDeps)` — `RecordDeps`는 `store`, `gh`(`listPr`, `prMerge`), `now`, `relayVersion`, `claudeVersion?`, `model?`, `log?`. `start(everyMs = FOLLOW_MS)`(지금 모든 프로젝트, 그 뒤 6시간마다. 타이머는 unref), `stop()`, `followAll()`, `follow(projectId): Promise<void>`(프로젝트마다 한 번에 하나: 돌고 있으면 그것을 돌려준다. 실패는 log하고 삼킨다).
+- 한 번: 끝난(done, abandoned) Work 기록을 먼저 읽고 장부를 읽는다(앱은 끝 줄을 쓴 뒤 Work를 끝낸다). `unsettled`의 내보내기마다 `gh.listPr(브랜치)`: 읽지 못하거나, work.json에 PR이 있었는데 보이지 않거나, 기준이 다른 PR이면 건너뛴다. 열림은 그대로, 머지됨은 끝 줄 `{ by: 'human-override', merged_head, ...mergedFields, accepted? }`, 닫힘은 `{ closed: true, pr }`. PR이 없으면 abandoned는 `{ ended: 'discarded' }`, done은 `{ ended: 'no_pr' }`(처음 한 번) 뒤 거울에서 head가 기준에 닿았는지 본다: 기준의 조상이거나 내보낸 때(하루 앞)부터의 기준 first-parent 커밋(100개까지) 가운데 patch-id가 같은 것(로컬 squash)이면 `{ by: 'human-override', merged_head: head, same_change: true, merge_commit? }`, 닿지 않았고 `noPrExpired`면 `{ ended: 'unmerged' }`, 거울이나 head를 읽지 못하면 아무것도 쓰지 않는다. 끝 줄의 head는 마지막 결론 줄의 head, 결론 칸은 `fateResult`, 버전 칸은 `works-ledger.ts versions`.
+- `Mirror(home, repo, base, log)` — 한 번의 따라가기에서 쓰는 거울: `dir()`(처음에 `ensureMirror`와 `fetchBase`, 못 하면 null), `take(dir, pr, branch)`(PR ref와 Work 브랜치를 한 번씩), `baseRef`.
+- `changeFacts(dir, baseRef, { head, merged, mergeCommit, baseSha }): Promise<ChangeFacts>` — 머지 전 기준은 머지 커밋의 첫 부모(모르면 기준 브랜치. merged가 이미 기준에 있으면 사실을 모름으로 둔다). 사이 커밋은 `logRange(head..merged, ^머지 전 기준)`(200개까지, 넘으면 null)이고 `baseUpdate`는 부모 둘 가운데 하나가 기준의 조상이고 `mergeTree(부모들) === tree`. 2로 정해지지 않으면 patch-id: head 쪽은 `base_sha`(없으면 공통 조상)..head, 머지 쪽은 merge-base(merged, 머지 전 기준)..merged.
+- `mergedFields(deps, { project, rec, x, pr, last, mirror? }): Promise<{ pr, merge_commit?, merged_at?, same_change }>` — `gh.prMerge`의 머지 커밋·때(때가 없으면 PR 목록의 mergedAt), 같은 변경은 내보낸 head가 PR head와 같으면 참, 아니면 거울의 `changeFacts`로(거울을 못 쓰면 null). `mergeOf(deps, repo, n)` — 머지 커밋과 때만.
+- 진행 중 Work는 `works-exports.ts`가 그대로 쓴다: 앱의 [머지]·정책 머지 끝 줄은 `{ same_change: true, pr, ...mergeOf }`, 앱 밖 머지(`fate`)는 끝 줄의 head를 마지막 결론 줄의 head로 두고 `mergedFields`를, 닫힘은 `pr`을 더한다. 끝난 Work는 `fate`가 돌아가고 이 파일이 맡는다.
+- 계기: `index.ts`가 `works.init()` 뒤 `start()`, 앱이 끝날 때 `stop()`. 새 Work는 `WorksDeps.follow?(projectId)`(`works-worktree.ts newWork`, 기다리지 않음). [흐름]의 앱(`test/support/works-app.ts`)은 `record`를 두고(타이머 없음) `follow`는 `follow: true`일 때만, 시계는 `recordNow`.
 
 ### `src/main/works-session-log.ts` — 세션 기록 (M4a)
 - `SessionLog.noteHook(workId, event, body)` — 훅 본문의 `effort.level`(`effortOf(body)`: 빈 글이 아닌 글만, relay-v2 녹화본의 PreToolUse·PostToolUse·PostToolUseFailure·Stop)을 Work마다 마지막 값으로 둔다. effort가 없는 본문은 앞 값을 그대로 둔다. `effort(workId)`. 메모리에만 둔다: 앱을 다시 켜면 다음 훅까지 모른다. index.ts와 [흐름]의 앱(`test/support/works-app.ts`)이 하나를 만들어 HookServer의 `noteHook`과 `deps.sessionLog`에 함께 준다. M4e의 세션 커밋 집합도 이 파일에 온다.

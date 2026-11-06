@@ -10,6 +10,7 @@
 //   works/<id>/feedback/<n>.md            쉬는 세션에 준 되먹임(V24, 자료)
 //   ledger.jsonl                          실적 장부(그림자)
 //   worktrees/<id>                        Work의 git worktree
+//   mirror/<레포 키>.git                  끝까지 따라가기의 앱 로컬 거울(M4b, adapters/mirror.ts. 이 파일은 쓰지 않는다)
 // 파일을 통째로 쓸 때는 임시 파일에 쓴 뒤 rename한다(반쯤 쓴 파일이 남지 않게). 줄 기록은 끝에 덧붙인다.
 // 파일은 0600, 만드는 폴더는 0700이다(mcp.json의 control 토큰, 요청과 계약을 같은 기계의 다른 사용자가 읽지 못하게).
 // 시계와 id는 주입한다.

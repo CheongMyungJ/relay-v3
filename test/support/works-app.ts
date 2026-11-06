@@ -14,6 +14,7 @@ import { SessionHost } from '../../src/main/sessions.ts'
 import { Store } from '../../src/main/store.ts'
 import { claudeReview, Works } from '../../src/main/works.ts'
 import { SessionLog } from '../../src/main/works-session-log.ts'
+import { RecordFollower } from '../../src/main/works-record.ts'
 import { FAKE_CLAUDE } from './fakes.ts'
 
 export const BRIDGE = resolve(import.meta.dirname, '../../src/main/mcp-bridge.ts')
@@ -22,6 +23,8 @@ export interface TestApp {
   works: Works
   sessions: SessionHost
   store: Store
+  /** 끝까지 따라가기(M4b). 시험이 follow를 부른다(타이머는 걸지 않는다) */
+  record: RecordFollower
   port: number
   /** Works가 화면에 보낸 이벤트 */
   emitted: { event: string; payload: unknown }[]
@@ -48,6 +51,10 @@ export interface OpenAppOptions {
   m3?: string
   /** 앱 checkout의 git commit(M4a relay_build) */
   relayBuild?: string
+  /** 끝까지 따라가기의 시계(M4b: 90일 창을 가짜 시계로 본다). 기본 지금 */
+  recordNow?: () => string
+  /** 새 Work를 만들 때 끝까지 따라가기를 부른다(index.ts처럼). 기본 끔: 다른 시험의 장부에 끝 줄이 끼지 않게 */
+  follow?: boolean
   log?: (message: string, error?: unknown) => void
 }
 
@@ -71,6 +78,15 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     log,
   })
   const port = await hooks.listen()
+  const relayVersion = o.relayVersion ?? '0.0.0-test'
+  const record = new RecordFollower({
+    store,
+    gh,
+    now: o.recordNow ?? now,
+    relayVersion,
+    ...(o.claudeVersion ? { claudeVersion: o.claudeVersion } : {}),
+    log,
+  })
   const works = new Works({
     store,
     sessions,
@@ -84,7 +100,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     now,
     newId: () => randomUUID(),
     emit: (event, payload) => void emitted.push({ event, payload }),
-    relayVersion: o.relayVersion ?? '0.0.0-test',
+    relayVersion,
     ...(o.claudeVersion ? { claudeVersion: o.claudeVersion } : {}),
     debounceMs: o.debounceMs ?? 200,
     prPollMs: o.prPollMs ?? 60_000,
@@ -93,6 +109,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     ...(o.m3 !== undefined ? { m3: o.m3 } : {}),
     sessionLog,
     ...(o.relayBuild ? { relayBuild: o.relayBuild } : {}),
+    ...(o.follow ? { follow: (projectId: string) => void record.follow(projectId) } : {}),
     log,
   })
   await works.init()
@@ -101,6 +118,7 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     works,
     sessions,
     store,
+    record,
     port,
     emitted,
     async close() {

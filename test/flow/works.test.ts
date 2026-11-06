@@ -259,7 +259,11 @@ describe('한 Work의 생애', () => {
       [true, 'human_merge', 'small', true, null],
       [true, 'human_merge', null, false, 'human'],
     ])
-    expect(ledger.at(-1)).toMatchObject({ project: projectId, work: id, merged_head: head })
+    // 머지 끝 줄(M4b): 앱이 묶음의 head를 머지했으니 같은 변경, gh pr view의 머지한 때
+    expect(ledger.at(-1)).toMatchObject({
+      ...{ project: projectId, work: id, merged_head: head, same_change: true, pr: 1 },
+      merged_at: expect.any(String),
+    })
     // 내보내기 결론 줄의 M4a 칸: 채운 조건 전부, 조건 hash, 판(리뷰가 본 모델, 세션의 effort, Claude Code, 관문·리뷰 프롬프트
     // 판), 요청한 모델, 앱 빌드, PR·base, 승인 주체
     const epoch = flowEpoch()
@@ -365,6 +369,10 @@ test('PR이 앱 밖(GitHub)에서 머지되면 PR 확인이 알아채 done으로
     work: id,
     by: 'human-override',
     merged_head: pr?.headRefOid,
+    // M4b: 내보낸 head 그대로라 같은 변경, gh pr view의 머지한 때
+    same_change: true,
+    merged_at: '2026-11-04T10:00:00Z',
+    pr: pr?.number,
   })
   await until(() => !app.sessions.isRunning(id), '세션 끝')
 })

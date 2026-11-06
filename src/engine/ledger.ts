@@ -1,5 +1,6 @@
 // 실적 장부 (그림자, V3, docs/m2-modules.md 1a절 ledger.ts. M4-0에서 core에서 옮김). $RELAY_HOME/ledger.jsonl에 관문 결론마다 한 줄.
-// 머지·닫힘은 그 Work(V22: 그 내보내기)의 줄(같은 줄을 고쳐 쓰거나 새 줄)에 by, merged_head, closed로 남는다.
+// 머지·닫힘은 그 Work(V22: 그 내보내기)의 줄(같은 줄을 고쳐 쓰거나 새 줄)에 by, merged_head, closed로 남는다. M4b부터 끝난
+// Work의 PR과 PR 없이 끝남·버림도 따라가 끝 줄(ended, merge_commit, merged_at, same_change)을 쓴다(main/works-record.ts).
 // 실적은 조건마다 '자동이었으면 머지했을 head를 사람이 그대로 머지했나'다. 버전이 바뀌면 다시 잰다(philosophy 원칙 4).
 
 import type { Conclusion, RatchetResult } from '../core/types.ts'
@@ -49,6 +50,21 @@ export interface LedgerEntry {
   base_sha?: string
   /** 계약을 승인한 주체(caller 계약은 따로 센다, philosophy 5장 단계 2) */
   approved_by?: 'human' | 'caller'
+  // ── M4b(m4-design 4.1): 끝 줄. 모두 선택 칸이고 M4b 앞의 줄에는 없다
+  /**
+   * PR 없이 끝남: no_pr는 PR 없이 [끝내기](아직 끝을 모름: 거울에서 90일 동안 head가 기준에 닿는지 본다), discarded는 [버림],
+   * unmerged는 no_pr 뒤 90일 동안 기준에 닿지 않음(불일치)
+   */
+  ended?: 'no_pr' | 'discarded' | 'unmerged'
+  /** 머지 커밋(gh pr view mergeCommit.oid) */
+  merge_commit?: string
+  /** 머지한 때(gh pr view mergedAt) */
+  merged_at?: string
+  /**
+   * 이 끝 줄의 head(그 내보내기의 마지막 결론 줄의 head)와 merged_head가 같은 변경인가(engine/follow.ts sameChange: 기준
+   * 맞춤 머지와 relay 빚 커밋만 더함, 또는 같은 patch-id). null은 모름(일치로 세지 않는다)
+   */
+  same_change?: boolean | null
 }
 
 /** 판 열쇠의 재료(m4-design 3.2): 내보내기 결론 줄의 판 칸. 지금 판도 같은 꼴로 만든다(main/works-exports.ts) */
@@ -63,6 +79,7 @@ const MATCH_RATE = 0.95
 const CONCLUSIONS: readonly Conclusion[] = ['human_merge', 'auto_merge_candidate', 'recontract']
 const BY: readonly NonNullable<LedgerEntry['by']>[] = ['human', 'policy', 'human-override']
 const APPROVED_BY: readonly NonNullable<LedgerEntry['approved_by']>[] = ['human', 'caller']
+const ENDED: readonly NonNullable<LedgerEntry['ended']>[] = ['no_pr', 'discarded', 'unmerged']
 
 /** Claude Code 판의 major.minor('2.1.318 (Claude Code)' → '2.1'). patch는 판 열쇠에 넣지 않는다(거의 매주 나온다). 못 읽으면 null */
 export function claudeMinor(version: string | undefined): string | null {
@@ -89,28 +106,60 @@ export function epochKey(e: EpochSource, condition: string): string | null {
   return JSON.stringify([condition, ...parts])
 }
 
-type Fate = { kind: 'merged'; head: string; by: LedgerEntry['by'] } | { kind: 'closed' }
+type Fate =
+  | {
+      kind: 'merged'
+      merged: string
+      by: LedgerEntry['by']
+      /** 끝 줄의 head와 그 head에 대한 same_change(M4b) */
+      head: string
+      same: boolean | null | undefined
+    }
+  | { kind: 'closed' }
+  | { kind: 'no_pr' }
 
-const exportKey = (e: LedgerEntry) => JSON.stringify([e.work, e.export ?? null])
+export const exportKey = (e: Pick<LedgerEntry, 'work' | 'export'>) =>
+  JSON.stringify([e.work, e.export ?? null])
 
-/** 내보내기마다 끝: 머지(마지막 merged_head), 닫힘, 아직 열림(없음) */
+/**
+ * 내보내기마다 끝: 머지(마지막 merged_head), 닫힘(PR 닫힘, 버림, PR 없이 끝나 90일 동안 기준에 닿지 않음), PR 없이 끝남(아직
+ * 끝을 모름), 아직 열림(없음). 머지는 뒤의 닫힘에 지지 않는다
+ */
 function fates(entries: LedgerEntry[]): Map<string, Fate> {
   const out = new Map<string, Fate>()
   for (const e of entries) {
     const key = exportKey(e)
-    if (e.merged_head) out.set(key, { kind: 'merged', head: e.merged_head, by: e.by })
-    else if (e.closed && out.get(key)?.kind !== 'merged') out.set(key, { kind: 'closed' })
+    const before = out.get(key)?.kind
+    if (e.merged_head)
+      out.set(key, {
+        kind: 'merged',
+        merged: e.merged_head,
+        by: e.by,
+        head: e.head,
+        same: e.same_change,
+      })
+    else if (before === 'merged') continue
+    else if (e.closed || e.ended === 'discarded' || e.ended === 'unmerged')
+      out.set(key, { kind: 'closed' })
+    else if (e.ended === 'no_pr' && before === undefined) out.set(key, { kind: 'no_pr' })
   }
   return out
 }
+
+/** 머지가 이 head를 그대로 머지했나: 머지된 head가 이 head이거나, 끝 줄이 이 head와 같은 변경이라고 적음(M4b) */
+const mergedAs = (f: Extract<Fate, { kind: 'merged' }>, head: string) =>
+  f.merged === head || (f.head === head && f.same === true)
 
 /**
  * 조건 id → 그림자 실적이 기준을 넘었나. 같은 project이고 그 결론 줄의 판 열쇠(epochKey)가 지금 판(current)과 같은 기록만
  * 센다(Work의 머지·닫힘은 판과 상관없이 읽는다). 판을 모르는 줄(M4a 앞의 줄, 리뷰 모델이나 effort를 읽지 못한 줄)은 세지 않는다.
  * - 센 것: 조건을 채운 결론(shadow 또는 auto_merge_candidate)이 있는 (Work, 조건) 하나에 한 건(V22: 내보내기가 여럿이어도).
- * - 일치: 그 조건을 채운 내보내기가 모두 조건을 채운 head를 사람이 고치지 않고 그대로 머지함(merged_head === head).
- * - 불일치: 그 head 뒤에 더 커밋해 머지했거나(중간 head가 조건을 채웠어도), 닫음.
- * - 그 조건을 채운 내보내기가 아직 열렸거나 정책이 머지한 것(by 'policy', 사람의 판단이 아님)이 있으면 세지 않는다.
+ * - 일치: 그 조건을 채운 내보내기가 모두 조건을 채운 head를 사람이 고치지 않고 그대로 머지함(merged_head === head, 또는
+ *   끝 줄이 그 head와 같은 변경이라고 적음: GitHub Update branch, relay 빚 커밋, rebase로 맞춤. M4b same_change).
+ * - 불일치: 그 head 뒤에 더 커밋해 머지했거나(중간 head가 조건을 채웠어도), 같은 변경인지 모르거나, 닫음, 버림, PR 없이
+ *   끝나 90일 동안 기준에 닿지 않음.
+ * - 그 조건을 채운 내보내기가 아직 열렸거나 PR 없이 끝나 아직 끝을 모르거나(no_pr) 정책이 머지한 것(by 'policy', 사람의
+ *   판단이 아님)이 있으면 세지 않는다.
  * 일치 수 ≥ minShadow이고 일치율 ≥ 95%이면 true. 기록이 없는 조건은 결과에 없다(관문은 없음을 거짓으로 본다).
  */
 export function trackRecord(
@@ -129,8 +178,8 @@ export function trackRecord(
     const unit = JSON.stringify([e.work, e.condition])
     const s = samples.get(unit) ?? { condition: e.condition, match: true, open: false }
     const f = fate.get(exportKey(e))
-    if (!f || (f.kind === 'merged' && f.by === 'policy')) s.open = true
-    else if (f.kind !== 'merged' || f.head !== e.head) s.match = false
+    if (!f || f.kind === 'no_pr' || (f.kind === 'merged' && f.by === 'policy')) s.open = true
+    else if (f.kind !== 'merged' || !mergedAs(f, e.head)) s.match = false
     samples.set(unit, s)
   }
   const counted = new Map<string, { match: number; miss: number }>()
@@ -193,7 +242,19 @@ function isEpochLine(e: Record<string, unknown>): boolean {
     optString(e['relay_build']) &&
     optNumber(e['pr']) &&
     optString(e['base_sha']) &&
-    optOf(e['approved_by'], APPROVED_BY)
+    optOf(e['approved_by'], APPROVED_BY) &&
+    isFateLine(e)
+  )
+}
+
+/** M4b의 칸(m4-design 4.1). 없으면 옛 줄이다 */
+function isFateLine(e: Record<string, unknown>): boolean {
+  const same = e['same_change']
+  return (
+    optOf(e['ended'], ENDED) &&
+    optString(e['merge_commit']) &&
+    optString(e['merged_at']) &&
+    (same === undefined || same === null || typeof same === 'boolean')
   )
 }
 

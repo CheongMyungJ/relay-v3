@@ -74,6 +74,8 @@ export interface WorksDeps {
   sessionLog?: SessionLog
   /** 앱 checkout의 git commit(M4a 장부의 relay_build, 감사용). 모르면 없다 */
   relayBuild?: string
+  /** 끝까지 따라가기(M4b, works-record.ts RecordFollower.follow)를 이 프로젝트에 부른다. 새 Work를 만들 때. 기다리지 않는다 */
+  follow?: (projectId: string) => void
   /** 처리 실패를 알린다. 기본 console.error */
   log?: (message: string, error?: unknown) => void
   /**

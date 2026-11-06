@@ -31,6 +31,7 @@ Electron main
   ├─ evidence     계기를 받아 엔진 check를 자식 프로세스(node src/cli/main.ts check --json)로 돌림. 한 Work에 하나씩
   ├─ review       claude -p, 읽기 도구만, --json-schema(지적 목록)
   ├─ gate·ledger  core.gate, 실적 장부 $RELAY_HOME/ledger.jsonl
+  ├─ record       끝까지 따라가기(M4b): 끝난 Work의 PR·PR 없이 끝남. 앱 시작, 새 Work, 6시간마다. 거울 $RELAY_HOME/mirror
   └─ gh           PR 찾기·읽기·머지 (gh CLI)
 Renderer (React)
   사이드바(프로젝트 → Work) │ 터미널(xterm) │ 패널: [계약] [증거] [변경] [빚]
