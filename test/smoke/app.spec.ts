@@ -331,7 +331,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('review-meta')).toHaveText('리뷰 끝(이 head): 지적 2개', {
     timeout: 60_000,
   })
-  await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible()
+  await expect(evidence.getByTestId('shadow-line')).toHaveCount(0) // Q6: 끝까지 가림
   await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
   // PR이 없으면 다음 할 일을 말한다
   await expect(evidence.getByTestId('next-step')).toContainText('PR이 열리면')
@@ -345,7 +345,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await page.keyboard.type('go')
   await page.keyboard.press('Enter')
   await expect(evidence.getByRole('link', { name: '#1' })).toBeVisible({ timeout: 60_000 })
-  await expect(evidence.getByText(/^그림자: 자동이었으면 머지했을 것/)).toBeVisible()
+  await expect(evidence.getByTestId('shadow-line')).toHaveCount(0) // Q6: 끝까지 가림
   await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
   await expect(evidence.getByTestId('next-step')).toBeHidden()
   // 리뷰 지적은 올림과 메모로 나뉜다(V26): 둘 다 메모라 올림 묶음이 없고, 구조/low에는 갈래를 붙인다
@@ -392,7 +392,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(page.locator('.work-head')).toContainText('끝남', { timeout: 30_000 })
   // 끝난 Work는 결과를 먼저, 관문 결론은 그때의 것으로
   await expect(evidence.getByTestId('outcome')).toHaveText(/^머지됨 · PR #1 · [0-9a-f]{7}$/)
-  await expect(evidence.getByTestId('verdict')).toContainText('그때의 관문 결론')
+  await expect(evidence.getByTestId('verdict')).toContainText(/그때의 관문 결론.*그림자 표본: 일치/)
   await expect(page.getByTestId('terminal')).toContainText('[세션을 닫음]')
   await shot('merged')
   // 품질 기준이 있는 레포에는 알림이 없다

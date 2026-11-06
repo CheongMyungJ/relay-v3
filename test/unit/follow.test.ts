@@ -10,12 +10,8 @@ import {
   type ChangeFacts,
 } from '../../src/engine/follow.ts'
 import { GATE_VERSION } from '../../src/engine/gate-version.ts'
-import {
-  parseLedger,
-  trackRecord,
-  type EpochSource,
-  type LedgerEntry,
-} from '../../src/engine/ledger.ts'
+import { parseLedger, type EpochSource, type LedgerEntry } from '../../src/engine/ledger.ts'
+import { trackRecord } from '../../src/engine/shadow.ts'
 
 const facts = (over: Partial<ChangeFacts> = {}): ChangeFacts => ({
   head: 'h',

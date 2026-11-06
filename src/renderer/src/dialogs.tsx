@@ -1,6 +1,7 @@
 // 새 Work 대화상자와 프로젝트 설정 (docs/m2-modules.md 4절).
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import type { NewWorkInput, ProjectSettings, ProjectView, WorkView } from '../../shared/api.ts'
+import { RecordTable } from './RecordTable.tsx'
 import { ErrorLine, useAction } from './ui.tsx'
 
 function Modal(p: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
@@ -183,7 +184,7 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
     })
   }
   return (
-    <Modal title={`${p.project.name} 설정`} onClose={p.onClose}>
+    <Modal title={`${p.project.name} 설정`} onClose={p.onClose} wide>
       <form className="form" onSubmit={save}>
         <label className="switch-row">
           <span>
@@ -313,6 +314,7 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
             onChange={(e) => set('m3', { ...s.m3, promote: e.target.checked })}
           />
         </label>
+        <RecordTable project={p.project} />
         <ErrorLine text={act.error} />
         <div className="row end">
           <button type="button" className="ghost" onClick={p.onClose}>

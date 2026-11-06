@@ -132,6 +132,7 @@ git.ts는 읽기만 한다. 앱이 레포에 쓰는 것은 빚 기록 하나다.
 - `relayHome(env)` — `RELAY_HOME` 또는 `~/.relay-v3`.
 - `repoKey(repoRoot: string): string` — 경로 해시 + 폴더 이름.
 - `evidencePath(home, key, sha)`, `writeJson(path, value)`, `readJson<T>(path): Promise<T | null>`.
+- `ledgerPath(home)`(`$RELAY_HOME/ledger.jsonl`), `readLedgerText(home): Promise<string>`(없으면 빈 글. M4c: 앱의 `main/store.ts`와 CLI `relay record`가 함께 읽는다. 줄을 읽는 것은 engine `parseRecord`).
 - `baseCache` — `(key, sha, commandId, runHash) → CommandRun` 읽기·쓰기.
 
 ### `src/adapters/worktrees.ts`
@@ -163,13 +164,16 @@ v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 �
 - knowledge.ts(git): `readEntries(root, sha)`, `relatedKnowledge(root, ref, request)`(새 Work), `checkKnowledgeGround(id, fileAt)`, `knowledgeChanged(diff): string[]`, `checkKnowledge(root, diff): Promise<{ changed: string[]; issues: KnowledgeIssue[] }>` — changed(`knowledgeChanged`)는 이 diff가 바꾼(더함·고침·옮김·지움) 지식 폴더의 .md(README 빼고). issues: 바꾼 파일이 지식 경로가 아니면 format, 바꾼 항목마다 `checkEntryFormat`(format)과 anchor의 마지막 조각이 head의 코드(지식 폴더 밖)에 없으면 anchor. 바꾸지 않은 항목은 `## 아직 규칙을 따르지 않는 곳`의 경로를 이 diff가 바꿨으면 not_yet(v2 D296), anchor를 이 diff가 지운 줄에 있고 head에 없으면 anchor.
 
 ### `src/engine/ledger.ts` — 실적 장부(그림자)
-M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. 순수 함수지만 src/core 상한 때문에 engine에 둔다(knowledge-format.ts와 같다). 약속은 [m2-modules.md](m2-modules.md) 1a절.
+M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. `trackRecord`는 M4c에서 `engine/shadow.ts`로 옮겼다. 순수 함수지만 src/core 상한 때문에 engine에 둔다(knowledge-format.ts와 같다). 약속은 [m2-modules.md](m2-modules.md) 1a절.
 
 ### `src/engine/gate-version.ts`, `src/engine/track.ts` — 관문 판과 그림자 실적의 셈 (M4a)
 순수 함수다. `GATE_VERSION`·`GATE_EPOCHS`·`gateEpoch`, `conditionsMet`(조건마다 core `gate`를 따로 부름)·`condHashes`(core `stableJson`, `qualityHash`). 약속은 [m2-modules.md](m2-modules.md) 1a절. core `contract.ts`의 `stableJson`을 내놓았다(모양은 그대로).
 
 ### `src/engine/follow.ts` — 끝까지 따라가기의 순수한 셈 (M4b, V48)
 순수 함수다. `unsettled`, `lastConclusion`, `noPrExpired`, `sameChange`, `fateResult`. 관문 판의 파일이 아니다. 약속은 [m2-modules.md](m2-modules.md) 1a절. 거울은 `src/adapters/mirror.ts`(m2-modules 2절).
+
+### `src/engine/shadow.ts`, `src/engine/after-merge.ts` — 조건별 실적의 숫자와 머지 뒤 30일 (M4c·M4d, V49·V50)
+순수 함수다(시계는 인자). `shadowStats`·`recordStats`·`shadowEnds`·`wilsonLow`·`trackRecord`(M4c에서 ledger.ts에서 옮김), `revertsOf`·`mainOf`·`windowEnd`·`parseRecord`·`afterStats`. 관문 판의 파일이 아니다(track.ts에 두면 GATE_VERSION을 올려야 한다). 화면과 CLI가 보이는 숫자의 모양(`RecordStats`, `ConditionStats`, `AfterStats`)은 `src/shared/api.ts`에 두고 이 파일들이 `import type`한다(렌더러가 engine을 가져가지 않게). 약속은 [m2-modules.md](m2-modules.md) 1a절.
 
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
 - `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).
@@ -209,4 +213,5 @@ M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. 순수 함�
 - `relay check [--base <ref>] [--head <ref>] [--contract <file>] [--request <file>] [--json]` — 요약 줄을 찍고 묶음 경로를 알린다. `--json`이면 묶음 JSON. M3 장치(V38~V42)는 환경 변수 `RELAY_M3`(V39)만 보고 정한다(없으면 프로젝트 설정의 기본: 지식 잇기는 끔(V44), 나머지는 켬. `off`면 모두 끔. 모르는 장치 이름은 stderr에 알린다).
 - `relay gate [--evidence <file>] [--contract <file>] [--head <ref>] [--auto-merge] [--json]` — 결론과 decisive, reasons. 묶음의 레포에서 `--head`(기본 HEAD)를 읽어 gate에 넘긴다(못 읽으면 null). 서버 보호는 M1에서 null(그래서 자동 조건을 채워도 그림자다. 다만 M1 묶음은 리뷰가 없어 그 전에 '리뷰 없음'으로 사람 머지다).
 - `relay debt list|scan` — 목록, 사라진 anchor.
+- `relay record [--json] [--project <경로>] [--all-epochs] [--pool]` (M4c, V49, `src/cli/record.ts`) — `$RELAY_HOME/ledger.jsonl`(adapters `readLedgerText`, engine `parseRecord`)에서 조건별 실적 표(engine `recordStats`: 앱 [실적]과 같은 셈)를 찍는다. 기본은 지금 폴더 레포(`repoKey(repoRoot)`)의 지금 판(그 프로젝트의 마지막 M4a 결론 줄의 판), `--all-epochs`는 모든 판, `--pool`은 프로젝트를 넘어 합친 값(Q11: 보이기만), `--json`은 `{ project, ...RecordStats }`. 레포 밖이면 사용 오류. 장부는 읽기만 한다.
 - 종료 코드: 0 성공(결론과 상관없이), 1 사용 오류, 2 내부 오류. SIGINT·SIGTERM·SIGHUP(Windows는 SIGBREAK도)을 받으면 돌던 레포 명령의 프로세스 묶음을 끝내고 128+신호 번호로 끝난다(명령은 자기 묶음에서 돌아 터미널의 신호를 받지 않는다).

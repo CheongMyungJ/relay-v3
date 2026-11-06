@@ -44,6 +44,9 @@ const api: RelayApi = {
   debt: (id) => call(IPC.debt, id),
   baseDebt: (id) => call(IPC.baseDebt, id),
   draftQuality: (projectId) => call(IPC.draftQuality, projectId),
+  record: (projectId, allEpochs) => call(IPC.record, projectId, allEpochs),
+  shadowEnds: (id) => call(IPC.shadowEnds, id),
+  dispute: (projectId, mergeCommit, event) => call(IPC.dispute, projectId, mergeCommit, event),
   on<E extends RelayEvent>(event: E, cb: (payload: RelayEventPayload[E]) => void): () => void {
     if (!events.has(event)) throw new Error(`모르는 이벤트: ${String(event)}`)
     const listener = (_e: unknown, payload: RelayEventPayload[E]) => cb(payload)

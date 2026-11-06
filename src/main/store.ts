@@ -8,7 +8,7 @@
 //   works/<id>/events.jsonl               훅과 사람의 동작 기록(한 줄에 하나)
 //   works/<id>/settings.json, instructions.md, mcp.json   세션에 주는 파일
 //   works/<id>/feedback/<n>.md            쉬는 세션에 준 되먹임(V24, 자료)
-//   ledger.jsonl                          실적 장부(그림자)
+//   ledger.jsonl                          실적 장부(그림자. M4d의 머지 뒤 30일 after 줄과 이의 dispute 줄도)
 //   worktrees/<id>                        Work의 git worktree
 //   mirror/<레포 키>.git                  끝까지 따라가기의 앱 로컬 거울(M4b, adapters/mirror.ts. 이 파일은 쓰지 않는다)
 // 파일을 통째로 쓸 때는 임시 파일에 쓴 뒤 rename한다(반쯤 쓴 파일이 남지 않게). 줄 기록은 끝에 덧붙인다.
@@ -18,7 +18,13 @@
 import { randomBytes } from 'node:crypto'
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { readJson, relayHome } from '../adapters/store.ts'
+import { ledgerPath, readJson, readLedgerText, relayHome } from '../adapters/store.ts'
+import {
+  parseRecord,
+  type AfterLine,
+  type DisputeLine,
+  type RecordFile,
+} from '../engine/after-merge.ts'
 import { parseLedger, type LedgerEntry } from '../engine/ledger.ts'
 import type { Contract, GateResult, GroundingCheck, M3Switches } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
@@ -219,7 +225,7 @@ export class Store {
   }
 
   get ledgerFile(): string {
-    return join(this.home, 'ledger.jsonl')
+    return ledgerPath(this.home)
   }
 
   workDir(id: string): string {
@@ -355,7 +361,7 @@ export class Store {
 
   // ── 장부 ───────────────────────────────────────────────────────────────────
 
-  appendLedger(entry: LedgerEntry): Promise<void> {
+  appendLedger(entry: LedgerEntry | AfterLine | DisputeLine): Promise<void> {
     const path = this.ledgerFile
     const line = `${JSON.stringify(entry)}\n`
     return this.serial(path, async () => {
@@ -368,5 +374,11 @@ export class Store {
     await this.written(this.ledgerFile)
     const text = await readFile(this.ledgerFile, 'utf8').catch(() => '')
     return parseLedger(text)
+  }
+
+  /** 장부 전체(M4c·M4d): 결론·끝 줄, 머지 뒤 30일의 after 줄, 이의(dispute) 줄, 읽지 못한 줄 수 */
+  async readRecord(): Promise<RecordFile> {
+    await this.written(this.ledgerFile)
+    return parseRecord(await readLedgerText(this.home).catch(() => ''))
   }
 }

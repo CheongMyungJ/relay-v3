@@ -7,10 +7,10 @@ import {
   claudeMinor,
   epochKey,
   parseLedger,
-  trackRecord,
   type EpochSource,
   type LedgerEntry,
 } from '../../src/engine/ledger.ts'
+import { trackRecord } from '../../src/engine/shadow.ts'
 
 /** 지금 판(판 열쇠의 재료). 결론 줄도 이 판으로 적는다 */
 const EPOCH: Required<EpochSource> = {

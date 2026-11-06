@@ -174,3 +174,42 @@ textarea.field {
 .switch:checked::after {
   transform: translateX(16px);
 }
+
+/* ── 설정의 [실적] (M4c, RecordTable.tsx) ───────────────────────────────── */
+
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-rows {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+}
+
+.record-title {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-event {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}

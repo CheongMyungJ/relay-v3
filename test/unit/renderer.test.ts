@@ -285,7 +285,7 @@ test('groundStatus: guess는 추정, 확인 못 한 근거도 추정, 근거 확
   expect(groundStatus({ type: 'guess' }, undefined).label).toBe('추정')
 })
 
-test('conclusionOf: 그림자면 자동이었으면 머지했을 것과 조건', () => {
+test('conclusionOf: 결론의 이름과 색만(그림자 줄은 끝이 정해진 뒤 record.ts shadowLine, Q6)', () => {
   const gate: GateResult = {
     conclusion: 'human_merge',
     decisive: '프로젝트에서 자동 머지가 꺼져 있음',
@@ -293,12 +293,7 @@ test('conclusionOf: 그림자면 자동이었으면 머지했을 것과 조건',
     condition: 'small',
     shadow: true,
   }
-  expect(conclusionOf(gate)).toEqual({
-    label: '사람 머지',
-    tone: 'info',
-    shadow: '그림자: 자동이었으면 머지했을 것 (조건 small)',
-  })
-  expect(conclusionOf({ ...gate, shadow: false }).shadow).toBeNull()
+  expect(conclusionOf(gate)).toEqual({ label: '사람 머지', tone: 'info' })
 })
 
 test('낡은 증거와 [머지]를 누를 수 있는 때', () => {

@@ -113,13 +113,9 @@ const CONCLUSION: Record<Conclusion, { label: string; tone: Tone }> = {
   recontract: { label: '계약 다시', tone: 'warn' },
 }
 
-/** 증거 패널 맨 위의 결론 한 줄. 그림자면 둘째 줄로 그 뜻을 붙인다 */
-export function conclusionOf(g: GateResult): { label: string; tone: Tone; shadow: string | null } {
-  const c = CONCLUSION[g.conclusion]
-  const shadow = g.shadow
-    ? `그림자: 자동이었으면 머지했을 것${g.condition ? ` (조건 ${g.condition})` : ''}`
-    : null
-  return { ...c, shadow }
+/** 증거 패널 맨 위의 결론 한 줄. 그림자 줄은 표본의 끝이 정해진 뒤에만 보인다(Q6, record.ts shadowLine) */
+export function conclusionOf(g: GateResult): { label: string; tone: Tone } {
+  return CONCLUSION[g.conclusion]
 }
 
 /** 사이드바의 상태 점: 사람의 답을 기다리면 눈에 띄게 */

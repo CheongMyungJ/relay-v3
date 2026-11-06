@@ -2,6 +2,7 @@
 // 머지·닫힘은 그 Work(V22: 그 내보내기)의 줄(같은 줄을 고쳐 쓰거나 새 줄)에 by, merged_head, closed로 남는다. M4b부터 끝난
 // Work의 PR과 PR 없이 끝남·버림도 따라가 끝 줄(ended, merge_commit, merged_at, same_change)을 쓴다(main/works-record.ts).
 // 실적은 조건마다 '자동이었으면 머지했을 head를 사람이 그대로 머지했나'다. 버전이 바뀌면 다시 잰다(philosophy 원칙 4).
+// 셈(trackRecord, shadowStats)은 engine/shadow.ts(M4c), 머지 뒤 30일의 after·dispute 줄은 engine/after-merge.ts(M4d)다.
 
 import type { Conclusion, RatchetResult } from '../core/types.ts'
 import { gateEpoch } from './gate-version.ts'
@@ -73,8 +74,8 @@ export type EpochSource = Pick<
   'conds' | 'model_observed' | 'effort' | 'claude_version' | 'gate_version' | 'review_prompt'
 >
 
-/** 일치율 기준 */
-const MATCH_RATE = 0.95
+/** 일치율 기준(그림자 실적, engine/shadow.ts trackRecord) */
+export const MATCH_RATE = 0.95
 
 const CONCLUSIONS: readonly Conclusion[] = ['human_merge', 'auto_merge_candidate', 'recontract']
 const BY: readonly NonNullable<LedgerEntry['by']>[] = ['human', 'policy', 'human-override']
@@ -106,101 +107,15 @@ export function epochKey(e: EpochSource, condition: string): string | null {
   return JSON.stringify([condition, ...parts])
 }
 
-type Fate =
-  | {
-      kind: 'merged'
-      merged: string
-      by: LedgerEntry['by']
-      /** 끝 줄의 head와 그 head에 대한 same_change(M4b) */
-      head: string
-      same: boolean | null | undefined
-    }
-  | { kind: 'closed' }
-  | { kind: 'no_pr' }
-
 export const exportKey = (e: Pick<LedgerEntry, 'work' | 'export'>) =>
   JSON.stringify([e.work, e.export ?? null])
-
-/**
- * 내보내기마다 끝: 머지(마지막 merged_head), 닫힘(PR 닫힘, 버림, PR 없이 끝나 90일 동안 기준에 닿지 않음), PR 없이 끝남(아직
- * 끝을 모름), 아직 열림(없음). 머지는 뒤의 닫힘에 지지 않는다
- */
-function fates(entries: LedgerEntry[]): Map<string, Fate> {
-  const out = new Map<string, Fate>()
-  for (const e of entries) {
-    const key = exportKey(e)
-    const before = out.get(key)?.kind
-    if (e.merged_head)
-      out.set(key, {
-        kind: 'merged',
-        merged: e.merged_head,
-        by: e.by,
-        head: e.head,
-        same: e.same_change,
-      })
-    else if (before === 'merged') continue
-    else if (e.closed || e.ended === 'discarded' || e.ended === 'unmerged')
-      out.set(key, { kind: 'closed' })
-    else if (e.ended === 'no_pr' && before === undefined) out.set(key, { kind: 'no_pr' })
-  }
-  return out
-}
-
-/** 머지가 이 head를 그대로 머지했나: 머지된 head가 이 head이거나, 끝 줄이 이 head와 같은 변경이라고 적음(M4b) */
-const mergedAs = (f: Extract<Fate, { kind: 'merged' }>, head: string) =>
-  f.merged === head || (f.head === head && f.same === true)
-
-/**
- * 조건 id → 그림자 실적이 기준을 넘었나. 같은 project이고 그 결론 줄의 판 열쇠(epochKey)가 지금 판(current)과 같은 기록만
- * 센다(Work의 머지·닫힘은 판과 상관없이 읽는다). 판을 모르는 줄(M4a 앞의 줄, 리뷰 모델이나 effort를 읽지 못한 줄)은 세지 않는다.
- * - 센 것: 조건을 채운 결론(shadow 또는 auto_merge_candidate)이 있는 (Work, 조건) 하나에 한 건(V22: 내보내기가 여럿이어도).
- * - 일치: 그 조건을 채운 내보내기가 모두 조건을 채운 head를 사람이 고치지 않고 그대로 머지함(merged_head === head, 또는
- *   끝 줄이 그 head와 같은 변경이라고 적음: GitHub Update branch, relay 빚 커밋, rebase로 맞춤. M4b same_change).
- * - 불일치: 그 head 뒤에 더 커밋해 머지했거나(중간 head가 조건을 채웠어도), 같은 변경인지 모르거나, 닫음, 버림, PR 없이
- *   끝나 90일 동안 기준에 닿지 않음.
- * - 그 조건을 채운 내보내기가 아직 열렸거나 PR 없이 끝나 아직 끝을 모르거나(no_pr) 정책이 머지한 것(by 'policy', 사람의
- *   판단이 아님)이 있으면 세지 않는다.
- * 일치 수 ≥ minShadow이고 일치율 ≥ 95%이면 true. 기록이 없는 조건은 결과에 없다(관문은 없음을 거짓으로 본다).
- */
-export function trackRecord(
-  entries: LedgerEntry[],
-  project: string,
-  minShadow: number,
-  current: EpochSource,
-): Record<string, boolean> {
-  const mine = entries.filter((e) => e.project === project)
-  const fate = fates(mine)
-  const samples = new Map<string, { condition: string; match: boolean; open: boolean }>()
-  for (const e of mine) {
-    if (e.condition === null || !(e.shadow || e.conclusion === 'auto_merge_candidate')) continue
-    const key = epochKey(e, e.condition)
-    if (key === null || key !== epochKey(current, e.condition)) continue
-    const unit = JSON.stringify([e.work, e.condition])
-    const s = samples.get(unit) ?? { condition: e.condition, match: true, open: false }
-    const f = fate.get(exportKey(e))
-    if (!f || f.kind === 'no_pr' || (f.kind === 'merged' && f.by === 'policy')) s.open = true
-    else if (f.kind !== 'merged' || !mergedAs(f, e.head)) s.match = false
-    samples.set(unit, s)
-  }
-  const counted = new Map<string, { match: number; miss: number }>()
-  for (const s of samples.values()) {
-    if (s.open) continue
-    const c = counted.get(s.condition) ?? { match: 0, miss: 0 }
-    if (s.match) c.match++
-    else c.miss++
-    counted.set(s.condition, c)
-  }
-  const out: Record<string, boolean> = {}
-  for (const [id, c] of counted)
-    out[id] = c.match >= minShadow && c.match / (c.match + c.miss) >= MATCH_RATE
-  return out
-}
 
 const optString = (v: unknown) => v === undefined || typeof v === 'string'
 const optNumber = (v: unknown) => v === undefined || (typeof v === 'number' && Number.isFinite(v))
 const optOf = (v: unknown, values: readonly unknown[]) => v === undefined || values.includes(v)
 
-function isEntry(v: unknown): v is LedgerEntry {
+/** 장부의 결론·끝 줄인가(M4d의 after·dispute 줄은 아니다: engine/after-merge.ts parseRecord) */
+export function isLedgerEntry(v: unknown): v is LedgerEntry {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
   const e = v as Record<string, unknown>
   return (
@@ -280,7 +195,7 @@ export function parseLedger(text: string): LedgerEntry[] {
     if (!line.trim()) continue
     try {
       const v: unknown = JSON.parse(line)
-      if (isEntry(v)) out.push(v)
+      if (isLedgerEntry(v)) out.push(v)
     } catch {
       // 깨진 줄(쓰다 끊긴 끝줄 등)은 건너뛴다
     }

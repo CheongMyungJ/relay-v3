@@ -3,7 +3,7 @@
   "source": {
     "stream": "relay-v2 app/test/contract/fixtures/claude.json stream.shapes (2.1.312 (Claude Code), 2026-10-28)",
     "hooks": "relay-v2 app/test/contract/fixtures/claude.json events.<이벤트>.shape (2.1.308 (Claude Code), 2026-10-22)",
-    "gh": "relay-v2 app/test/contract/fixtures/gh.json shapes.prView (gh version 2.101.0, 2026-10-05)"
+    "gh": "relay-v2 app/test/contract/fixtures/gh.json shapes.prView, shapes.run (gh version 2.101.0, 2026-10-05)"
   },
   "stream": {
     "assistant": [
@@ -153,12 +153,53 @@
       "state",
       "statusCheckRollup",
       "url"
+    ],
+    "run": [
+      "actor",
+      "artifacts_url",
+      "cancel_url",
+      "check_suite_id",
+      "check_suite_node_id",
+      "check_suite_url",
+      "conclusion",
+      "created_at",
+      "display_title",
+      "event",
+      "head_branch",
+      "head_commit",
+      "head_repository",
+      "head_sha",
+      "html_url",
+      "id",
+      "jobs_url",
+      "logs_url",
+      "name",
+      "node_id",
+      "path",
+      "previous_attempt_url",
+      "pull_requests",
+      "referenced_workflows",
+      "repository",
+      "rerun_url",
+      "run_attempt",
+      "run_number",
+      "run_started_at",
+      "status",
+      "triggering_actor",
+      "updated_at",
+      "url",
+      "workflow_id",
+      "workflow_url"
     ]
   },
   "read": {
     "stream.assistant.message.model": "adapters/claude.ts streamOutput (M4a model_observed)",
     "hooks.<PreToolUse|PostToolUse|PostToolUseFailure|Stop>.effort.level": "main/works-session-log.ts (M4a effort, 녹화본 sample: 'medium')",
     "gh.prView.mergeCommit.oid": "adapters/gh.ts prMerge (M4b merge_commit)",
-    "gh.prView.mergedAt": "adapters/gh.ts prMerge (M4b merged_at)"
+    "gh.prView.mergedAt": "adapters/gh.ts prMerge (M4b merged_at)",
+    "gh.run.<name|path|head_sha|event|status|conclusion|run_attempt>": "adapters/gh.ts runsAt (M4d main 실패)"
+  },
+  "not_recorded": {
+    "gh.actions/runs?head_sha=…": "목록의 봉투 workflow_runs는 녹화본에 없다(녹화본의 run은 actions/runs/<실행> 하나의 응답). GitHub REST 문서의 꼴을 쓰고 가짜 gh도 그 꼴로 낸다. 다시 녹화(Q9)할 때 함께 녹화한다"
   }
 }

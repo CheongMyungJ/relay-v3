@@ -322,6 +322,120 @@ export interface TerminalBacklog {
   live: boolean
 }
 
+// ── 실적 (M4c·M4d, docs/m4-design.md 5절·6절). engine/shadow.ts가 셈하고 설정 대화상자의 [실적]과 `relay record`가 보인다 ──
+
+/** 머지 뒤 30일의 main 상태(engine/after-merge.ts mainOf). pending은 미정(실패했는데 다시 시도가 없음, 또는 아직 돎) */
+export type MainState =
+  'clean' | 'attributed' | 'pending' | 'inherited' | 'unknown' | 'unmeasurable'
+
+/** 귀속된 사건 하나(되돌림, 귀속 main 실패). 사람이 [귀속이 틀림]으로 이의를 달 수 있다 */
+export interface AfterEvent {
+  merge_commit: string
+  work: string
+  event: 'revert' | 'main'
+  /** 되돌린 커밋이나 실패한 실행의 커밋 */
+  sha: string
+  disputed: boolean
+}
+
+/** 머지 무리 하나의 머지 뒤 30일 */
+export interface AfterStats {
+  /** 머지 수(창이 닫힘 + 지켜보는 중) */
+  merges: number
+  closed: number
+  watching: number
+  /** 이의로 빼지 않은 되돌림 */
+  reverts: number
+  main: { attributed: number; pending: number; inherited: number; unknown: number }
+  unmeasurable: number
+  /** 이의로 셈에서 뺀 사건 수 */
+  disputed: number
+  /** 창이 닫힌 머지에서 되돌림과 귀속 main 실패가 0이면 3의 규칙의 위 한계(3/n). 아니면 null */
+  upper: number | null
+  events: AfterEvent[]
+}
+
+/** 비교군(그 조건을 못 채운 내보내기, 또는 어느 조건도 못 채운 '사람 경로') */
+export interface ControlStats {
+  /** 끝이 정해진 Work(사람의 머지, 닫힘, 버림) */
+  n: number
+  /** 그 가운데 내보낸 head를 같은 변경으로 그대로 머지함 */
+  as_is: number
+  after: AfterStats
+}
+
+/** 조건 하나(판 하나 또는 모든 판)의 그림자 실적 */
+export interface ConditionStats {
+  id: string
+  /** 조건 정의의 hash(가장 뒤 결론 줄의 것) */
+  cond_hash: string | null
+  /** 끝이 정해진 표본 = match + miss 합 */
+  n: number
+  match: number
+  miss: {
+    more_session: number
+    more_human: number
+    more_unknown: number
+    closed: number
+    discarded: number
+    unknown_change: number
+  }
+  /** 분모 밖: 열림, 낡음(14일), 추적 잃음(90일), 정책 머지, preapproved(Q9 전에는 늘 0), 판이 다름 */
+  outside: {
+    open: number
+    stale: number
+    lost: number
+    policy: number
+    preapproved: number
+    other_epoch: number
+  }
+  rate: number | null
+  wilson_low: number | null
+  /** 다른 조건과 같은 Work로 함께 센 표본 수 */
+  correlated: number
+  after: AfterStats
+  control: ControlStats
+  /** 이 조건의 '그대로 머지' 비율 − 비교군의 것. 둘 중 하나라도 n이 0이면 null */
+  lift: number | null
+  inflow: { exports_30d: number; met_30d: number }
+}
+
+/** 판의 칸(보이기용) */
+export interface EpochView {
+  model: string | null
+  effort: string | null
+  /** Claude Code major.minor */
+  claude: string | null
+  gate_epoch: number | null
+  review_prompt: number | null
+}
+
+/** 설정 대화상자의 [실적]과 `relay record`가 보이는 것. 숫자는 규칙의 근거이지 할 일 목록이 아니다(진행 막대 없음) */
+export interface RecordStats {
+  /** 'current'는 이 프로젝트의 마지막 내보내기 결론 줄의 판 */
+  epoch: 'current' | 'all'
+  current: EpochView | null
+  conditions: ConditionStats[]
+  /** 어느 조건도 채우지 못한 내보내기(사람 경로) */
+  human: ControlStats
+  /** 판이 바뀐 자리(최근 것부터): '판이 바뀜: Claude Code 2.3 → 2.4' */
+  changes: { ts: string; fields: string[] }[]
+  /** 결론 줄 가운데 판 열쇠를 모르는 줄(판 칸 빈 비율의 분자)과 전체 */
+  unknown_epoch: { lines: number; of: number }
+  /** 장부에서 읽지 못한 줄 */
+  broken: number
+}
+
+/** 내보내기 하나의 그림자 표본의 끝(Q6: 끝이 정해질 때까지 [증거]의 그림자 줄을 가린다) */
+export interface ShadowEnd {
+  /** 단위 브랜치의 내보내기(V22)면 그 단위 */
+  unit: string | null
+  conditions: string[]
+  result: 'match' | 'miss'
+  /** 불일치 갈래(ConditionStats.miss의 칸 이름) */
+  why: keyof ConditionStats['miss'] | null
+}
+
 // ── 이벤트 (메인 → 렌더러) ───────────────────────────────────────────────────
 
 export const EVENTS = {
@@ -333,6 +447,8 @@ export const EVENTS = {
   terminalData: 'relay:terminal-data',
   /** 세션이 끝남. payload: TerminalExit */
   terminalExit: 'relay:terminal-exit',
+  /** 실적 장부에 줄이 더해짐(끝까지 따라가기, 머지 뒤 30일, 이의). payload: { project } */
+  record: 'relay:record',
 } as const
 
 export type RelayEvent = (typeof EVENTS)[keyof typeof EVENTS]
@@ -353,6 +469,7 @@ export interface RelayEventPayload {
   'relay:projects': ProjectView[]
   'relay:terminal-data': TerminalData
   'relay:terminal-exit': TerminalExit
+  'relay:record': { project: string }
 }
 
 // ── preload가 내놓는 API (window.relay) ─────────────────────────────────────
@@ -404,6 +521,12 @@ export interface RelayApi {
   baseDebt(id: string): Promise<DebtItem[]>
   /** [초안 만들기](V20): 품질 기준 초안을 프로젝트의 작업 트리에 쓴다. 커밋은 사람이 한다 */
   draftQuality(projectId: string): Promise<DraftQualityResult>
+  /** 설정 대화상자의 [실적](M4c): 이 프로젝트의 조건별 실적. allEpochs면 모든 판 */
+  record(projectId: string, allEpochs: boolean): Promise<RecordStats>
+  /** 이 Work의 내보내기마다 그림자 표본의 끝(Q6). 끝이 정해지지 않은 내보내기는 없다 */
+  shadowEnds(id: string): Promise<ShadowEnd[]>
+  /** [귀속이 틀림](M4d): 귀속된 사건에 이의를 단다. 장부에 dispute 줄을 쓰고 그 사건은 셈에서 빠진 채 보인다 */
+  dispute(projectId: string, mergeCommit: string, event: AfterEvent['event']): Promise<void>
   /** 이벤트를 받는다. 돌려준 함수를 부르면 그만 받는다 */
   on<E extends RelayEvent>(event: E, cb: (payload: RelayEventPayload[E]) => void): () => void
 }
@@ -432,6 +555,9 @@ export const IPC = {
   debt: 'relay:debt',
   baseDebt: 'relay:base-debt',
   draftQuality: 'relay:draft-quality',
+  record: 'relay:record',
+  shadowEnds: 'relay:shadow-ends',
+  dispute: 'relay:dispute',
 } as const
 
 /** ipcMain.handle의 답. 메인은 던지지 않고 이것으로 돌려주고, preload가 실패를 Error로 바꾼다 */

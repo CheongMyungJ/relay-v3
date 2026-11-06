@@ -1,6 +1,6 @@
 # M4 설계: 그림자 실적
 
-- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절)를 만들었다. M4c~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
+- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절)를 만들었다. M4e~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
 - **사용자 결정(2026-11-06, ✅):**
   - Q10 자기 실행: **도구만 만들고 relay-v3 자기 실행은 나중에 따로 정한다.** quality.json PR, main 보호·필수 검사, 앱으로 relay-v3 개발하기는 하지 않는다. 그래서 M4h(10절)는 '나중'이고, M4의 숫자는 재생과 평가 자료로만 낸다.
   - Q2 M5 숫자: **12절의 안 그대로**(일치 ≥ 20, V3 그대로; 끝이 정해진 n ≥ 30; 일치율 ≥ 0.95; lift > 0; 창 30일; 창이 닫힌 이 조건의 머지 ≥ 20에서 귀속 0·미정 0; 결정론 5회 갈림 0; 지금 관문 판의 재생 거짓 자동 0). M5 규약이 이것을 그대로 쓴다.
@@ -264,6 +264,29 @@ interface ConditionStats {
 - **CLI `relay record [--json] [--project <path>] [--all-epochs] [--pool]`** (`src/cli/app.ts`에서 부르는 새 파일 `src/cli/record.ts`): `$RELAY_HOME`의 장부에서 같은 표를 찍는다. 장부 읽기는 `main/store.ts`에서 `adapters/store.ts`로 내려 main과 cli가 함께 쓴다. relay-v3 주간 기록과 M5 판정 문서가 이것을 쓴다.
 - 화면을 고치므로 `CONTRIBUTING.md`의 화면 찍기로 띄워 찍어 열어 보고, [스모크] `test/smoke/record.spec.ts`를 돌린다.
 
+### 5.3 만든 것 (M4c, V49)
+
+- **셈(5.1):** 새 파일 `engine/shadow.ts`. `shadowStats({ entries, after?, disputes?, scope, epoch, now })`가 조건마다 `ConditionStats`(n, match, miss 여섯 갈래, outside 여섯 갈래, rate, wilson_low, correlated, after, control, lift, inflow)를 낸다. 단위는 (프로젝트, Work, 조건). 표본은 결론 줄(follow.ts `isConclusionLine`)이 그림자나 자동 후보이고 `met`에 그 조건이 있는 것(옛 줄은 `condition`). 줄마다 그 내보내기의 끝으로 판정하고, 단위는 분모 밖이 하나라도 있으면 분모 밖, 모두 일치면 일치, 아니면 첫 불일치다. `wilsonLow`(95%), `recordStats`(화면·CLI의 표), `shadowEnds`(Q6), `epochView`. `trackRecord`를 `engine/ledger.ts`에서 이리로 옮겨 `shadowStats` 위의 얇은 함수로 바꿨다(5.1: 일치 ≥ min_shadow, 일치율 ≥ 0.95, 이 조건의 머지에 이의 없는 귀속 되돌림·귀속 main 실패 0). `ledger.ts`는 `MATCH_RATE`와 `isLedgerEntry`를 내놓는다.
+- **화면용 모양:** `shared/api.ts`에 `ConditionStats`, `ControlStats`, `AfterStats`, `AfterEvent`, `MainState`, `EpochView`, `RecordStats`, `ShadowEnd`(engine이 `import type`한다. 렌더러는 engine을 가져가지 않는다).
+- **장부 읽기:** `adapters/store.ts`에 `ledgerPath`, `readLedgerText`. `main/store.ts`는 그것을 쓰고 `readRecord()`(engine `parseRecord`: 결론·끝 줄, after, dispute, 읽지 못한 줄 수)를 더했다. `works-ledger.ts trackFor`가 장부 전체로 `trackRecord`를 부른다.
+- **[실적](5.2):** 새 파일 `main/works-stats.ts` `RecordDesk`(`record`, `shadowEnds`, `dispute`), IPC `record`·`shadowEnds`·`dispute`, 이벤트 `EVENTS.record { project }`(끝까지 따라가기가 한 번 돈 뒤 `RecordDeps.onChange`, 이의 뒤). 새 컴포넌트 `renderer/src/RecordTable.tsx`(설정 대화상자를 넓게 열고 장치 스위치 아래)와 글 `renderer/src/record.ts`. [지금 판]·[모든 판], 조건마다 한 줄, '사람 경로(조건 못 채움)' 줄, 귀속된 사건과 [귀속이 틀림], '판이 바뀜', '판을 모르는 결론 줄 a/b · 읽지 못한 장부 줄 c'.
+- **그림자 줄(Q6):** `format.ts conclusionOf`에서 그림자 글을 뺐다. [증거]의 결론 칸이 `useShadowEnds`(RecordTable.tsx)로 그 Work의 표본의 끝을 묻고, 끝이 정해진 뒤에만 '그림자 표본: 일치 (조건 small)'·'그림자 표본: 불일치(<갈래>) (조건 …)'를 보인다(`record.ts shadowLine`). 단위 브랜치는 그 단위의 끝.
+- **CLI:** 새 파일 `cli/record.ts`, `relay record [--json] [--project <경로>] [--all-epochs] [--pool]`(app.ts의 명령표와 쓰는 법).
+- **시험:** [단위] `shadow.test.ts`, `renderer-record.test.ts`, `renderer.test.ts`(conclusionOf), `ledger.test.ts`·`follow.test.ts`(trackRecord를 shadow.ts에서 가져옴, 시험 본문 그대로 지남). [흐름] `cli-record.test.ts`. [스모크] `record.spec.ts`(새), `app.spec.ts`(열린 동안 그림자 줄이 없고 [머지] 뒤 '그림자 표본: 일치'). `npm run test:smoke` 6개 지남, 찍은 그림(`smoke-record-01-current.png`, `-02-disputed.png`, `smoke-11-merged.png`)을 열어 봤다. `npm run test:replay` 그대로 지남.
+- core는 고치지 않았다(4,850줄 그대로).
+
+### 5.4 설계와 다른 것 (M4c)
+
+- **`shadowStats`는 `engine/track.ts`가 아니라 새 파일 `engine/shadow.ts`에 있다**(sameChange와 같은 까닭: track.ts는 관문 판의 파일이다). `trackRecord`도 함께 옮겨 ledger.ts와 shadow.ts가 서로 가져오지 않게 했다.
+- **모양:** `shadowStats(entries, scope, epoch)` 대신 입력 객체 하나(`after`, `disputes`, 시계 `now`를 더함). 낡음·추적 잃음과 들어오는 빠르기에 시계가 들어서다. `trackRecord`는 `now: null`로 부른다(분모 밖의 갈래만 달라지고 일치·불일치는 같다). 결과의 `cond_hash`는 지금 판이면 그 판의 hash, 모든 판이면 장부의 마지막 hash다. 조건 목록은 지금 판이면 그 판의 `conds`, 모든 판이면 장부에 나온 조건 전부다. `epoch`는 문자열 칸 대신 `RecordStats.current`(`EpochView`)로 보인다.
+- **'지금 판'(화면·CLI):** 묶음이 없는 자리라 그 프로젝트의 마지막 M4a 결론 줄의 판으로 정했다(관문의 지금 판은 그대로 묶음의 판, works-ledger.ts).
+- **비교군과 lift:** 비교군은 '그 조건을 못 채우고 사람이 머지한 내보내기'가 아니라 그 조건을 못 채운(그 줄의 `conds`에 조건이 있던) Work를 표본과 같은 규칙으로 판정해 끝이 정해진 것(사람 머지, 닫힘, 버림)이다. 그래서 lift는 일치율 − 비교군의 '그대로 머지' 비율로 분모가 같은 꼴이다(정책 머지와 열림은 양쪽 다 빠진다). '사람 경로' 줄은 어느 조건도 채우지 못한 Work이고, 지금 판이면 조건과 상관없는 판 칸(모델, effort, Claude Code major.minor, 관문 epoch, 리뷰 프롬프트)이 같은 줄만 센다.
+- **불일치 갈래:** M4e 전이라 '더 커밋'은 모두 `more_unknown`이다(`more_session`·`more_human`은 0). 마지막이 아닌 결론 줄의 head(뒤에 다시 내보냄)도 `more_unknown`이다.
+- **판 칸 빈 비율(M4a의 열린 문제)을 여기서 센다:** `RecordStats.unknown_epoch`(결론 줄 가운데 판 칸을 하나라도 모르는 줄 / 결론 줄 전체). M4a 앞의 줄도 분자에 든다.
+- **[귀속이 틀림]의 커밋은 링크가 아니라 짧은 SHA다.** 장부에 PR URL이나 레포 URL이 없다.
+- **그림자 줄만 가린다.** 결론 칸의 decisive('프로젝트에서 자동 머지가 꺼져 있음')와 '사람에게 보낸 까닭'의 '조건 small의 그림자 실적이 기준에 못 미침'은 그대로 보인다(설계: 결론과 열린 것은 그대로). 이 둘도 조건을 채웠다는 뜻을 담는다(열린 문제).
+- **`relay record`의 글은 화면의 글과 따로 만든다**(cli는 renderer를 가져갈 수 없고 shared에는 런타임 코드를 두지 않는다). 셈은 같은 `recordStats`다.
+
 ## 6. M4d 머지 뒤 30일
 
 - **누구를:** 그림자 표본만이 아니라 앱이 내보낸 머지 전부(사람, human-override, 정책, preapproved). 8.4 다섯째 조건('자동 후보의 되돌림이 사람 검토 변경보다 많으면 열지 않는다')에 비교군이 필요하다.
@@ -288,6 +311,26 @@ interface AfterLine {
   - 레포에 필수 검사가 없거나(`ci_checks`가 비고 서버 보호의 required contexts도 없음) push 실행이 0: **잴 수 없음**. 0과 다르게 보인다.
 - **후속 고침**(같은 줄을 30일 안에 다시 고침)은 8.1대로 참고만이고 M4에서는 만들지 않는다.
 - **`AfterStats`:** 창 닫힘 수, 지켜보는 중 수, 되돌림 수, main 실패(귀속, 미정, 물려받음, 모름), 잴 수 없음 수, 이의로 뺀 수, 0이면 위 한계.
+
+### 6.1 만든 것 (M4d, V50)
+
+- **셈:** 새 파일 `engine/after-merge.ts`. `AfterLine`·`DisputeLine`, `AFTER_DAYS`(30), `windowEnd`, `revertsOf`(세 꼴), `repoSlug`, `mainOf`(여섯 상태), `parseRecord`(장부의 결론·끝 줄, after, dispute, 읽지 못한 줄), `lastAfter`, `afterStats`(shared `AfterStats`: 머지 수, 창 닫힘, 지켜보는 중, 되돌림, main 갈래, 잴 수 없음, 이의로 뺀 수, 3의 규칙의 위 한계, 귀속된 사건 목록).
+- **gh:** `adapters/gh.ts runsAt(repo, sha)` — `gh api repos/{owner}/{repo}/actions/runs?head_sha=<sha>&event=push&per_page=100`, 녹화본 `run`의 칸(name, path, head_sha, event, status, conclusion, run_attempt)만 읽는다. 가짜 gh에 `api …/actions/runs?…`(상태의 `runs`, 실패 이름 `api runs`). `test/fixtures/recorded-fields.json`에 `gh.run`(relay-v2 녹화본 run 모양의 맨 위 칸)과 읽는 칸, `not_recorded`(봉투 `workflow_runs`).
+- **따라가기:** 새 파일 `main/works-after.ts followAfter`. `RecordFollower`의 한 번이 끝 줄을 쓴 뒤 장부를 다시 읽어 부른다(진행 중 Work도 넣는다: 단위 브랜치의 머지). 머지마다 거울에서 머지 커밋을 확인하고, 올린 커밋(merge·squash·rebase)과 창 안의 기준 커밋으로 되돌림을, gh 실행으로 main을 본다. 필수 검사는 서버 보호(`serverProtection`)나 그 커밋의 `ci_checks`. 창 안에서는 사건(되돌림, 귀속·미정·물려받음)이 앞 줄과 다를 때만, 창이 닫히면 한 줄을 쓰고 그 뒤로 보지 않는다. `RecordDeps.gh`에 `runsAt`·`serverProtection`, `RecordDeps.onChange`.
+- **이의:** `RecordDesk.dispute`가 그 머지의 after 줄에 그 사건이 있을 때만 `kind: 'dispute'` 줄을 쓴다(같은 이의는 한 번). `afterStats`와 `trackRecord`가 그 사건을 셈에서 뺀다.
+- **시험:** [단위] `after-merge.test.ts`. [어댑터] `gh.test.ts`(runsAt). [흐름] `works-after.test.ts`: merge 머지의 귀속 main 실패와 `git revert -m 1`, 같은 사건은 다시 쓰지 않음, [실적]의 셈과 이의, 가짜 시계(`recordNow`)로 30일 뒤 닫힘과 그 뒤로 보지 않음, gh 기록에 rerun 없음, 사용자 레포 ref 그대로. squash 머지의 미정(다시 시도 없음)과 제목 되돌림, 필수 검사가 없는 레포의 잴 수 없음. 앞선 [흐름](`works-record*.test.ts`, `works.test.ts`)도 따라가기가 머지 뒤 30일을 함께 돌린 채 그대로 지난다.
+
+### 6.2 설계와 다른 것 (M4d)
+
+- **gh 목록의 봉투:** `actions/runs?head_sha=` 응답의 `workflow_runs`는 relay-v2 녹화본에 없다(녹화본의 `run`은 실행 하나의 응답). 실행의 칸은 녹화본에 있는 것만 쓰고 봉투는 GitHub REST 문서의 꼴을 쓴다. 가짜 gh도 그 꼴로 낸다(서버 보호의 `branches`·`rules` API와 같은 선례). 다시 녹화(Q9) 때 함께 녹화한다.
+- **(다) 제목 되돌림은 PR 제목이 아니라 올린 커밋의 제목으로 본다.** PR `title`은 녹화본 prView에 없다. GitHub의 squash 커밋 제목은 'PR 제목 (#N)'이고 되돌림 PR과 `git revert`는 'Revert "<커밋 제목>"'을 짓는다.
+- **(나) `Reverts <owner>/<repo>#<pr>`의 owner/repo는 origin URL이 GitHub 꼴일 때만 견준다.** 모르면 번호만 본다(엄격한 쪽: 되돌림을 더 센다).
+- **잴 수 있음:** `ci_checks`는 머지 커밋의 `.relay/quality.json`(거울에서 읽음), 서버 보호는 지금의 것(gh는 그때의 보호를 주지 않는다). 둘 다 없으면 잴 수 없음이다. 워크플로 이름을 `ci_checks`의 잡 이름과 잇지 않는다(잡 API는 녹화본에 없다): 그 커밋의 모든 push 워크플로를 본다.
+- **미정(pending)에 '아직 도는 실행'도 넣었다.** 창이 닫힐 때 아직 돌면 미정으로 남는다. 취소·action_required 같은 결론은 모름이다.
+- **main을 다시 재는 때:** 앞 줄이 귀속·물려받음·깨끗이면 다시 재지 않는다. 미정·모름·잴 수 없음은 창이 닫힐 때까지 계기마다 다시 잰다(사람이 CI를 다시 돌리면 미정이 귀속이 될 수 있다). gh를 읽지 못해 모름이 되면 앞 줄의 상태를 지우지 않는다.
+- **PR 없이 끝난 Work의 로컬 fast-forward 머지(4.6: 머지 커밋·때가 없음)는 머지된 head를 머지 커밋으로, 그 끝 줄을 쓴 때를 `merged_at`으로 쓴다.** 올린 커밋은 그 head 하나로 본다.
+- **창의 시작과 끝은 커미터 시각이다**(`git log --since/--until`). 시각이 어긋난 커밋은 놓칠 수 있다. `seen_until`은 거울 기준 브랜치 끝 커밋의 시각이고, 창을 닫는 것은 그 계기에 기준을 받았고 시계가 창 끝을 지났을 때다.
+- **after 줄의 열쇠는 (프로젝트, 머지 커밋)이다.** 같은 머지 커밋을 두 내보내기가 가리키면(드묾) 한 무리로 센다.
 
 ## 7. M4e 세션 커밋 가르기와 트레일러
 

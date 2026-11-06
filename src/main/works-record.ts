@@ -4,6 +4,7 @@
 // unmerged로 쓴다. 진행 중 Work는 PR 확인(works-exports.ts fate)이 그대로 쓴다: 이 파일은 그것이 놓친 Work가 끝난 뒤의 끝을
 // 맡는다. 같은 변경(engine/follow.ts sameChange)의 사실은 $RELAY_HOME의 거울(adapters/mirror.ts)에서 읽는다. 사용자 레포는
 // 읽기만 한다(ref·설정·객체를 바꾸지 않는다). 계기: 앱 시작, 새 Work, 앱이 도는 동안 6시간마다. 프로젝트마다 한 번에 하나만.
+// 같은 계기에 머지 뒤 30일(M4d, works-after.ts)도 본다.
 
 import {
   isAncestor,
@@ -44,6 +45,7 @@ import {
   type WorkRecord,
 } from './store.ts'
 import { acceptedOf } from './works-debt.ts'
+import { followAfter } from './works-after.ts'
 import { ledgerEntry, type LedgerDeps } from './works-ledger.ts'
 import { isActive } from './works-types.ts'
 
@@ -59,8 +61,10 @@ const SQUASH_SLACK_MS = 24 * 60 * 60 * 1000
 
 export interface RecordDeps extends LedgerDeps {
   store: Store
-  gh: Pick<typeof import('../adapters/gh.ts'), 'listPr' | 'prMerge'>
+  gh: Pick<typeof import('../adapters/gh.ts'), 'listPr' | 'prMerge' | 'runsAt' | 'serverProtection'>
   log?: (message: string, error?: unknown) => void
+  /** 장부에 줄을 썼다(화면의 [실적]을 다시 읽게) */
+  onChange?: (projectId: string) => void
 }
 
 /** 머지 끝 줄의 M4b 칸 */
@@ -315,22 +319,27 @@ export class RecordFollower {
     const works = new Map<string, WorkRecord>()
     for (const id of await store.listWorkIds()) {
       const w = await store.readWork(id)
-      if (w !== null && w.project === projectId && !isActive(w.state)) works.set(id, upgradeWork(w))
+      if (w !== null && w.project === projectId) works.set(id, upgradeWork(w))
     }
     const ledger = await store.readLedger()
     const mirrors = new Map<string, Mirror>()
+    const mirrorFor = (base: string) => {
+      const m = mirrors.get(base) ?? new Mirror(store.home, project.path, base, this.deps.log)
+      mirrors.set(base, m)
+      return m
+    }
     for (const u of unsettled(ledger, projectId)) {
       const rec = works.get(u.work)
-      if (!rec) continue
-      let mirror = mirrors.get(rec.base)
-      if (!mirror) {
-        mirror = new Mirror(store.home, project.path, rec.base, this.deps.log)
-        mirrors.set(rec.base, mirror)
-      }
-      await this.settle(project, rec, u, mirror, ledger).catch((e: unknown) =>
+      if (!rec || isActive(rec.state)) continue
+      await this.settle(project, rec, u, mirrorFor(rec.base), ledger).catch((e: unknown) =>
         this.deps.log?.(`내보내기를 따라가지 못함 (${rec.id})`, e),
       )
     }
+    // 머지 뒤 30일(M4d): 진행 중 Work(단위 브랜치의 내보내기)의 머지도 본다
+    await followAfter(this.deps, project, works, await store.readRecord(), mirrorFor).catch(
+      (e: unknown) => this.deps.log?.(`머지 뒤 30일을 보지 못함 (${projectId})`, e),
+    )
+    this.deps.onChange?.(projectId)
   }
 
   /** 내보내기 하나의 끝을 본다(m4-design 4.2) */

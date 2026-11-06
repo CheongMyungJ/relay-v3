@@ -23,6 +23,7 @@ import { evidencePath, readJson, relayHome, repoKey } from '../adapters/store.ts
 import { check, CheckInputError, QUALITY_PATH } from '../engine/check.ts'
 import { draftFor, draftText, writeDraft } from '../engine/init.ts'
 import { m3Switches } from '../engine/m3.ts'
+import { recordCommand } from './record.ts'
 
 export interface Io {
   cwd: string
@@ -43,6 +44,9 @@ export const USAGE = `쓰는 법: relay <명령> [옵션]
       묶음의 head가 --head(기본 HEAD)와 다르면 낡은 증거로 본다.
   relay debt list|scan [--json]
       빚 장부(.relay/debt)의 목록, anchor가 사라진 항목.
+  relay record [--json] [--project <경로>] [--all-epochs] [--pool]
+      $RELAY_HOME 실적 장부의 조건별 그림자 실적(일치 k/n, 불일치, 분모 밖, 머지 뒤 30일, lift).
+      기본은 지금 폴더의 레포와 그 마지막 판. --pool은 레포를 넘어 합친 값(보이기만).
 
 종료 코드: 0 성공(결론과 상관없이), 1 사용 오류, 2 내부 오류`
 
@@ -61,6 +65,7 @@ const COMMANDS: Record<string, Command> = {
   check: checkCommand,
   gate: gateCommand,
   debt: debtCommand,
+  record: (io, args) => recordCommand(io, args, (text) => new UsageError(text)),
 }
 
 export async function main(argv: string[], io: Io): Promise<number> {

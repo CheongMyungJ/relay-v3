@@ -2,7 +2,8 @@
 // 기준에 합쳐 push했으면 human-override 머지로 쓴다. squash(같은 patch-id의 기준 커밋을 찾음)와 merge(head가 기준의 조상).
 // works-record.test.ts와 origin을 나누지 않으려고(기준에 변경이 들어간다) 파일을 갈랐다. 바탕은 test/support/works-flow.ts.
 import { expect, test } from 'vitest'
-import { trackRecord, type LedgerEntry } from '../../src/engine/ledger.ts'
+import type { LedgerEntry } from '../../src/engine/ledger.ts'
+import { trackRecord } from '../../src/engine/shadow.ts'
 import { makeTempDir } from '../support/repo.ts'
 import type { TestApp } from '../support/works-app.ts'
 import {

@@ -11,6 +11,7 @@ import * as gh from '../adapters/gh.ts'
 import { relayHome } from '../adapters/store.ts'
 import { check } from '../engine/check.ts'
 import { m3Switches } from '../engine/m3.ts'
+import { EVENTS } from '../shared/api.ts'
 import { HookServer } from './hooks.ts'
 import { registerIpc } from './ipc.ts'
 import { SessionHost } from './sessions.ts'
@@ -18,6 +19,7 @@ import { Store } from './store.ts'
 import { claudeReview, Works } from './works.ts'
 import { SessionLog } from './works-session-log.ts'
 import { RecordFollower } from './works-record.ts'
+import { RecordDesk } from './works-stats.ts'
 
 let win: BrowserWindow | null = null
 let works: Works | null = null
@@ -114,6 +116,11 @@ async function start(): Promise<void> {
     relayVersion,
     ...(version ? { claudeVersion: version } : {}),
     log,
+    // 장부에 줄이 더해졌다: 화면의 [실적]과 그림자 줄을 다시 읽게 한다
+    onChange: (project) => {
+      for (const bw of BrowserWindow.getAllWindows())
+        if (!bw.isDestroyed()) bw.webContents.send(EVENTS.record, { project })
+    },
   })
   follower = record
   const w = new Works({
@@ -150,7 +157,7 @@ async function start(): Promise<void> {
   await w.init()
   works = w
   record.start()
-  registerIpc({ works: w, sessions, window: () => win })
+  registerIpc({ works: w, record: new RecordDesk({ store, now }), sessions, window: () => win })
   createWindow()
 }
 

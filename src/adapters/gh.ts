@@ -1,4 +1,5 @@
-// gh CLI (docs/m2-modules.md 2절): PR 찾기·읽기·머지와 서버 쪽 브랜치 보호 읽기, 머지된 PR의 머지 커밋(M4b).
+// gh CLI (docs/m2-modules.md 2절): PR 찾기·읽기·머지와 서버 쪽 브랜치 보호 읽기, 머지된 PR의 머지 커밋(M4b), 커밋의 push
+// 실행(M4d: 읽기만. 앱은 CI를 다시 돌리지 않는다).
 // gh는 셸 없이 인자 배열로 부르고(runFile), repoDir에서 돌려 gh가 그 레포의 원격으로 OWNER/REPO를 고르게 한다.
 // 실패는 던지지 않고 결과로 돌려준다. 실행 파일은 RELAY_GH_BIN(시험의 가짜 gh), 없으면 PATH의 gh다.
 
@@ -169,6 +170,53 @@ export async function prMerge(repoDir: string, number: number): Promise<PrMerge>
     headRefOid: str(j.headRefOid),
     mergeCommit: /^[0-9a-f]{40,64}$/.test(oid) ? oid : null,
     mergedAt: str(j.mergedAt) || null,
+  }
+}
+
+/**
+ * 워크플로 실행 하나. 칸은 relay-v2 녹화본 gh.json의 `run` 모양(REST actions/runs/<실행>)에 있는 것만 쓴다: name, path, head_sha,
+ * event, status, conclusion, run_attempt
+ */
+export interface WorkflowRun {
+  name: string
+  path: string
+  head_sha: string
+  event: string
+  status: string
+  conclusion: string | null
+  run_attempt: number
+}
+
+/**
+ * 커밋 sha의 push 실행(M4d 머지 뒤 30일의 main 실패): `gh api repos/{owner}/{repo}/actions/runs?head_sha=<sha>&event=push`.
+ * 목록의 봉투 `workflow_runs`는 GitHub REST 문서의 꼴이고 녹화본에는 없다(녹화본의 run은 실행 하나의 응답). 실행의 칸은
+ * 녹화본에 있는 것만 읽는다. 다시 시도한 실행은 목록에 마지막 시도로 나온다(run_attempt). 읽지 못하면 `{ ok: false }`
+ */
+export async function runsAt(
+  repoDir: string,
+  sha: string,
+): Promise<{ ok: true; runs: WorkflowRun[] } | { ok: false; error: string }> {
+  if (!/^[0-9a-f]{40,64}$/.test(sha)) return { ok: false, error: `SHA가 아님: ${sha}` }
+  const r = await gh(repoDir, [
+    'api',
+    `repos/{owner}/{repo}/actions/runs?head_sha=${sha}&event=push&per_page=100`,
+  ])
+  if (!r.ok) return r
+  const j = parseJson(r.stdout)
+  const list = isObject(j) ? j.workflow_runs : undefined
+  if (!Array.isArray(list))
+    return { ok: false, error: `gh api actions/runs의 출력을 읽지 못함: ${r.stdout.slice(0, 200)}` }
+  return {
+    ok: true,
+    runs: list.filter(isObject).map((x) => ({
+      name: str(x.name),
+      path: str(x.path),
+      head_sha: str(x.head_sha),
+      event: str(x.event),
+      status: str(x.status),
+      conclusion: typeof x.conclusion === 'string' ? x.conclusion : null,
+      run_attempt: typeof x.run_attempt === 'number' ? x.run_attempt : 1,
+    })),
   }
 }
 

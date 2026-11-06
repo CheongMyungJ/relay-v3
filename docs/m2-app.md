@@ -32,6 +32,7 @@ Electron main
   ├─ review       claude -p, 읽기 도구만, --json-schema(지적 목록)
   ├─ gate·ledger  core.gate, 실적 장부 $RELAY_HOME/ledger.jsonl
   ├─ record       끝까지 따라가기(M4b): 끝난 Work의 PR·PR 없이 끝남. 앱 시작, 새 Work, 6시간마다. 거울 $RELAY_HOME/mirror
+  │              머지 뒤 30일(M4d, works-after.ts): 되돌림·main 실패를 같은 계기에. [실적]은 works-stats.ts(M4c)
   └─ gh           PR 찾기·읽기·머지 (gh CLI)
 Renderer (React)
   사이드바(프로젝트 → Work) │ 터미널(xterm) │ 패널: [계약] [증거] [변경] [빚]

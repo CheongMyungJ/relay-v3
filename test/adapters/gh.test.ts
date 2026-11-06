@@ -9,6 +9,7 @@ import {
   mergePr,
   prMerge,
   prStatus,
+  runsAt,
   serverProtection,
 } from '../../src/adapters/gh.ts'
 import { runFile } from '../../src/adapters/pty.ts'
@@ -199,6 +200,43 @@ describe('listPr와 prMerge (M4b)', () => {
       expect(recorded.gh.prView).toContain(f)
     expect(await prMerge(repo.dir, 9)).toMatchObject({ ok: false })
     expect(await prMerge(repo.dir, 0)).toMatchObject({ ok: false })
+  })
+})
+
+describe('runsAt (M4d)', () => {
+  test('커밋의 push 실행을 읽는다: 녹화본 run 모양의 칸만, 다시 시도는 run_attempt', async () => {
+    const sha = 'a'.repeat(40)
+    const run = {
+      name: 'ci',
+      path: '.github/workflows/ci.yml',
+      head_sha: sha,
+      event: 'push',
+      status: 'completed',
+      conclusion: 'failure',
+      run_attempt: 2,
+    }
+    await setState({
+      runs: [run, { ...run, event: 'pull_request' }, { ...run, head_sha: 'b'.repeat(40) }],
+    })
+    expect(await runsAt(repo.dir, sha)).toEqual({ ok: true, runs: [run] })
+    const last = (await logged()).at(-1)
+    expect(last?.args).toEqual([
+      'api',
+      `repos/{owner}/{repo}/actions/runs?head_sha=${sha}&event=push&per_page=100`,
+    ])
+    // 읽는 칸은 relay-v2 녹화본의 run에 있다(봉투 workflow_runs는 REST 문서의 꼴, recorded-fields.json의 note)
+    const recorded = JSON.parse(
+      readFileSync(new URL('../fixtures/recorded-fields.json', import.meta.url), 'utf8'),
+    ) as { gh: { run: string[] } }
+    for (const f of Object.keys(run)) expect(recorded.gh.run).toContain(f)
+    // 앱은 CI를 다시 돌리지 않는다
+    expect((await logged()).some((l) => l.args.includes('rerun'))).toBe(false)
+  })
+
+  test('읽지 못하면 ok 거짓(SHA가 아님, gh 실패)', async () => {
+    expect(await runsAt(repo.dir, 'main')).toMatchObject({ ok: false })
+    await setState({ fail: ['api runs'] })
+    expect(await runsAt(repo.dir, 'a'.repeat(40))).toMatchObject({ ok: false })
   })
 })
 

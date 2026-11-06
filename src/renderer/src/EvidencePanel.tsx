@@ -1,4 +1,4 @@
-// [증거] 패널 (docs/m2-modules.md 4절): 맨 위 결론 한 줄(그림자면 '자동이었으면 머지했을 것'), 그 아래 결론을 정한 사실.
+// [증거] 패널 (docs/m2-modules.md 4절): 맨 위 결론 한 줄(그림자 표본은 끝이 정해진 뒤 '일치·불일치', Q6), 그 아래 결론을 정한 사실.
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
 // 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 지식(V38), 빚(V41), 리뷰 지적(올림과
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
@@ -13,6 +13,8 @@ import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
 import { debtAsk, debtCommitText } from './debt.ts'
 import { DebtChoice, EndArmed, EndBox, EndMemos } from './EndPanels.tsx'
 import { exportSection, integrationText } from './exports.ts'
+import { shadowLine } from './record.ts'
+import { useShadowEnds } from './RecordTable.tsx'
 import {
   KNOWLEDGE_ISSUE,
   LINE_STATUS,
@@ -170,7 +172,13 @@ function ExportSection(p: {
         </p>
       ) : null}
       {view.gate ? (
-        <Verdict gate={view.gate} view={view} qualityNotice={p.qualityNotice} ending={p.ending} />
+        <Verdict
+          gate={view.gate}
+          view={view}
+          unit={x.unit}
+          qualityNotice={p.qualityNotice}
+          ending={p.ending}
+        />
       ) : (
         <Empty title="아직 증거가 없습니다">세션이 이 단위 브랜치에 커밋하고 쉬면 잽니다.</Empty>
       )}
@@ -198,9 +206,20 @@ function FeedbackLine({ view }: { view: WorkView }) {
   )
 }
 
-function Verdict(p: { gate: GateResult; view: WorkView; qualityNotice: boolean; ending: boolean }) {
+function Verdict(p: {
+  gate: GateResult
+  view: WorkView
+  unit?: string
+  qualityNotice: boolean
+  ending: boolean
+}) {
   const { gate, view } = p
   const c = conclusionOf(gate)
+  const ends = useShadowEnds(view, gate.shadow)
+  const shadow = shadowLine(
+    gate,
+    ends.find((x) => x.unit === (p.unit ?? null)),
+  )
   const e = view.evidence
   const outcome = outcomeOf(view)
   const next = nextStep(view, { qualityNotice: p.qualityNotice, ending: p.ending })
@@ -224,7 +243,11 @@ function Verdict(p: { gate: GateResult; view: WorkView; qualityNotice: boolean; 
           </p>
         </>
       )}
-      {c.shadow ? <p className="verdict-shadow">{c.shadow}</p> : null}
+      {shadow ? (
+        <p className="verdict-shadow" data-testid="shadow-line">
+          {shadow}
+        </p>
+      ) : null}
       <p className="verdict-decisive" data-testid="decisive">
         {decisiveText(view)}
       </p>

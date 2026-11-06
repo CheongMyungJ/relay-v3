@@ -1,9 +1,10 @@
-// 렌더러 ↔ 메인 (docs/m2-modules.md 3절 ipc.ts). RelayApi의 채널을 Works와 SessionHost에 잇는다.
+// 렌더러 ↔ 메인 (docs/m2-modules.md 3절 ipc.ts). RelayApi의 채널을 Works, SessionHost, RecordDesk(실적)에 잇는다.
 // 처리는 던지지 않고 IpcResult로 돌려준다(오류 글이 'Error invoking remote method …'에 묻히지 않게). preload가 Error로 바꾼다.
 // 'electron'을 가져오는 곳은 이 파일과 index.ts뿐이다.
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import {
+  EVENTS,
   IPC,
   type HandPick,
   type IpcResult,
@@ -11,6 +12,7 @@ import {
   type SettingsInput,
 } from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
+import type { RecordDesk } from './works-stats.ts'
 import { exportable } from './works-evidence.ts'
 import { baseDebt } from './works-worktree.ts'
 import type { Works } from './works.ts'
@@ -61,6 +63,7 @@ const picksArg = (v: unknown): HandPick[] => {
 
 export function registerIpc(o: {
   works: Works
+  record: RecordDesk
   sessions: SessionHost
   window: () => BrowserWindow | null
 }): () => void {
@@ -144,6 +147,15 @@ export function registerIpc(o: {
     [IPC.debt]: (id) => works.debt(str(id, 'id')),
     [IPC.baseDebt]: (id) => baseDebt(works.record(str(id, 'id'))),
     [IPC.draftQuality]: (id) => works.draftQuality(str(id, 'projectId')),
+    // 실적(M4c·M4d): 장부를 읽어 셈한다
+    [IPC.record]: (id, all) => o.record.record(str(id, 'projectId'), all === true),
+    [IPC.shadowEnds]: (id) => o.record.shadowEnds(str(id, 'id')),
+    [IPC.dispute]: async (id, commit, event) => {
+      if (event !== 'revert' && event !== 'main') throw new Error('사건이 revert·main이 아님')
+      const project = str(id, 'projectId')
+      await o.record.dispute(project, str(commit, '머지 커밋'), event)
+      o.window()?.webContents.send(EVENTS.record, { project })
+    },
   }
   for (const [channel, fn] of Object.entries(handlers)) {
     ipcMain.handle(channel, async (_e, ...args: unknown[]): Promise<IpcResult<unknown>> => {

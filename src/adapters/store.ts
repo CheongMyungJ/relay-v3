@@ -56,6 +56,21 @@ function checkSegment(text: string, what: string): string {
   return text
 }
 
+/** 실적 장부의 자리: $RELAY_HOME/ledger.jsonl(앱이 덧붙이고 앱과 `relay record`가 읽는다) */
+export function ledgerPath(home: string): string {
+  return join(home, 'ledger.jsonl')
+}
+
+/** 실적 장부의 글. 없으면 빈 글(줄을 읽는 것은 engine/after-merge.ts parseRecord) */
+export async function readLedgerText(home: string): Promise<string> {
+  try {
+    return await readFile(ledgerPath(home), 'utf8')
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return ''
+    throw e
+  }
+}
+
 /** 증거 묶음의 자리 */
 export function evidencePath(home: string, key: string, sha: string): string {
   return join(home, 'evidence', checkSegment(key, '레포 키'), `${checkSha(sha)}.json`)

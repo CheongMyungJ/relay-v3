@@ -7,7 +7,8 @@
 import { REVIEW_PROMPT_VERSION } from '../core/review.ts'
 import type { Contract, EvidenceBundle, GateResult, Integration, Policy } from '../core/types.ts'
 import { GATE_VERSION } from '../engine/gate-version.ts'
-import { trackRecord, type EpochSource, type LedgerEntry } from '../engine/ledger.ts'
+import type { EpochSource, LedgerEntry } from '../engine/ledger.ts'
+import { trackRecord } from '../engine/shadow.ts'
 import { condHashes, conditionsMet } from '../engine/track.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { WorkCtx, WorksDeps } from './works-types.ts'
@@ -83,7 +84,7 @@ export function epochOf(
   }
 }
 
-/** 조건마다 지금 판(이 묶음의 판)의 그림자 실적이 기준을 넘었나(관문의 track_record_ok) */
+/** 조건마다 지금 판(이 묶음의 판)의 그림자 실적이 기준을 넘었나(관문의 track_record_ok, engine/shadow.ts) */
 export async function trackFor(
   ctx: WorkCtx,
   rec: WorkRecord,
@@ -91,9 +92,10 @@ export async function trackFor(
   conditions: Policy['conditions'],
   bundle: EvidenceBundle,
 ): Promise<Record<string, boolean>> {
-  const ledger = await ctx.deps.store.readLedger()
+  const { entries, after, disputes } = await ctx.deps.store.readRecord()
   const current = epochOf(ctx.deps, rec, bundle, conditions)
-  return trackRecord(ledger, project.id, project.settings.min_shadow, current)
+  // 이 조건의 머지에 귀속된 되돌림·main 실패(M4d)가 있으면 기준을 넘지 못한다(엄격하게만)
+  return trackRecord(entries, project.id, project.settings.min_shadow, current, { after, disputes })
 }
 
 /**

@@ -14,8 +14,11 @@
 //                             "protection": { "required_status_checks": { "enforcement_level": "everyone",
 //                                                                          "contexts": ["ci"], "strict": true } } } },
 //     "rules": { "main": [{ "type": "merge_queue", "parameters": {} }] },
+//     "runs": [{ "name": "ci", "path": ".github/workflows/ci.yml", "head_sha": "<sha>", "event": "push",
+//                "status": "completed", "conclusion": "failure", "run_attempt": 2 }],   // 녹화본 run 모양의 칸만
 //     "fail": ["pr merge"]                // 그 명령이 종료 코드 1로 실패한다:
-//                                         // auth, pr list, pr view, pr merge, pr create, api branches, api rules
+//                                         // auth, pr list, pr view, pr merge, pr create, api branches, api rules,
+//                                         // api runs
 //   }
 //
 // 명령:
@@ -26,6 +29,8 @@
 //   pr create [--head <b>] [--base <b>] [--title t] [--body b | --body-file f] [--draft]   head는 origin에 있어야 한다
 //   api repos/{owner}/{repo}/branches/<b>         branches에 없으면 HTTP 404
 //   api repos/{owner}/{repo}/rules/branches/<b>   rules에 없으면 []
+//   api repos/{owner}/{repo}/actions/runs?head_sha=<sha>&event=<e>   runs에서 고름. 봉투 workflow_runs는 GitHub REST 문서의 꼴
+//                                                 (녹화본에는 run 하나의 모양만 있다)
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 
@@ -71,7 +76,7 @@ function retrying(fn) {
 function loadState() {
   const file = env.FAKE_GH_STATE
   const s = file && retrying(() => fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')))
-  return { auth: true, prs: [], branches: {}, rules: {}, fail: [], ...(s || {}) }
+  return { auth: true, prs: [], branches: {}, rules: {}, runs: [], fail: [], ...(s || {}) }
 }
 
 /** 시험이 반쯤 쓴 파일을 읽지 않게 임시 파일에 쓰고 이름을 바꾼다 */
@@ -237,6 +242,17 @@ if (cmd === 'pr' && sub === 'create') {
 
 if (cmd === 'api') {
   const target = argv.slice(1).find((a) => !a.startsWith('-')) ?? ''
+  const runs = /^repos\/[^/]+\/[^/]+\/actions\/runs\?(.*)$/.exec(target)
+  if (runs) {
+    if (failing('api runs')) fail('gh: Server Error (HTTP 502)')
+    const q = new URLSearchParams(runs[1])
+    const rows = state.runs.filter(
+      (r) =>
+        (!q.get('head_sha') || r.head_sha === q.get('head_sha')) &&
+        (!q.get('event') || r.event === q.get('event')),
+    )
+    print({ workflow_runs: rows })
+  }
   const m = /^repos\/[^/]+\/[^/]+\/(rules\/)?branches\/(.+)$/.exec(target)
   if (!m) fail(`가짜 gh: 모르는 api 요청 ${argv.join(' ')}`)
   const branch = decodeURIComponent(m[2])
