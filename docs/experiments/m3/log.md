@@ -25,3 +25,7 @@
   - sha256: `hidden/`, `sealed/`, `reference-*.patch`의 파일 56개를 이름 순으로 `sha256sum`한 출력의 sha256 = `86daef46876a75cea61bab97878c8159961d6dc803c6d9d4b5165ccc70a837af`(판 커밋 때와 같음).
 - **시범의 봉인 어김(7절):** 시범 에이전트가 봉인 과제 `s2`를 실제 기준 에이전트로 돌리고 그 대화 기록을 읽었다. 설계자에게는 끝·시간·토큰·통과 수만 왔다. 시범 에이전트가 설계자의 작업 폴더(scratchpad)에 남긴 사본(`pilot-sealed/`, `hidden/`, `sealed-hidden/`, `shop/`, `m3-dry*`, `out-w*`·`out-s*` 등)은 열지 않고 지웠다(2026-11-06 07:0x UTC). 이것을 근거로 설명서·프롬프트·시나리오를 고치지 않는다.
 - **배치 전 치우기(8절 3의 2, 2026-11-06 07:23 UTC):** relay-v2 `app/eval/results/m3-pilot`, `m3-pilot2`, `m3-pilot.log`를 `/home/user/m3-archive/m3-pilots.tar.gz`로 묶고 지웠다. `/tmp/relay-eval/`의 `m3-arch-out`, `m3-arch-out2`, `m3-dry`, `m3-dry-final`, `m3-pilot`, `m3-pilot-cli`, `m3-pilot2`를 지웠다. `/tmp`에 `relay-judge-*`, `relay-final-*`, `task-*`는 없었다. `ls -d /tmp/relay-eval/m3-*`: 없음. 다른 평가의 폴더는 남겼다(규약 8절 3의 2, 고정 전에 고침).
+
+## 배치
+
+- 시작: 2026-11-06 07:24 UTC. 배치 기준 SHA: relay-v3 `4c98291`(규약 고정 커밋), relay-v2 `25e78fa`, 앱 빌드 `/home/user/relay-v3-m3` `a0b39e9`(깨끗함). 명령은 규약 8절 4 그대로(`--checkpoints /home/user/m3-runs`, `--archive-push` 없음), 러너 로그 `/home/user/m3-runs/batch.log`.
