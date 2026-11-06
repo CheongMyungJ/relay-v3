@@ -70,7 +70,14 @@ export function bundleName(b: ReplayBundle): string {
  * 규약마다 실행 단위의 '자동 조건을 채움'. any: 실행의 내보내기 묶음 가운데 하나라도 채웠으면(M2). all: 모두 채웠을 때만
  * (V22, M2.1 규약 5.1의 G1·G2). 묶음을 더한 규약은 여기에 적는다(gate-replay.test.ts가 모든 규약에 있는지 본다)
  */
-export const RUN_MET: Record<string, 'any' | 'all'> = { m2: 'any', 'm2.1': 'all' }
+export const RUN_MET: Record<string, 'any' | 'all'> = { m2: 'any', 'm2.1': 'all', m4: 'all' }
+
+/** 규약의 실행 단위 규칙. RUN_MET에 없는 규약이면 던진다(조용히 '하나라도'로 세지 않게: M4 규약 8.1) */
+export function runMet(protocol: string): 'any' | 'all' {
+  const rule = RUN_MET[protocol]
+  if (rule === undefined) throw new Error(`RUN_MET에 없는 규약: ${protocol}`)
+  return rule
+}
 
 /** 사람 머지 까닭의 갈래: 첫 ': ', ' (', ' — ' 앞. 줄 id는 뺀다('줄 C2 못 미침' → '줄 못 미침') */
 export function reasonKind(reason: string): string {
@@ -115,7 +122,7 @@ export function generationRuns(bundles: readonly ReplayBundle[]): GenerationRun[
     for (const { b } of rs)
       for (const l of b.contract?.lines ?? []) lines.set(`${b.work}\0${l.id}`, l.kind)
     const met = (r: { g: GateResult }) => r.g.condition !== null
-    const all = RUN_MET[first.protocol] === 'all'
+    const all = runMet(first.protocol) === 'all'
     return {
       group: key.split('\0')[0] ?? key,
       run: first.run,

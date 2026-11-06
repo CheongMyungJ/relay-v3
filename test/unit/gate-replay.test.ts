@@ -19,6 +19,7 @@ import {
   readReplay,
   reasonKind,
   RUN_MET,
+  runMet,
   type ReplayBundle,
 } from '../support/gate-replay.ts'
 
@@ -184,7 +185,7 @@ function byRun(rs: Replayed[]): Row[] {
   }
   return [...runs.values()].map((run) => {
     const first = run[0] as Replayed
-    const all = RUN_MET[first.b.protocol] === 'all'
+    const all = runMet(first.b.protocol) === 'all'
     const metRun = all ? run.every((r) => met(r.g)) : run.some((r) => met(r.g))
     return { pass: first.b.hidden_pass, met: metRun }
   })

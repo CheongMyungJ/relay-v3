@@ -2,7 +2,10 @@
 // run.json(M3 순차는 Work마다의 칸)에서 Work마다 한 줄을 쓴다. 모델을 부르지 않는다. 표는 test/unit/track-replay.test.ts가
 // 찍고(npm run test:track) 자료의 꼴과 셈은 test/support/track-replay.ts다.
 //   node scripts/track-replay.ts test/fixtures/track-replay/<규약>.jsonl <결과 폴더>...
-// 결과 폴더는 relay-v2 app/eval/results의 배치 폴더다.
+//   node scripts/track-replay.ts --report --track <자료 .jsonl이나 폴더>... --gate <재생 묶음 .jsonl이나 폴더>...
+// 결과 폴더는 relay-v2 app/eval/results의 배치 폴더다. --report는 고른 자료(예: test/fixtures/ 밖의 docs/experiments/m4/replay/)로
+// test/support/track-replay.ts report의 표를 찍는다(npm run test:track은 고정 자료만 찍는다).
+// - 실행을 무리(시나리오/쪽)마다 '셈'과 '뺌(까닭)'으로 센다(M4 규약 9절: 빠진 실행이 조용히 n에서 사라지지 않게).
 // - M2·M2.1(m2-*, m21-sealed-*, m21-design-*): report.json이 있는 배치, <시나리오>/<쪽>-<n>/run.json. 쪽은 gate-replay-fixture.ts와
 //   같다(relay3, relay3-noreview, relay3-m21, hands-off는 relay3-handsoff). 오류로 끝났거나 숨긴 시험 결과가 없는 실행은 건너뛴다.
 // - M3 순차(m3-seq): <시나리오>/<쪽>-<n>/run.json의 complete가 참이고 works[]가 Work 차례(work)인 실행. 쪽은 relay3, relay3-m2.
@@ -16,13 +19,21 @@
 // - 숨긴 시험: M2·M2.1은 실행의 outcome.success. M3는 그 Work의 outcome.success(그 Work를 머지한 main의 누적 숨긴 시험),
 //   later(그 Work의 숨긴 시험이 뒤 Work의 누적에서 계속 통과했나), main(레포 시험 통과, 새로 깨뜨린 앞 Work 시험 수). 시험의
 //   이름·본문·출력은 넣지 않는다.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
 import { isLedgerEntry, type LedgerEntry } from '../src/engine/ledger.ts'
 import { isConclusionLine } from '../src/engine/follow.ts'
 import type { EvidenceBundle } from '../src/core/types.ts'
-import type { TrackEnd, TrackLine, TrackWork } from '../test/support/track-replay.ts'
+import { readReplay, type ReplayBundle } from '../test/support/gate-replay.ts'
+import {
+  readTrack,
+  report,
+  type TrackEnd,
+  type TrackLine,
+  type TrackWork,
+} from '../test/support/track-replay.ts'
 
 const ARMS = ['relay3', 'relay3-noreview', 'relay3-m21']
 const SEQ_ARMS = ['relay3', 'relay3-m2']
@@ -144,18 +155,28 @@ export function diffStats(text: string): { paths: string[]; added: number; delet
 /** 실행 끝의 작업 트리가 마지막 Work 브랜치 결론 줄의 증거 그대로인가. 가를 수 없으면 null */
 function sameAsExport(dir: string, runDir: string, short: string, lines: TrackLine[]) {
   const conclusions = lines.filter((l) => isConclusionLine(l as LedgerEntry))
-  if (conclusions.some((l) => l.export !== undefined)) return null
+  // null의 까닭을 센다(M4 규약 4.4: 도구의 한계라 '[끝내기]를 머지로 봄'에서 열림으로도 센다)
+  if (conclusions.some((l) => l.export !== undefined)) {
+    count('같은 변경을 가르지 못함: 단위 브랜치 내보내기가 있음')
+    return null
+  }
   const last = conclusions.at(-1)
   const evPath = path.join(dir, 'evidence.json')
   const diffPath = path.join(runDir, 'final', `${short}.diff`)
-  if (last === undefined) return null
+  if (last === undefined) {
+    count('같은 변경을 가르지 못함: 결론 줄 없음')
+    return null
+  }
   if (!existsSync(evPath) || !existsSync(diffPath)) {
     // 묶은 기록이 증거나 final diff를 따로 두었으면(M2 runs/의 *.extra) 함께 풀어야 한다
     count('같은 변경을 가르지 못함: evidence.json이나 final diff 없음')
     return null
   }
   const ev = readJson<EvidenceBundle>(evPath)
-  if (ev.head !== last.head) return null
+  if (ev.head !== last.head) {
+    count('같은 변경을 가르지 못함: 증거가 마지막 결론 줄과 다른 head')
+    return null
+  }
   const d = diffStats(readFileSync(diffPath, 'utf8'))
   return (
     d.added === ev.diff.added &&
@@ -189,16 +210,19 @@ interface StoredWork {
 
 function m2Works(protocol: string, runDir: string, scenario: string, arm: string, n: number) {
   const run = readJson<StoredRun>(path.join(runDir, 'run.json'))
+  const side = `${arm}${run.options?.humanMode === 'hands-off' ? '-handsoff' : ''}`
   if (run.error !== undefined && run.error !== null) {
     count('건너뜀: 오류로 끝난 실행')
+    count(`실행 뺌(오류로 끝남): ${scenario}/${side}`)
     return []
   }
   const success = run.outcome?.success
   if (typeof success !== 'boolean') {
     count('건너뜀: 숨긴 시험 결과가 없는 실행')
+    count(`실행 뺌(숨긴 시험 결과 없음): ${scenario}/${side}`)
     return []
   }
-  const side = `${arm}${run.options?.humanMode === 'hands-off' ? '-handsoff' : ''}`
+  count(`실행 셈: ${scenario}/${side}`)
   const out: TrackWork[] = []
   for (const w of run.works ?? []) {
     if (w.id === undefined) continue
@@ -288,8 +312,13 @@ function folderWorks(protocol: string, folder: string): TrackWork[] {
     for (const r of readdirSync(sDir, { withFileTypes: true })) {
       const m = /^(.+)-(\d+)$/.exec(r.name)
       const runDir = path.join(sDir, r.name)
-      if (!r.isDirectory() || m === null || !existsSync(path.join(runDir, 'run.json'))) continue
+      if (!r.isDirectory() || m === null) continue
       const [arm = '', n = 0] = [m[1], Number(m[2])]
+      if (!existsSync(path.join(runDir, 'run.json'))) {
+        if (ARMS.includes(arm) || SEQ_ARMS.includes(arm))
+          count(`실행 뺌(run.json 없음): ${s.name}/${arm}`)
+        continue
+      }
       const seq = isSequence(readJson<StoredRun>(path.join(runDir, 'run.json')))
       if (seq && SEQ_ARMS.includes(arm)) out.push(...m3Works(protocol, runDir, s.name, arm, n))
       else if (!seq && batch && ARMS.includes(arm))
@@ -324,7 +353,36 @@ export function trackWorks(
   return { works: all, counts: new Map(counts) }
 }
 
+/** 자료 읽기: 폴더(그 안의 *.jsonl)나 .jsonl 파일 */
+function readInputs<T>(inputs: string[], dir: (p: string) => T[]): T[] {
+  return inputs.flatMap((p) =>
+    statSync(p).isDirectory()
+      ? dir(p)
+      : readFileSync(p, 'utf8')
+          .split('\n')
+          .filter((l) => l.trim() !== '')
+          .map((l) => JSON.parse(l) as T),
+  )
+}
+
 function main(args: string[]) {
+  if (args[0] === '--report') {
+    const { values: v } = parseArgs({
+      args: args.slice(1),
+      options: {
+        track: { type: 'string', multiple: true, default: [] },
+        gate: { type: 'string', multiple: true, default: [] },
+      },
+    })
+    if (v.track.length === 0) {
+      note('쓰는 법: node scripts/track-replay.ts --report --track <자료>... --gate <재생 묶음>...')
+      process.exit(1)
+    }
+    const works = readInputs<TrackWork>(v.track, readTrack)
+    const bundles = readInputs<ReplayBundle>(v.gate, readReplay)
+    console.log(report(works, bundles))
+    return
+  }
   const [out, ...folders] = args
   if (out === undefined || !out.endsWith('.jsonl') || folders.length === 0) {
     note('쓰는 법: node scripts/track-replay.ts <규약>.jsonl <결과 폴더>...')

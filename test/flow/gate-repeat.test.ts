@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { contractHash, examplesFileText } from '../../src/core/contract.ts'
 import type { Contract } from '../../src/core/types.ts'
 import type { CheckLine, ReviewLine, Target } from '../../scripts/gate-repeat.ts'
-import { calc, QUALITY_TEXT, TESTS_BASE } from '../support/calc.ts'
+import { calc, QUALITY, QUALITY_TEXT, TESTS_BASE } from '../support/calc.ts'
 import { cleanupAll, makeRepo, makeTempDir, writeFiles, type TestRepo } from '../support/repo.ts'
 
 afterAll(cleanupAll)
@@ -145,7 +145,44 @@ describe('gate-repeat: (A) check와 (B) 리뷰 반복', () => {
     expect(r.stdout).toMatch(/- flaky: 2회 → (결론이 갈림|칸이 갈림)/)
     expect(r.stdout).toContain('  commands.unit: unstable | pass')
     expect(r.stdout).toMatch(/결정론 입력만으로 결론\(또는 채운 조건\)이 갈린 head: \d\/2/)
+    // met을 가를 수 있는 입력 칸(여기서는 commands.unit)이 갈린 head는 결론이 같아도 따로 센다
+    expect(r.stdout).toContain('met을 가를 수 있는 입력 칸')
+    expect(r.stdout).toMatch(/diff\)이 갈린 head: 1\/2/)
+    expect(r.stdout).toContain('덜 함(끝난 반복이 2 아래): -')
     expect(await repoState(repo)).toBe(before)
+  })
+
+  test('(A) setup이 실패한 반복은 칸의 갈림이 아니라 준비 실패로 적고, --max-attempts까지만 다시 하며, 요약은 덜 함으로 뺀다', async () => {
+    const broken = await makeRepo({
+      files: {
+        'package.json': '{ "name": "calc", "private": true, "type": "module" }\n',
+        '.gitignore': '.relay-out/\n',
+        '.relay/quality.json': `${JSON.stringify({ ...QUALITY, setup: { run: 'exit 3', inputs: ['package.json'], keep: [] } }, null, 2)}\n`,
+        'src/calc.js': calc('lo'),
+        'test/calc.test.js': TESTS_BASE,
+      },
+    })
+    await broken.branch('fix')
+    await broken.commit('clamp 고침', {
+      'src/calc.js': calc('hi'),
+      'test/calc.test.js': FIXED_TEST,
+    })
+    const file = join(dir, 'targets-setup.json')
+    const t: Target = { name: 'setup', repo: broken.dir, base: 'main', head: 'fix' }
+    await writeFile(file, JSON.stringify([t]))
+    const out = join(dir, 'check-setup.jsonl')
+    const args = ['check', '--targets', file, '--repeats', '1', '--out', out]
+    expect((await gateRepeat(args)).code).toBe(0)
+    const first = readLines<CheckLine>(out)
+    expect(first.map((l) => l.status)).toEqual(['failed'])
+    expect(first[0]?.error).toMatch(/^setup 실패: setup\(/)
+    // 다시 하기는 두 번째 시도까지(기본 --max-attempts 2), 그 뒤 --resume은 더 하지 않는다
+    expect((await gateRepeat([...args, '--resume'])).code).toBe(0)
+    const last = await gateRepeat([...args, '--resume'])
+    expect(readLines<CheckLine>(out)).toHaveLength(2)
+    expect(last.stdout).toContain('- setup: 0회, 실패 1, 다시 한 반복 1 → 덜 함(분모에서 뺌)')
+    expect(last.stdout).toContain('갈린 head: 0/0')
+    expect(last.stdout).toContain('덜 함(끝난 반복이 2 아래): setup')
   })
 
   test('(A) 이미 있는 결과는 --resume 없이 덮지 않고, --resume은 끝난 반복을 건너뛴다', async () => {
@@ -169,10 +206,15 @@ describe('gate-repeat: (A) check와 (B) 리뷰 반복', () => {
       '--dry',
       '--out',
       out,
+      '--check',
+      join(dir, 'check.jsonl'),
     ])
     expect(r.code, r.stderr).toBe(0)
     const lines = readLines<ReviewLine>(out)
     expect(lines).toHaveLength(4)
+    // (A)의 줄을 주면 결론을 가르는 갈림(유무 갈림 × (A)에서 모두 small)을 센다. 가짜 리뷰어는 늘 같은 지적이라 0
+    expect(r.stdout).toContain('유무는 같고 갈래만 갈림 0')
+    expect(r.stdout).toMatch(/결론을 가르는 갈림\(유무가 갈렸고 .*\): 0/)
     expect(lines.every((l) => l.status === 'done' && l.dry)).toBe(true)
     // 가짜 리뷰어의 지적 가운데 지금 올림 규칙(core raises)이 올리는 것만
     expect(lines[0]?.raises).toEqual({ 'structure/medium': 1 })

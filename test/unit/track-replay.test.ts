@@ -11,11 +11,14 @@ import { readReplay } from '../support/gate-replay.ts'
 import {
   afterProxy,
   agreementTable,
+  ledgerDisagreements,
   ledgerOf,
   metBy,
   precisionTable,
   readTrack,
   report,
+  runGroups,
+  runTable,
   workName,
   type TrackWork,
 } from '../support/track-replay.ts'
@@ -86,6 +89,9 @@ describe('재생 실적 자료', () => {
     console.log(text)
     expect(text).toContain('표 1.')
     expect(text).toContain('표 4.')
+    expect(text).toContain('표 2c.')
+    expect(text).toContain('표 5.')
+    expect(text).toMatch(/m2\.1: 실행 35\(내보내기 없음 0\), 채움 3, 거짓 자동 0/)
   })
 })
 
@@ -128,6 +134,62 @@ describe('재생 실적의 셈', () => {
     expect([t['small']?.n, t['small']?.outside.open]).toEqual([0, 3])
     // 옛 결론 줄에 초안 조건을 채워 비교군을 센다
     expect(ledgerOf(work({}))[0]?.conds).toEqual({ small: 'draft' })
+    // 가를 수 없는 것(null)을 열림으로 두면 그 Work는 분모 밖이다(M4 규약 4.4)
+    const open = ends.flatMap((w) => ledgerOf(w, true, true))
+    const u = shadowStats({ entries: open, scope: { pool: true }, epoch: 'all', now: null })[
+      'small'
+    ]
+    expect([u?.n, u?.match, u?.miss.unknown_change, u?.outside.open]).toEqual([2, 1, 0, 1])
+  })
+
+  test('표 5: 실행 단위 채움, 내보내기가 없는 실행도 n에 들고, 앱 장부(a)와 지금 관문(b)을 견준다', () => {
+    const b = BUNDLES.find(
+      (x) => x.protocol === 'm2.1' && x.scenario === '07-two-bugs' && x.run === 1,
+    )
+    if (b === undefined) throw new Error('자료에 m2.1 07 회차 1이 없음')
+    const same = BUNDLES.filter(
+      (x) => x.protocol === 'm2.1' && x.scenario === b.scenario && x.arm === b.arm && x.run === 1,
+    )
+    const keys = { protocol: 'm2.1', scenario: b.scenario, arm: b.arm }
+    const line = (x: (typeof same)[number], met: string[]) => ({
+      ...LINE,
+      head: x.evidence.head,
+      met,
+    })
+    const app = same.map((x, i) =>
+      work({
+        ...keys,
+        run: 1,
+        work: x.work.slice(0, 8),
+        ledger: [line(x, i === 0 ? [] : ['small'])],
+      }),
+    )
+    const empty = work({ ...keys, run: 9, work: 'w9', ledger: [] })
+    const rows = runTable([...app, empty], same)
+    expect(rows.map((r) => [r.run, r.bundles, r.met, r.ledger_met])).toEqual([
+      [1, same.length, true, false],
+      [9, 0, false, false],
+    ])
+    const g = runGroups(rows)
+    expect(g).toEqual([
+      expect.objectContaining({ runs: 2, met: 1, ledger_met: 0, no_export: 1, disagree: 1 }),
+    ])
+    const d = ledgerDisagreements(app, same)
+    expect(d.compared).toBe(same.length)
+    expect(d.differ).toEqual([
+      `m2.1/${b.scenario}/${b.arm}-1/${same[0]?.work.slice(0, 8)}: 앱 장부 못 채움, 지금 관문 채움`,
+    ])
+    // met 칸이 없는 옛 줄은 견주지 않고 (a)는 '-'
+    const old = same.map((x) =>
+      work({
+        ...keys,
+        run: 1,
+        work: x.work.slice(0, 8),
+        ledger: [{ ...LINE, head: x.evidence.head }],
+      }),
+    )
+    expect(runTable(old, same)[0]?.ledger_met).toBeNull()
+    expect(ledgerDisagreements(old, same).compared).toBe(0)
   })
 
   test('표 3: 귀속 대리(main 레포 시험 실패, 앞 main 통과)가 누적 숨긴 시험의 깨뜨림을 잡는가', () => {

@@ -66,5 +66,31 @@ describe('track-replay: 묶은 기록에서 빠진 파일을 센다', () => {
       false,
     )
     expect(found.counts.has('장부 파일 없음(이 Work의 장부 줄 없음)')).toBe(false)
+    // 증거가 마지막 결론 줄과 다른 head면 null의 까닭을 센다
+    await writeFiles(run, {
+      'works/w1/evidence.json': JSON.stringify({
+        head: 'b'.repeat(40),
+        diff: { files: 1, added: 1, deleted: 1, paths: ['x.js'] },
+      }),
+    })
+    const other = trackWorks('m2', [root])
+    expect(other.works[0]?.end).toEqual({ kind: 'ended', same_as_export: null })
+    expect(other.counts.get('같은 변경을 가르지 못함: 증거가 마지막 결론 줄과 다른 head')).toBe(1)
+  })
+
+  test('실행을 무리마다 셈과 뺌(까닭)으로 센다: 오류, 숨긴 시험 결과 없음, run.json 없음', async () => {
+    const root = await makeTempDir('relay-track-replay-runs-')
+    const s = join(root, '08-timezone')
+    await writeFiles(root, { 'report.json': '{}\n' })
+    const ok = { error: null, outcome: { success: true }, works: [] }
+    await writeFiles(join(s, 'relay3-1'), { 'run.json': JSON.stringify(ok) })
+    await writeFiles(join(s, 'relay3-2'), { 'run.json': JSON.stringify({ ...ok, error: 'x' }) })
+    await writeFiles(join(s, 'relay3-3'), { 'run.json': JSON.stringify({ ...ok, outcome: null }) })
+    await writeFiles(join(s, 'relay3-4'), { 'runner.log': '' })
+    const { counts } = trackWorks('m4', [root])
+    expect(counts.get('실행 셈: 08-timezone/relay3')).toBe(1)
+    expect(counts.get('실행 뺌(오류로 끝남): 08-timezone/relay3')).toBe(1)
+    expect(counts.get('실행 뺌(숨긴 시험 결과 없음): 08-timezone/relay3')).toBe(1)
+    expect(counts.get('실행 뺌(run.json 없음): 08-timezone/relay3')).toBe(1)
   })
 })

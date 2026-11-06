@@ -12,12 +12,15 @@ import {
   type GenerationRun,
 } from '../../src/engine/stability.ts'
 import {
+  checkSummary,
   generationSummary,
+  isMetInput,
   readJsonl,
   reviewCost,
   reviewSummary,
+  type CheckLine,
 } from '../../scripts/gate-repeat.ts'
-import { generationRuns, readReplay, type ReplayBundle } from '../support/gate-replay.ts'
+import { generationRuns, readReplay, runMet, type ReplayBundle } from '../support/gate-replay.ts'
 
 const evidence = (over: Partial<EvidenceBundle> = {}): EvidenceBundle => ({
   version: 1,
@@ -147,6 +150,55 @@ describe('(B) reviewStability', () => {
     expect(text).toMatch(/리뷰 한 번\(끝난 반복 54, 토큰을 적은 반복 54\): 평균 \d+초/)
   })
 
+  const checkLine = (name: string, repeat: number, met: string, unit = 'pass'): CheckLine => ({
+    name,
+    repeat,
+    status: 'done',
+    digest: { 'commands.unit': unit, met, conclusion: 'human_merge' },
+    ms: 1,
+  })
+
+  test('checkSummary: 끝난 반복이 minDone에 이른 대상만 분모, met을 가를 수 있는 입력 칸의 갈림을 따로 센다', () => {
+    const lines = [
+      ...[1, 2, 3].map((r) => checkLine('same', r, 'small')),
+      ...[1, 2, 3].map((r) => checkLine('field', r, 'small', r === 2 ? 'unstable' : 'pass')),
+      ...[1, 2, 3].map((r) =>
+        checkLine('flip', r, r === 3 ? '' : 'small', r === 3 ? 'fail' : 'pass'),
+      ),
+      ...[1, 2].map((r) => checkLine('short', r, 'small')),
+    ]
+    const text = checkSummary(lines, 3)
+    expect(text).toContain('결정론 입력만으로 결론(또는 채운 조건)이 갈린 head: 1/3')
+    expect(text).toMatch(/diff\)이 갈린 head: 2\/3/)
+    expect(text).toContain('- short: 2회 → 덜 함(분모에서 뺌)')
+    expect(text).toContain('덜 함(끝난 반복이 3 아래): short')
+    // 기본(2)이면 short도 분모에 든다
+    expect(checkSummary(lines)).toContain('갈린 head: 1/4')
+    expect(
+      ['commands.x', 'ratchets.tests', 'lines.C1', 'examples_file', 'diff'].every(isMetInput),
+    ).toBe(true)
+    expect(['met', 'conclusion', 'decisive', 'missing'].some(isMetInput)).toBe(false)
+  })
+
+  test('reviewSummary: 유무 갈림, 유무는 같고 갈래만 갈림, (A)에서 모두 small을 채운 대상의 유무 갈림(결론을 가름)', () => {
+    const review = (name: string, raises: Record<string, number>[]) =>
+      raises.map((r, i) => ({ name, repeat: i + 1, status: 'done' as const, raises: r }))
+    const raw = [
+      ...review('decide', [{}, { 'security/high': 1 }]),
+      ...review('nometa', [{}, { 'security/high': 1 }]),
+      ...review('kind', [{ 'structure/medium': 1 }, { 'security/low': 1 }]),
+    ]
+    const check = [
+      ...[1, 2].map((r) => checkLine('decide', r, 'small')),
+      ...[1, 2].map((r) => checkLine('nometa', r, r === 1 ? 'small' : '')),
+    ]
+    const text = reviewSummary(raw, check)
+    expect(text).toContain('올림 유무가 갈림 2, 올림 갈래(심각도는 보지 않음)가 갈림 3')
+    expect(text).toContain('유무는 같고 갈래만 갈림 1')
+    expect(text).toMatch(/결론을 가르는 갈림\(.*\): 1 \(decide\)/)
+    expect(reviewSummary(raw)).toContain('(A) 자료(--check)를 주지 않아 재지 않음')
+  })
+
   test('reviewCost: 끝난 반복만의 평균 시간과 토큰(배치 비용 어림)', () => {
     const usage = (input: number, out: number) => ({ input_tokens: input, output_tokens: out })
     const lines = [
@@ -244,6 +296,14 @@ describe('(C) generationSpread와 generationRuns', () => {
     expect(runs[0]?.conclusions).toHaveLength(3)
     expect(runs.every((r) => !r.met)).toBe(true)
     expect(runs[0]?.facts.length).toBeGreaterThan(0)
+  })
+
+  test('RUN_MET에 없는 규약은 조용히 하나라도로 세지 않고 던진다(자료 폴더 밖의 규약도)', () => {
+    expect(runMet('m4')).toBe('all')
+    expect(() => runMet('m9')).toThrow('RUN_MET에 없는 규약: m9')
+    expect(() => generationRuns([bundle({ protocol: 'm9' }, contract(['change']))])).toThrow(
+      'RUN_MET에 없는 규약',
+    )
   })
 
   test('지금 재생 자료로 요약이 나온다(무리마다 실행 5개 안팎)', () => {
