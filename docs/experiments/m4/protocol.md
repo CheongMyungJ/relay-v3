@@ -1,13 +1,13 @@
 # M4 평가 규약 (그림자 실적)
 
-- 상태: **초안(고정 전)**. 고정 전에 사용자에게 물을 것 하나(아래 Q13의 단위)가 남았다. 답을 받고 빈칸을 채워 고정한다. 고정한 뒤에는 바꾸지 않는다. 바꿀 일이 생기면 사람에게 묻고 까닭을 `log.md`에 적는다(이 폴더에 고정 때 만든다).
-- 고정: `<고정 때 채움>`(날짜와 UTC 시각). SHA는 둘이다.
-  - **빌드·도구 SHA** = relay-v3 `<고정 때 채움>`: 규약 커밋 바로 앞의 커밋. 고정 때 worktree `/home/user/relay-v3-m4`를 이 커밋으로 옮기고(`git checkout --detach <SHA>`) `npm ci`, `node node_modules/electron/install.js`, `npm run build`를 다시 하며 작업 트리가 깨끗해야 한다. 평가 도구에는 `RELAY3_APP=/home/user/relay-v3-m4`로 준다. 앱이 장부에 적는 `relay_build`는 이 SHA다. 지금 worktree는 `14f3303`(시범의 빌드)에 있고, 그 뒤의 커밋(`27b348c`와 규약 검토의 도구 고침 `e8a0df5`)은 `scripts/`, `test/`, `docs/`만 바꿨으므로 앱 빌드는 같다. 그래도 `relay_build`가 하나의 SHA를 가리키게 옮긴다.
+- 상태: **고정(2026-11-06 22:55 UTC)**. 고정한 뒤에는 바꾸지 않는다. 바꿀 일이 생기면 사람에게 묻고 까닭을 `log.md`에 적는다(이 폴더에 고정 때 만든다).
+- 고정: 2026-11-06 22:55 UTC. SHA는 둘이다.
+  - **빌드·도구 SHA** = relay-v3 `e8a0df5`: 도구를 바꾼 마지막 커밋(그 뒤의 `9d540d1`은 이 규약의 초안만 더했다). 고정 때 worktree `/home/user/relay-v3-m4`를 이 커밋으로 옮기고(`git checkout --detach <SHA>`) `npm ci`, `node node_modules/electron/install.js`, `npm run build`를 다시 하며 작업 트리가 깨끗해야 한다. 평가 도구에는 `RELAY3_APP=/home/user/relay-v3-m4`로 준다. 앱이 장부에 적는 `relay_build`는 이 SHA다. 지금 worktree는 `14f3303`(시범의 빌드)에 있고, 그 뒤의 커밋(`27b348c`와 규약 검토의 도구 고침 `e8a0df5`)은 `scripts/`, `test/`, `docs/`만 바꿨으므로 앱 빌드는 같다. 그래도 `relay_build`가 하나의 SHA를 가리키게 옮긴다.
   - **규약 SHA** = 이 줄을 넣은 커밋. 빌드·도구 SHA에 이 문서와 대상 목록(`targets.json`의 사본)만 더한 커밋이다. 재생, (A), (B), (C)의 셈은 설계자 체크아웃(`/home/user/relay-v3`)에서 이 커밋으로 돈다(도구의 코드는 빌드·도구 SHA와 같다).
-  - 그 커밋의 `GATE_VERSION` = 1, `REVIEW_PROMPT_VERSION` = 4, `npm run test:replay`와 `gate-version.test.ts`가 지난다(고정 때 다시 확인해 적는다). 평가 도구 = relay-v2 `<고정 때 채움>`(`--clean-work`가 든 `cba165a` 이후, push함. `config.json`·`run.json`의 commit이 돈 코드를 가리키게, 8.1).
+  - 그 커밋의 `GATE_VERSION` = 1, `REVIEW_PROMPT_VERSION` = 4, `npm run test:replay`와 `gate-version.test.ts`가 지난다(고정 때 다시 확인해 적는다). 평가 도구 = relay-v2 `cba165a`(`--clean-work`가 든 `cba165a` 이후, push함. `config.json`·`run.json`의 commit이 돈 코드를 가리키게, 8.1).
 - 근거: [m4-design.md](../../m4-design.md) 8절(M4f 관문 5회), 9절(M4g 재생 실적), 11절(30일), 12절(M5에 넘기는 것), 13절(장치 줄), 15절(재는 판)과 절마다의 '만든 것'·'설계와 다른 것'. [devices.md](../../devices.md)의 M4 줄('그림자 실적', '머지 뒤 30일 추적', '세션 커밋 가르기', '판 다시 재기', '자동 머지')의 끄는 조건과 최소 n. [design.md](../../design.md) V46~V54. philosophy 8.3(하네스를 깎는 규칙), 8.4 일곱째(결정론 입력의 5회 갈림). 모양은 [M3 규약](../m3/protocol.md)과 [M2.1 규약](../m2.1/protocol.md)을 따른다.
 - 사용자 결정(2026-11-06, ✅, m4-design 머리): Q10 relay-v3 자기 실행(M4h)은 나중이다. 그래서 이 규약의 숫자는 재생과 평가 자료로만 낸다. Q2 M5 숫자는 m4-design 12절의 안 그대로다. Q7 트레일러는 붙인다(기본 켬). Q13 이 평가는 같은 요청 5회 새 실행을 한다: 재생 소급 + (A) + (B) + (C) 시나리오 6개 × 5회 = Work 30.
-- **사용자에게 다시 물을 것(고정 전, 규칙 9).** Q13의 'Work 30'은 실행마다 Work가 하나라는 어림이었다. 3.4의 시나리오 가운데 `07-two-bugs`는 실행마다 Work가 둘이라(지난 자료 m2·m2.1 모두) 시나리오 6개 × 5회 = **실행 30, Work 약 35**다. 이 초안은 단위를 실행으로 적었다(4.3: 같은 요청 한 번이 단위). 사용자의 답이 'Work 30'이면 `07-two-bugs`를 `19-split-report`(실행마다 Work 하나)로 바꾸고 3.4·5절·6절의 Work 수를 30으로 고친다. 어느 쪽이든 단위는 한 가지로만 쓴다: 실행의 셈(조건 채움, 거짓 자동, 갈림)은 실행, 장부·세션 커밋의 셈(일치, 판 칸, 트레일러)은 Work다.
+- **사용자 결정(2026-11-06, ✅): Q13의 단위는 실행이다. 시나리오 6개 × 5회 = 실행 30, Work 약 35**(`07-two-bugs`가 실행마다 Work 둘). 실행의 셈(조건 채움, 거짓 자동, 갈림)은 실행, 장부·세션 커밋의 셈(일치, 판 칸, 트레일러)은 Work로만 쓴다. 물을 때 설계자가 시나리오 보기로 '07, 08, 10, 14, 45, 19'를 적었으나, 이 규약은 3.4의 까닭(45는 실행 하나가 약 15달러, 19는 조건을 거의 채우지 않음)대로 '07, 08, 10, 14, 09, 47'을 쓴다. 사용자의 답은 단위에 대한 것이고, 이 차이는 보고에 적는다.
 - 도구: 재생과 (A)·(B)·(C)의 셈은 relay-v3 `scripts/gate-repeat.ts`(요약 `scripts/gate-repeat-summary.ts`), `scripts/track-replay.ts`(`--report`), `scripts/gate-replay-fixture.ts`, `scripts/app-record.ts`와 `engine/stability.ts`, `engine/shadow.ts`, `test/support/gate-replay.ts`, `test/support/track-replay.ts`다. (C)의 새 실행은 relay-v2 평가 도구(`relay-v2/app/eval/run.mjs`, 쪽 `relay3`)다. **고정할 SHA에 없는 셈은 '재지 않음'이다. 결과 폴더에서 나중에 손으로 세지 않는다.** 도구가 찍은 줄을 그대로 옮긴다.
 - 시범 실행: 2026-11-06(규약 초안 전후, 8.2). 결과는 세션 임시 폴더(`/tmp/claude-0/…/scratchpad`의 `c-pilot/`, `gr-check.jsonl`, `gr-check21.jsonl`, `gr-review.jsonl`, `m4p/pre1.jsonl`)에 있고 7절대로 (C) 전에 옮긴다. 시범 결과는 판정과 집계에 넣지 않는다.
 
@@ -89,7 +89,7 @@ M4는 그림자 실적을 바르게 세고 보이는 장치를 만들었다(장�
 
 ### 3.4 (C) 같은 요청 5회 새 실행
 
-**시나리오 6개 × 5회 = 실행 30**(사용자 결정 Q13 ✅. Work 수는 머리의 물음). 쪽 `relay3` 하나.
+**시나리오 6개 × 5회 = 실행 30, Work 약 35**(사용자 결정 Q13 ✅, 머리). 쪽 `relay3` 하나.
 
 | 시나리오 | 실행마다 Work | 왜 | 지난 자료(지금 관문, 실행 단위) |
 |---|---|---|---|

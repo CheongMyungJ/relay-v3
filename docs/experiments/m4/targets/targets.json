@@ -1,0 +1,122 @@
+[
+  {
+    "name": "07-two-bugs/relay3-m21-2/1982d73f",
+    "repo": "07-two-bugs_relay3-m21-2_1982d73f",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-2_1982d73f.contract.json",
+    "request": "07-two-bugs_relay3-m21-2_1982d73f.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-2/e5affdc4",
+    "repo": "07-two-bugs_relay3-m21-2_e5affdc4",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-2_e5affdc4.contract.json",
+    "request": "07-two-bugs_relay3-m21-2_e5affdc4.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-3/ec993a2d",
+    "repo": "07-two-bugs_relay3-m21-3_ec993a2d",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-3_ec993a2d.contract.json",
+    "request": "07-two-bugs_relay3-m21-3_ec993a2d.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-4/c16c735c",
+    "repo": "07-two-bugs_relay3-m21-4_c16c735c",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-4_c16c735c.contract.json",
+    "request": "07-two-bugs_relay3-m21-4_c16c735c.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-5/452fa99c",
+    "repo": "07-two-bugs_relay3-m21-5_452fa99c",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-5_452fa99c.contract.json",
+    "request": "07-two-bugs_relay3-m21-5_452fa99c.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-5/99de9298",
+    "repo": "07-two-bugs_relay3-m21-5_99de9298",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-5_99de9298.contract.json",
+    "request": "07-two-bugs_relay3-m21-5_99de9298.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-3/99dda7cd",
+    "repo": "07-two-bugs_relay3-m21-3_99dda7cd",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-3_99dda7cd.contract.json",
+    "request": "07-two-bugs_relay3-m21-3_99dda7cd.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "07-two-bugs/relay3-m21-4/b54c9c51",
+    "repo": "07-two-bugs_relay3-m21-4_b54c9c51",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "07-two-bugs_relay3-m21-4_b54c9c51.contract.json",
+    "request": "07-two-bugs_relay3-m21-4_b54c9c51.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "09-stock-negative/relay3-m21-3/fa6ac6aa",
+    "repo": "09-stock-negative_relay3-m21-3_fa6ac6aa",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "09-stock-negative_relay3-m21-3_fa6ac6aa.contract.json",
+    "request": "09-stock-negative_relay3-m21-3_fa6ac6aa.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  },
+  {
+    "name": "09-stock-negative/relay3-m21-4/7e65ced6",
+    "repo": "09-stock-negative_relay3-m21-4_7e65ced6",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "contract": "09-stock-negative_relay3-m21-4_7e65ced6.contract.json",
+    "request": "09-stock-negative_relay3-m21-4_7e65ced6.request.md",
+    "options": {
+      "effort": "medium",
+      "agentModel": "sonnet"
+    }
+  }
+]
