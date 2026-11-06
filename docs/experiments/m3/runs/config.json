@@ -1,0 +1,53 @@
+{
+  "agentModel": "sonnet",
+  "effort": "medium",
+  "humanModel": "sonnet",
+  "humanEffort": "medium",
+  "judgeModel": "sonnet",
+  "cliArgs": [
+    "--dangerously-skip-permissions"
+  ],
+  "vision": true,
+  "workRoot": "/tmp/relay-eval/m3-seq",
+  "apps": {},
+  "relay3App": "/home/user/relay-v3-m3",
+  "humanMode": "normal",
+  "judgePurpose": false,
+  "qualityOverlay": {
+    "path": ".relay/quality.json",
+    "sha256": "082644e4b314500c5a4f02f77ca165b032b0ecca565b3460446d70417a89a02f"
+  },
+  "baseline": {
+    "model": "sonnet",
+    "effort": "medium",
+    "minutes": 30
+  },
+  "sealed": true,
+  "dry": false,
+  "scenario": "48-long-shop",
+  "arms": [
+    "relay3",
+    "relay3-m2",
+    "cli"
+  ],
+  "runs": 3,
+  "firstRun": 1,
+  "maxAttempts": 3,
+  "debtRule": "always-record",
+  "startedAt": "2026-11-06T07:24:02.004Z",
+  "commit": "25e78fa",
+  "appCommits": {
+    "relay3": "a0b39e9"
+  },
+  "claudeVersion": "2.1.318 (Claude Code)",
+  "builds": [
+    {
+      "at": "2026-11-06T07:24:02.004Z",
+      "commit": "25e78fa",
+      "appCommits": {
+        "relay3": "a0b39e9"
+      },
+      "claudeVersion": "2.1.318 (Claude Code)"
+    }
+  ]
+}
