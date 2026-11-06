@@ -5,9 +5,9 @@ M2는 Electron 앱에서 한 Work의 생애를 끝까지 잇는다([m2-app.md](m
 ## 0. 배치와 층
 
 ```
-src/core        순수 (M1 + work.ts, ledger.ts, git-guard.ts, instructions.ts, review.ts)
+src/core        순수 (M1 + work.ts, git-guard.ts, instructions.ts, review.ts)
 src/adapters    git·프로세스·PTY·gh·claude (M1 + pty.ts, claude.ts, gh.ts)
-src/engine      check 흐름 (M1)
+src/engine      check 흐름 (M1), ledger.ts(M4-0에서 core에서 옮김)
 src/cli         relay CLI (M1)
 src/shared      메인·렌더러가 함께 쓰는 IPC 타입 (api.ts). 런타임 코드 없음(타입과 상수만)
 src/main        Electron 메인. index.ts와 ipc.ts만 'electron'을 가져온다. 나머지는 Node에서도 돈다(시험)
@@ -64,7 +64,10 @@ v2 `app/src/core/git-guard.ts`를 옮긴다(가져오는 v2 모듈은 같은 동
 - `REVIEW_PROMPT_VERSION: number` — 리뷰 프롬프트·스키마의 판. 바꾸면 올린다. 앱이 리뷰 결과를 묶음에 붙일 때 `review.prompt_version`에 적고, 미리 리뷰(V23)를 내보내기에 다시 쓸 때 견준다. 1은 V23의 첫 판, 2는 심각도 기준표(V26), 3은 요청 대조(V30: 요청 인용, request_gap, high의 '요청이 이름 붙인 동작'), 4는 예시와 시험 불일치의 뜻(V34: 값을 박아 쓴 시험이라도 승인된 예시를 그대로 확인하면 불일치가 아님).
 - `reviewReady(e: EvidenceBundle, contract: Contract | null, head: string | null): boolean` — 리뷰 준비(V23): 계약이 있고, 묶음이 이 계약(hash)과 이 head로 만든 것이고(낡지 않음), 못 미침·증거 없음 줄이 없고(줄 판정이 없으면 준비가 아님), 명령이 모두 pass이고, 풀리지 않은 계약 변경 요청(`contract.change_requested`, `e.contract_change_requested`)이 없다. 앱은 쉬는 세션의 이 head에 리뷰를 미리 돌린다.
 
-### `src/core/ledger.ts` — 실적 장부(그림자)
+## 1a. engine (순수 함수지만 core 상한 때문에 engine에 둠)
+
+### `src/engine/ledger.ts` — 실적 장부(그림자)
+M4-0(m4-design 2절)에서 `src/core/ledger.ts`를 옮겼다(동작 그대로, `import type`만 씀). 선례는 M3a의 `engine/knowledge-format.ts`다. 렌더러는 이 파일의 타입을 가져가지 않는다.
 ```ts
 interface LedgerEntry {
   ts: string; project: string; work: string; head: string

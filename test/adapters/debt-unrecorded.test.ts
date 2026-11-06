@@ -3,7 +3,7 @@
 // 기준의 .relay/debt/에 같은 경로·래칫의 빚이 있으면 기록된 것
 import { afterAll, expect, test } from 'vitest'
 import { formatDebt } from '../../src/core/debt.ts'
-import type { LedgerEntry } from '../../src/core/ledger.ts'
+import type { LedgerEntry } from '../../src/engine/ledger.ts'
 import type { RatchetResult } from '../../src/core/types.ts'
 import { unrecordedRegressions } from '../../src/engine/debt-record.ts'
 import { cleanupAll, makeRepo } from '../support/repo.ts'

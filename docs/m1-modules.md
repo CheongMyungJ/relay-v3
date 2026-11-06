@@ -161,6 +161,9 @@ v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 �
 - `relatedListText(entries, request): string` — request.md 끝의 `## 관련 지식 (relay가 고름)`: 요청 글의 낱말·경로·코드 이름으로 점수가 있는 항목을 `PICK_LIMIT`(15)개까지 '- 제목 — `경로`'로. 본문은 넣지 않는다. 항목이 없으면 빈 글, 겹치는 것이 없으면 한 줄.
 - knowledge.ts(git): `readEntries(root, sha)`, `relatedKnowledge(root, ref, request)`(새 Work), `checkKnowledgeGround(id, fileAt)`, `knowledgeChanged(diff): string[]`, `checkKnowledge(root, diff): Promise<{ changed: string[]; issues: KnowledgeIssue[] }>` — changed(`knowledgeChanged`)는 이 diff가 바꾼(더함·고침·옮김·지움) 지식 폴더의 .md(README 빼고). issues: 바꾼 파일이 지식 경로가 아니면 format, 바꾼 항목마다 `checkEntryFormat`(format)과 anchor의 마지막 조각이 head의 코드(지식 폴더 밖)에 없으면 anchor. 바꾸지 않은 항목은 `## 아직 규칙을 따르지 않는 곳`의 경로를 이 diff가 바꿨으면 not_yet(v2 D296), anchor를 이 diff가 지운 줄에 있고 head에 없으면 anchor.
 
+### `src/engine/ledger.ts` — 실적 장부(그림자)
+M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. 순수 함수지만 src/core 상한 때문에 engine에 둔다(knowledge-format.ts와 같다). 약속은 [m2-modules.md](m2-modules.md) 1a절.
+
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
 - `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).
 - `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 `M3_DEFAULT`의 값.

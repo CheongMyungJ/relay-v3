@@ -1,8 +1,8 @@
-// 실적 장부 (그림자, V3, docs/m2-modules.md 1절 ledger.ts). $RELAY_HOME/ledger.jsonl에 관문 결론마다 한 줄.
+// 실적 장부 (그림자, V3, docs/m2-modules.md 1a절 ledger.ts. M4-0에서 core에서 옮김). $RELAY_HOME/ledger.jsonl에 관문 결론마다 한 줄.
 // 머지·닫힘은 그 Work(V22: 그 내보내기)의 줄(같은 줄을 고쳐 쓰거나 새 줄)에 by, merged_head, closed로 남는다.
 // 실적은 조건마다 '자동이었으면 머지했을 head를 사람이 그대로 머지했나'다. 버전이 바뀌면 다시 잰다(philosophy 원칙 4).
 
-import type { Conclusion, RatchetResult } from './types.ts'
+import type { Conclusion, RatchetResult } from '../core/types.ts'
 
 export interface LedgerEntry {
   ts: string

@@ -48,6 +48,16 @@ M4e의 세션 커밋 집합은 소급되지 않으므로 M4a 바로 뒤에 낼 �
 - **core에 더하는 것(M4 전체):** `types.ts`의 `EvidenceBundle.review`에 `model?: string` 한 줄(4절). `Policy`, `GateResult`, `gate()`의 모양은 바꾸지 않는다. 세션 환경 변수는 core `sessionEnv`가 아니라 main에서 합친다(7절).
 - 렌더러는 core 타입만 가져갈 수 있으므로 화면용 숫자의 모양(`RecordStats`)은 `src/shared/api.ts`에 둔다(engine 타입을 렌더러가 가져가지 않게).
 
+### 2.1 만든 것 (M4-0)
+
+- `src/core/ledger.ts`를 `git mv`로 `src/engine/ledger.ts`에 옮겼다. 바뀐 것은 `import type`의 경로(`../core/types.ts`)와 머리 주석뿐이다. 가져오는 곳 다섯(`main/store.ts`, `works-exports.ts`, `works-projects.ts`, `works-debt.ts`, `engine/debt-record.ts`)과 시험 셋(`test/unit/ledger.test.ts`, `test/flow/works.test.ts`, `test/adapters/debt-unrecorded.test.ts`)의 경로를 바꿨다. 시험 본문은 그대로다.
+- 문서: m2-modules 0절의 배치와 1a절(새 절, engine), m1-modules engine 절의 한 줄, design.md 7절('CLI `relay gate`는 실적을 읽지 않는다'), V45.
+- core 4,999 → 4,847줄(limits 셈).
+
+### 2.2 설계와 다른 것 (M4-0)
+
+- 없음. m2-modules에는 engine 절이 없어서 1a절을 새로 만들었다.
+
 ## 3. M4a 장부 칸과 판
 
 ### 3.1 내보내기 결론 줄에 더하는 칸

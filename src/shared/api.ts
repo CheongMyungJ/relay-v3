@@ -72,7 +72,7 @@ export interface ProjectView {
    * 커밋하고 push해야 쓰인다
    */
   qualityRef: string | null
-  /** 실적 장부에서 사람이 나빠진 래칫을 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b, core acceptedUnrecorded) */
+  /** 실적 장부에서 사람이 나빠진 래칫을 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b, engine acceptedUnrecorded) */
   unrecordedDebt: number
 }
 

@@ -8,7 +8,7 @@
 import { commitFiles, pushBranch } from '../adapters/git-write.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
 import { parseContract } from '../core/contract.ts'
-import type { LedgerEntry } from '../core/ledger.ts'
+import type { LedgerEntry } from '../engine/ledger.ts'
 import type { EvidenceBundle } from '../core/types.ts'
 import {
   debtAt,

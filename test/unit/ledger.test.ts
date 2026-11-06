@@ -6,7 +6,7 @@ import {
   parseLedger,
   trackRecord,
   type LedgerEntry,
-} from '../../src/core/ledger.ts'
+} from '../../src/engine/ledger.ts'
 
 const NOW = { model: 'opus', claude_version: '2.1.300', relay_version: '0.1.0' }
 

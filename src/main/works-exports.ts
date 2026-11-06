@@ -7,7 +7,7 @@
 
 import type { PrCheck } from '../adapters/gh.ts'
 import type { EvidenceBundle, GateResult, Policy } from '../core/types.ts'
-import { trackRecord, type LedgerEntry } from '../core/ledger.ts'
+import { trackRecord, type LedgerEntry } from '../engine/ledger.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
 import { worseOf } from '../engine/debt-record.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'

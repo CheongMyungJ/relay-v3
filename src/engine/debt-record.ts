@@ -4,7 +4,7 @@
 
 import { changedPaths, lineCounts, lsTree, mergeBase, revParse, showFile } from '../adapters/git.ts'
 import { debtFromRatchet, formatDebt, parseDebt } from '../core/debt.ts'
-import type { LedgerEntry } from '../core/ledger.ts'
+import type { LedgerEntry } from './ledger.ts'
 import { parseQuality, QUALITY_PATH } from '../core/quality.ts'
 import { fileLinesRatchet, type FileLines } from '../core/ratchet.ts'
 import type { DebtItem, RatchetResult } from '../core/types.ts'
