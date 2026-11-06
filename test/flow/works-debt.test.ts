@@ -76,7 +76,7 @@ test('[빚으로 남기고 머지]: relay가 Work 브랜치에 빚을 커밋하�
   const id = await startWork(app)
   const head = await exported(app, id)
   const v = works.view(id)
-  expect(v.m3).toEqual({ knowledge: true, debt: true })
+  expect(v.m3).toEqual({ knowledge: true, debt: true, tidy: true })
   expect(v.gate?.reasons).toContainEqual(expect.stringMatching(/^래칫 나빠짐: file-size/))
   const measured = await exportsOf(app, id)
 

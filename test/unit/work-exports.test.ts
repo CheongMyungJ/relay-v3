@@ -83,12 +83,14 @@ describe('upgradeWork', () => {
       end_memos: [],
       feedback: { rounds: 0, sent: [] },
       // M3 앞의 Work는 M3 장치가 모두 꺼진 것이다(V38). 기록 안 된 나빠짐(M3b)도 없다
-      m3: { knowledge: false, debt: false },
+      m3: { knowledge: false, debt: false, tidy: false },
       unrecorded: [],
     })
-    // M3a의 Work는 빚 기록(M3b)이 꺼진 것이다: Work는 만들 때의 스위치를 지닌다
+    // M3a의 Work는 빚 기록(M3b)과 곁들일 정리(M3c)가 꺼진 것이다: Work는 만들 때의 스위치를 지닌다
     const m3a = { ...old, m3: { knowledge: true } } as unknown as WorkRecord
-    expect(upgradeWork(m3a).m3).toEqual({ knowledge: true, debt: false })
+    expect(upgradeWork(m3a).m3).toEqual({ knowledge: true, debt: false, tidy: false })
+    const m3b = { ...old, m3: { knowledge: true, debt: true } } as unknown as WorkRecord
+    expect(upgradeWork(m3b).m3).toEqual({ knowledge: true, debt: true, tidy: false })
   })
 
   test('뺀 장치의 칸은 버린다: V28(제출 때 기준 확인, V32에서 뺌)의 probe', () => {

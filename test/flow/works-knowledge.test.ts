@@ -105,7 +105,7 @@ async function run(m3?: string) {
 
 test('켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge와 형식 오류의 사람 머지, relay_check', async () => {
   const { app, works, id, groundings, instructions } = await run()
-  expect(works.record(id).m3).toEqual({ knowledge: true, debt: true })
+  expect(works.record(id).m3).toEqual({ knowledge: true, debt: true, tidy: true })
   const request = (await app.store.readText(id, 'request.md')) ?? ''
   expect(request.startsWith(`${REQUEST}\n\n${LIST_HEADING}\n`)).toBe(true)
   expect(request).toContain('- clamp는 hi로 자른다 — `docs/knowledge/calc/clamp.md`')
@@ -146,7 +146,7 @@ test('켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge�
 
 test('RELAY_M3=off: 목록·지침·근거 확인·knowledge 칸 없이 M2 그대로', async () => {
   const { app, works, id, groundings, instructions } = await run('off')
-  expect(works.record(id).m3).toEqual({ knowledge: false, debt: false })
+  expect(works.record(id).m3).toEqual({ knowledge: false, debt: false, tidy: false })
   expect(await app.store.readText(id, 'request.md')).toBe(`${REQUEST}\n`)
   expect(instructions).not.toContain('docs/knowledge/')
   expect(groundings.filter((g) => g.ground.type === 'knowledge').map((g) => g.detail)).toEqual([

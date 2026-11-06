@@ -1,17 +1,17 @@
 // M3 장치의 스위치 (docs/m3-design.md 1절, V38). 장치는 하나씩 켜며 잰다(원칙 5): 프로젝트 설정 m3이 장치마다 켜고 끄고,
 // 환경 변수 RELAY_M3이 있으면 그것이 모두를 덮는다. 장기 평가의 relay3-m2 쪽은 RELAY_M3=off 하나로 M3 장치를 모두 끈다.
 // 값: off(또는 0, none) 모두 끔, on(또는 1, all) 모두 켬, 쉼표로 이은 장치 이름(knowledge: 지식 잇기 M3a, debt: 받아들인
-// 나빠짐의 빚 기록 M3b) 그것만 켬. 비었으면 프로젝트 설정.
+// 나빠짐의 빚 기록 M3b, tidy: 곁들일 정리 M3c) 그것만 켬. 비었으면 프로젝트 설정.
 
 import type { M3Device, M3Switches } from '../core/types.ts'
 
-export const M3_DEVICES: readonly M3Device[] = ['knowledge', 'debt']
+export const M3_DEVICES: readonly M3Device[] = ['knowledge', 'debt', 'tidy']
 
 /** 프로젝트 설정의 기본값: 모두 켬 */
-export const M3_ON: Readonly<M3Switches> = { knowledge: true, debt: true }
+export const M3_ON: Readonly<M3Switches> = { knowledge: true, debt: true, tidy: true }
 
 /** 모두 끔. M3 앞에 만든 Work의 기록도 이것으로 읽는다 */
-export const M3_OFF: Readonly<M3Switches> = { knowledge: false, debt: false }
+export const M3_OFF: Readonly<M3Switches> = { knowledge: false, debt: false, tidy: false }
 
 const all = (on: boolean): M3Switches => ({ ...(on ? M3_ON : M3_OFF) })
 

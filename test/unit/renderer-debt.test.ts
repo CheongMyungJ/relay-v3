@@ -15,7 +15,7 @@ const WORSE: RatchetResult = {
 function view(ratchets: RatchetResult[], more: Partial<EvidenceBundle> = {}) {
   const evidence = { head: 'h1', ratchets, ...more } as EvidenceBundle
   return {
-    m3: { knowledge: true, debt: true },
+    m3: { knowledge: true, debt: true, tidy: true },
     exports: [] as WorkView['exports'],
     evidence,
     head: 'h1' as string | null,
@@ -34,7 +34,9 @@ describe('debtAsk', () => {
     expect(debtAsk(view([]))).toBeNull()
     expect(debtAsk(view([WORSE], { debt_commit: { from: 'h0', items: ['x'] } }))).toBeNull()
     expect(debtAsk({ ...view([WORSE]), head: 'h2' })).toBeNull()
-    expect(debtAsk({ ...view([WORSE]), m3: { knowledge: true, debt: false } })).toBeNull()
+    expect(
+      debtAsk({ ...view([WORSE]), m3: { knowledge: true, debt: false, tidy: true } }),
+    ).toBeNull()
     const units = [{ unit: 'api' }] as WorkView['exports']
     expect(debtAsk({ ...view([WORSE]), exports: units })).toBeNull()
     expect(debtAsk({ ...view([WORSE]), evidence: null })).toBeNull()

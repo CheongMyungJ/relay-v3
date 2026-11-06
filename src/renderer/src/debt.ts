@@ -2,7 +2,7 @@
 // [머지]와 [그래도 끝내기]는 Work 브랜치의 내보내기 증거(지금 HEAD의 것)에 나빠진 래칫이 있고 아직 빚으로 기록하지 않았으면
 // 한 번 묻는다: [빚으로 남기고 …] / [그냥 …]. 이 diff가 이미 둔 빚이 모두 덮은 래칫은 묻지 않는다. 장치(view.m3.debt)가 꺼졌거나 branch_per_unit(V22)이면 묻지 않는다.
 
-import type { EvidenceBundle } from '../../core/types.ts'
+import type { DebtPayoff, EvidenceBundle } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
 
 /** 물을 래칫(한 줄씩 'id (detail)'). 묻지 않으면 null */
@@ -52,4 +52,32 @@ export function debtCommitText(
 export function unrecordedText(v: Pick<WorkView, 'unrecorded'>): string | null {
   if (v.unrecorded.length === 0) return null
   return '앞 기록 뒤로 기준 브랜치에 래칫이 나빠진 채 들어왔고 빚으로 적히지 않았습니다. 세션에게도 요청 글 끝에 알렸습니다.'
+}
+
+type Tidy = NonNullable<EvidenceBundle['tidy']>
+
+/**
+ * 곁들일 정리(M3c)의 [증거] 칸: 갚은 빚(계약 tidy이든 아니든), 못 갚은 빚(계약 tidy인데 갚지 않았거나 가르지 못함), 건드린
+ * 곳의 빚(계약 tidy가 아닌데 이 diff가 바꾼 경로에 닿고 갚지 않음), 정리 몫이 상한을 넘었나(계약 tidy가 있을 때만). 알림이다
+ */
+export function tidyGroups(t: Tidy): {
+  paid: DebtPayoff[]
+  unpaid: DebtPayoff[]
+  touched: DebtPayoff[]
+  over: boolean
+} {
+  const taken = new Set(t.taken)
+  return {
+    paid: t.items.filter((i) => i.status === 'paid'),
+    unpaid: t.items.filter((i) => taken.has(i.id) && i.status !== 'paid'),
+    touched: t.items.filter((i) => !taken.has(i.id) && i.status !== 'paid'),
+    over: t.taken.length > 0 && t.lines > t.max,
+  }
+}
+
+/** 정리 몫 한 줄. 계약 tidy가 없으면 null */
+export function tidyLinesText(t: Tidy): string | null {
+  if (t.taken.length === 0) return null
+  const head = `곁들일 정리 ${t.taken.length}개 · 정리 몫 ${t.lines}줄 (상한 ${t.max}줄`
+  return t.lines > t.max ? `${head}을 넘음)` : `${head})`
 }

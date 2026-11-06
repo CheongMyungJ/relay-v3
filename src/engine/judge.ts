@@ -28,6 +28,7 @@ import { showFile } from '../adapters/git.ts'
 import { UNRECORDED_TITLE } from './debt-record.ts'
 import { checkKnowledgeGround } from './knowledge.ts'
 import { LIST_HEADING } from './knowledge-format.ts'
+import { TIDY_TITLE } from './tidy.ts'
 import { message, type OverlayFile, type Workspace } from './workspace.ts'
 
 /** JUnit을 읽은 실행들의 testcase를 모은다. 하나도 없으면 null */
@@ -123,8 +124,8 @@ function overlayPaths(diff: DiffFacts, q: QualityConfig): string[] {
   return [...paths]
 }
 
-/** relay가 request.md 끝에 붙이는 절(M3: 관련 지식, 기록 안 된 나빠짐)의 제목 */
-const RELAY_SECTIONS = [LIST_HEADING, UNRECORDED_TITLE]
+/** relay가 request.md 끝에 붙이는 절(M3: 관련 지식, 기록 안 된 나빠짐, 이 레포의 빚)의 제목 */
+const RELAY_SECTIONS = [LIST_HEADING, UNRECORDED_TITLE, TIDY_TITLE]
 
 /** 요청 글에서 사람이 쓴 것: relay가 붙인 첫 절 앞까지. 근거 request의 인용은 이것으로 확인한다 */
 export function humanRequest(text: string): string {

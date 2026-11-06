@@ -25,8 +25,10 @@ import { QUALITY_PATH } from '../engine/check.ts'
 import { unrecordedRegressions, unrecordedSection } from '../engine/debt-record.ts'
 import { relatedKnowledge } from '../engine/knowledge.ts'
 import { m3Switches } from '../engine/m3.ts'
+import { repoDebtSection } from '../engine/tidy.ts'
 import { EVENTS, type NewWorkInput } from '../shared/api.ts'
 import { branchExport, type ProjectRecord, type WorkRecord } from './store.ts'
+import { claimedDebt } from './works-debt.ts'
 import { message, type WorkCtx, type WorksDeps, workHead } from './works-types.ts'
 
 const BRANCH_NAME = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]+$/
@@ -235,7 +237,17 @@ export async function newWork(
       deps.log?.('기록 안 된 나빠짐을 찾지 못함', e)
       return []
     })
-  await store.writeText(id, 'request.md', text + related + unrecordedSection(rec.unrecorded))
+  // 곁들일 정리(M3c): 기준의 빚 목록(다른 진행 중 Work가 집은 것은 '진행 중'). 읽지 못해도 Work는 만든다
+  const debt = rec.m3.tidy
+    ? await claimedDebt(store, project.id)
+        .then((claims) => repoDebtSection(project.path, ref, claims))
+        .catch((e: unknown) => {
+          deps.log?.('빚 목록을 읽지 못함', e)
+          return ''
+        })
+    : ''
+  const relay = related + unrecordedSection(rec.unrecorded) + debt
+  await store.writeText(id, 'request.md', text + relay)
   await store.writeText(
     id,
     'instructions.md',
@@ -247,6 +259,7 @@ export async function newWork(
       workBranch: branch,
       questionMode: project.settings.question_mode,
       knowledge: rec.m3.knowledge,
+      tidy: rec.m3.tidy,
     }),
   )
   return rec

@@ -1,13 +1,13 @@
 // [증거] 패널 (docs/m2-modules.md 4절): 맨 위 결론 한 줄(그림자면 '자동이었으면 머지했을 것'), 그 아래 결론을 정한 사실.
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
-// 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 지식(V38), 리뷰 지적(올림과
+// 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 지식(V38), 빚(V41), 리뷰 지적(올림과
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
 // 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다), 끝난 Work는 끝낼 때의
 // 메모(V37, 접힘). 결론 아래 되먹임 상태 한
 // 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시와 [세션에 넘기기](사람 몫, 그리고 저절로 가지 않는
 // 세션 몫), 상자에도 [세션에 넘기기](걸린 끝과 상자는 EndPanels.tsx). 단위 브랜치로 내보내면(V22) Work 브랜치의 통합 증거
 // 칸 하나(열린 것, 명령·줄·래칫·신호, 리뷰 없음)와 내보내기마다 칸 하나(결론, 되먹임, PR과 [머지], 펼침)를 보인다.
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
 import { debtAsk, debtCommitText } from './debt.ts'
@@ -40,7 +40,8 @@ import {
 } from './format.ts'
 import { feedbackStatus, findingGroups, findingRoute, passable, raiseLabel } from './findings.ts'
 import { QualityNotice } from './QualityNotice.tsx'
-import { Empty, ErrorLine, Spinner, Tag, useAction } from './ui.tsx'
+import { TidyFold } from './TidyFold.tsx'
+import { Empty, ErrorLine, Fold, Spinner, Tag, useAction } from './ui.tsx'
 
 export function EvidencePanel(p: { view: WorkView; project: ProjectView | null }) {
   const { view } = p
@@ -339,18 +340,6 @@ function Actions({ view, unit, measure }: { view: WorkView; unit?: string; measu
   )
 }
 
-function Fold(p: { title: string; count?: number; open?: boolean; children: ReactNode }) {
-  return (
-    <details className="fold" open={p.open}>
-      <summary>
-        {p.title}
-        {p.count === undefined ? null : <span className="count">{p.count}</span>}
-      </summary>
-      <div className="fold-body">{p.children}</div>
-    </details>
-  )
-}
-
 /**
  * 리뷰 지적 목록: 심각도, 갈래, 글, 파일:줄, 되먹임(V24: 세션에 보냄, 세션 몫이면 쉬면 저절로 감, 사람 몫이거나 저절로 가지
  * 않는 세션 몫(상한, 사람 몫의 올림이 막음, 끝내기)이면 [세션에 넘기기])
@@ -517,6 +506,7 @@ function Details(p: { view: WorkView; e: EvidenceBundle; unit?: string; integrat
         </ul>
       </Fold>
       {e.knowledge ? <Knowledge k={e.knowledge} /> : null}
+      {e.tidy ? <TidyFold t={e.tidy} /> : null}
       {p.integration ? null : (
         <Fold title="리뷰 지적" count={findings.length}>
           {review ? (

@@ -149,6 +149,7 @@ export function checkReply(bundle: EvidenceBundle, head: string): Record<string,
     lines: bundle.lines?.map((l) => ({ line: l.line, status: l.status, examples: l.examples })),
     missing: bundle.missing,
     ...(bundle.knowledge ? { knowledge: bundle.knowledge } : {}),
+    ...(bundle.tidy ? { tidy: bundle.tidy } : {}),
   }
 }
 

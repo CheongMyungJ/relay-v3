@@ -68,11 +68,16 @@ export interface InstructionsInput {
   questionMode: 'confirm_each' | 'draft_first'
   /** 지식 잇기(M3a, V38)가 켜졌나 */
   knowledge?: boolean
+  /** 곁들일 정리(M3c)가 켜졌나 */
+  tidy?: boolean
 }
 
 /** 지식 잇기(V38)의 읽기와 쓰기. v2의 지식 형식(D293, D296, D299)이다 */
 const KNOWLEDGE_READ = ` If \`docs/knowledge/\` exists, read the entries related to the request before you write the contract; the request file may end with a list of related entries that relay picked (titles and paths).`
 const KNOWLEDGE_WRITE = `\n\nKnowledge: \`docs/knowledge/[<area>/]<name>.md\` keeps facts for later Works, one entry per file (area: lowercase letters, digits, \`-\`). Of the contract's \`human_rules\`, save the ones later work will also need as knowledge entries in this Work and commit them; do not save scope instructions that only apply to this Work ("leave X alone this time"): code that does not follow a rule yet goes under \`## 아직 규칙을 따르지 않는 곳\` of that rule's entry. An entry starts with a front matter between \`---\` lines: \`kind: rule | fact | history | pitfall\`, \`source: human | investigation\`, and optionally \`anchor: <the code name the entry is about>\`. Then a \`# \` title and \`## 규칙\` (for a rule) or \`## 내용\` (otherwise); optional sections are \`## 아직 규칙을 따르지 않는 곳\` and \`## 아직 정하지 않은 것\` (rule only; what the human said is not decided yet) and \`## 바뀐 이력\`. When a rule changes, edit its entry and add a line to \`## 바뀐 이력\`. relay checks the knowledge on the head: an entry with a format error sends the change to the human; an anchor that is not in the head and an entry whose \`## 아직 규칙을 따르지 않는 곳\` lists a file you changed without editing the entry are shown to the human.`
+
+/** 곁들일 정리(M3c): request.md 끝의 빚 목록, 계약 tidy, 상한, 갚는 법 */
+const TIDY = ` The request file may end with the debt items of the repository (oldest first). You may put the ids of items on paths this Work changes anyway into \`tidy\`; the human keeps or removes them with the contract. Leave items marked as in progress (another Work took them). A tidy-up stays inside the files the Work changes and within \`tidy_max_lines\` changed lines (\`.relay/quality.json\`, default 100). Paying an item: for \`accepted_regression\` of a file-size ratchet, bring the file down to the ratchet's max; for \`tidy\` and \`test_gap\`, do what it says. Then delete the item's file in \`.relay/debt/\`. The evidence shows the human which items are paid and which taken items are not.`
 
 const QUESTIONS: Record<InstructionsInput['questionMode'], string> = {
   confirm_each: `Ask before you submit. Ask one decision per question: the scope (what is in, what is out) and each decision point separately. For each thing to build or change, ask separately (a) what goes in and what comes out, with a concrete example the human can confirm or correct, and (b) what happens on bad input or errors. A question about scope alone gets only a list back; output formats and error rules stay unknown.`,
@@ -113,7 +118,7 @@ The contract is JSON:
 - \`non_goals\`: what this Work does not do.
 - \`human_rules\`: rules only the human knows (business rules, time zones, compatibility promises, who uses the behavior).
 - \`hint\`: the human's suggestion about the kind of work, if the request has one.
-- \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.
+- \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.${o.tidy === true ? TIDY : ''}
 - \`delivery\` (optional): how the units are delivered; see Units below.
 
 The contract explains the request:

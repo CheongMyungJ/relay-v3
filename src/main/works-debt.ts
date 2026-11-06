@@ -7,6 +7,7 @@
 
 import { commitFiles, pushBranch } from '../adapters/git-write.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
+import { parseContract } from '../core/contract.ts'
 import type { LedgerEntry } from '../core/ledger.ts'
 import type { EvidenceBundle } from '../core/types.ts'
 import {
@@ -18,8 +19,24 @@ import {
   workDebt,
   worseOf,
 } from '../engine/debt-record.ts'
-import type { ExportRecord, WorkRecord } from './store.ts'
-import { message, perUnit, type WorkCtx, workHead } from './works-types.ts'
+import type { ExportRecord, Store, WorkRecord } from './store.ts'
+import { isActive, message, perUnit, type WorkCtx, workHead } from './works-types.ts'
+
+/**
+ * 곁들일 정리(M3c)의 잡힘: 이 프로젝트의 진행 중 Work가 승인된 계약(contract.json)의 tidy로 집은 빚 id → 그 Work id. 앱
+ * 저장소(work.json, contract.json)에서 읽으므로 Work가 끝나면 풀린다. 새 Work의 빚 목록이 '진행 중: 잡힘(<Work id>)'으로 보인다
+ */
+export async function claimedDebt(store: Store, project: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  for (const id of await store.listWorkIds()) {
+    const w = await store.readWork(id)
+    if (w === null || w.project !== project || !isActive(w.state)) continue
+    const text = await store.readText(id, 'contract.json')
+    const parsed = text === null ? null : parseContract(text)
+    for (const debt of parsed?.ok ? parsed.value.tidy : []) if (!out.has(debt)) out.set(debt, id)
+  }
+  return out
+}
 
 /** 묶음의 나빠진 래칫 가운데 이 diff가 둔 빚(debt_covered)이 모두 덮지 않은 것 */
 const openWorse = (b: EvidenceBundle) =>

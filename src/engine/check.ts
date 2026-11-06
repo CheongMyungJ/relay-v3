@@ -49,6 +49,7 @@ import {
 } from './judge.ts'
 import { coveredDebt } from './debt-record.ts'
 import { checkKnowledge } from './knowledge.ts'
+import { checkTidy } from './tidy.ts'
 import { message, workspace, type Workspace } from './workspace.ts'
 
 export { QUALITY_PATH }
@@ -80,6 +81,8 @@ export interface CheckOptions extends Partial<M3Switches> {
   knowledge?: boolean
   /** 빚 기록(M3b, V40): 이 diff가 이미 둔 빚이 나빠진 래칫을 덮나(묶음의 debt_covered). 기본 꺼짐(null) */
   debt?: boolean
+  /** 곁들일 정리(M3c, V41): 빚의 갚음과 정리 몫(묶음의 tidy). 계약은 examplesContractPath(없으면 contractPath). 기본 꺼짐(null) */
+  tidy?: boolean
 }
 
 /** worktree 잠금을 기다리는 기본 시간 */
@@ -190,6 +193,13 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
           return null
         })
       : null
+  const tidy =
+    opts.tidy === true
+      ? await checkTidy(root, diff, q, whole).catch((e) => {
+          missing.push(`빚 갚음 확인: ${message(e)}`)
+          return null
+        })
+      : null
 
   const bundle: EvidenceBundle = {
     version: 1,
@@ -205,6 +215,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
     groundings,
     knowledge,
     debt_covered: debt,
+    tidy,
     ratchets,
     signals: report.signals,
     diff: diffSummary(diff, report),

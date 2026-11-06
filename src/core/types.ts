@@ -76,6 +76,8 @@ export interface QualityConfig {
   /** 지식에서 승격된 검사의 위치(설명용, 판정에 쓰지 않음) */
   rules: string[]
   auto: AutoCondition[]
+  /** 곁들인 정리(M3c) 몫의 바뀐 줄 상한. 없으면 100 */
+  tidy_max_lines?: number
 }
 
 // ── 계약 ────────────────────────────────────────────────────────────────────
@@ -297,7 +299,7 @@ export interface FeedbackFact {
 // ── M3 장치 (docs/m3-design.md) ──────────────────────────────────────────────
 
 /** M3 장치. 프로젝트 설정 m3과 환경 변수 RELAY_M3(engine/m3.ts)가 켜고 끈다. 장치를 더하면 이름을 더한다 */
-export type M3Device = 'knowledge' | 'debt'
+export type M3Device = 'knowledge' | 'debt' | 'tidy'
 export type M3Switches = Record<M3Device, boolean>
 
 /** 지식 확인 문제(V38). format은 형식 오류(사람 머지 사실), anchor·not_yet은 알림 */
@@ -358,6 +360,11 @@ export interface EvidenceBundle {
    * 래칫(ratchets). 덮인 래칫은 다시 묻지 않는다. 장치를 껐거나 M3b 앞의 묶음은 null이거나 칸이 없다
    */
   debt_covered?: { ratchets: string[]; items: string[] } | null
+  /**
+   * 곁들일 정리(M3c): 계약 tidy의 id(taken), 기준의 빚 가운데 taken이거나 이 diff가 건드리거나 갚은 항목(items), taken의 anchor에
+   * 닿은 바뀐 파일의 바뀐 줄(lines)과 상한(max). 알림이다. 장치를 껐거나 M3c 앞의 묶음은 null이거나 칸이 없다
+   */
+  tidy?: { taken: string[]; items: DebtPayoff[]; lines: number; max: number } | null
   /** 세션이 PR 본문 등에 쓴 주장. 관문에 들어가지 않는다 */
   claims: string | null
   contract_change_requested: boolean
@@ -420,4 +427,12 @@ export interface DebtItem {
   reason: string
   /** YYYY-MM-DD */
   created: string
+}
+
+/** 빚 한 항목의 갚음(M3c). unknown: 가르지 못함(rule_violation, 파일 줄 수가 아닌 래칫, 기준에 없는 id). kind null은 없는 id */
+export interface DebtPayoff extends Pick<DebtItem, 'id' | 'reason'> {
+  path: string
+  kind: DebtKind | null
+  status: 'paid' | 'open' | 'unknown'
+  detail: string
 }

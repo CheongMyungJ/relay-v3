@@ -280,6 +280,22 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
             onChange={(e) => set('m3', { ...s.m3, debt: e.target.checked })}
           />
         </label>
+        <label className="switch-row">
+          <span>
+            <span className="switch-title">곁들일 정리</span>
+            <span className="help">
+              .relay/debt/의 빚 목록을 세션에 주어 계약의 곁들일 정리로 집게 하고, 갚은 빚과 못 갚은
+              빚, 건드린 곳의 빚을 증거에 보입니다. 새로 만드는 Work에 적용됩니다.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            checked={s.m3.tidy}
+            onChange={(e) => set('m3', { ...s.m3, tidy: e.target.checked })}
+          />
+        </label>
         <ErrorLine text={act.error} />
         <div className="row end">
           <button type="button" className="ghost" onClick={p.onClose}>

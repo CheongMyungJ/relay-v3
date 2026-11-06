@@ -287,6 +287,7 @@ const TOP_KEYS = [
   'ratchets',
   'rules',
   'auto',
+  'tidy_max_lines',
 ]
 
 function noDuplicateIds(items: { id: string; path: string }[], e: string[]): void {
@@ -324,6 +325,7 @@ export function parseQuality(text: string): Result<QualityConfig> {
     ratchets: opt(o, 'ratchets', '', e, list(readRatchet)) ?? [],
     rules: opt(o, 'rules', '', e, texts) ?? [],
     auto: opt(o, 'auto', '', e, list(readAuto)) ?? [],
+    tidy_max_lines: opt(o, 'tidy_max_lines', '', e, count),
   })
 
   const cmds = q.commands

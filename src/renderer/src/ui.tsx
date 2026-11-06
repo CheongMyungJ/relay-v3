@@ -6,6 +6,19 @@ export function Tag({ tone = 'muted', children }: { tone?: Tone; children: React
   return <span className={`tag tone-${tone}`}>{children}</span>
 }
 
+/** 접는 칸: 제목, 수(선택), 내용 */
+export function Fold(p: { title: string; count?: number; open?: boolean; children: ReactNode }) {
+  return (
+    <details className="fold" open={p.open}>
+      <summary>
+        {p.title}
+        {p.count === undefined ? null : <span className="count">{p.count}</span>}
+      </summary>
+      <div className="fold-body">{p.children}</div>
+    </details>
+  )
+}
+
 export function Dot({ tone, label }: { tone: Tone; label?: string }) {
   return <span className={`dot tone-${tone}`} aria-label={label} title={label} />
 }
