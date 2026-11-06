@@ -41,6 +41,34 @@ export function shadowLine(g: GateResult, end: ShadowEnd | undefined): string | 
   return `그림자 표본: 불일치(${end.why ? MISS[end.why] : '모름'})${conds}`
 }
 
+/** 관문이 조건을 하나도 채우지 못했을 때의 결론(core/gate.ts)과 정책에 조건이 없을 때의 까닭 */
+const NO_AUTO = '채운 자동 조건 없음'
+const NO_CONDITIONS = '정책에 자동 조건이 없음'
+
+/** 자동 조건의 판정을 가린 결론 한 줄(Q6) */
+export const AUTO_HIDDEN = '사람에게 보낼 사실 없음: 자동 조건의 판정은 끝이 정해진 뒤 보입니다'
+
+/**
+ * 관문이 자동 조건의 판정만으로 사람에게 보냈나: 조건을 채웠는데 스위치·서버 보호·실적이 막음(그림자), 또는 채운 조건이 없음
+ * (정책에 조건이 있을 때). 사람에게 보낼 사실이 있으면 그 사실이 결론이다
+ */
+export function autoJudged(g: GateResult): boolean {
+  if (g.conclusion !== 'human_merge') return false
+  return g.shadow || (g.decisive === NO_AUTO && !g.reasons.includes(NO_CONDITIONS))
+}
+
+/**
+ * [증거]의 결론 칸과 '사람에게 보낸 까닭'에서 자동 조건의 판정을 가리나(Q6): 끝(그림자 표본의 끝, 또는 Work의 결과)이 정해지기
+ * 전. 그림자 줄만 가리면 '자동 머지가 꺼져 있음'·'조건 X의 그림자 실적이 못 미침'이 조건을 채웠다는 뜻을 그대로 보이고, 그것만
+ * 가리면 채우지 못한 조건의 까닭과 갈려 보인다. 그래서 두 경우를 같은 글로 가린다
+ */
+export function hideAuto(
+  g: GateResult,
+  o: { end: ShadowEnd | undefined; outcome: boolean },
+): boolean {
+  return autoJudged(g) && !o.outcome && !(g.shadow && o.end !== undefined)
+}
+
 const pct = (x: number) => x.toFixed(2)
 
 /** 'k/n (하한 0.45)'. n이 0이면 '0/0' */
@@ -126,7 +154,8 @@ export function sessionText(s: SessionStats): string {
   })
   return [
     '세션 커밋',
-    `내보낸 뒤 사람 교정 ${s.corrected}/${s.merges}`,
+    `내보낸 뒤 사람 교정 ${s.corrected}/${s.merges}` +
+      (s.unclassified > 0 ? ` (가르지 못한 머지 ${s.unclassified})` : ''),
     `내보낸 뒤 커밋: ${commits}`,
     `집합과 트레일러가 다름 ${s.disagree}`,
     ...(s.set_only > 0 ? [`집합만으로 가름 ${s.set_only}`] : []),

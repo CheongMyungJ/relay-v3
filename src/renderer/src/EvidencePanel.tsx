@@ -13,7 +13,7 @@ import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
 import { debtAsk, debtCommitText } from './debt.ts'
 import { DebtChoice, EndArmed, EndBox, EndMemos } from './EndPanels.tsx'
 import { exportSection, integrationText } from './exports.ts'
-import { shadowLine } from './record.ts'
+import { AUTO_HIDDEN, hideAuto, shadowLine } from './record.ts'
 import { useShadowEnds } from './RecordTable.tsx'
 import {
   KNOWLEDGE_ISSUE,
@@ -216,12 +216,11 @@ function Verdict(p: {
   const { gate, view } = p
   const c = conclusionOf(gate)
   const ends = useShadowEnds(view, gate.shadow)
-  const shadow = shadowLine(
-    gate,
-    ends.find((x) => x.unit === (p.unit ?? null)),
-  )
+  const end = ends.find((x) => x.unit === (p.unit ?? null))
+  const shadow = shadowLine(gate, end)
   const e = view.evidence
   const outcome = outcomeOf(view)
+  const hidden = hideAuto(gate, { end, outcome: outcome !== null })
   const next = nextStep(view, { qualityNotice: p.qualityNotice, ending: p.ending })
   return (
     <section className={`verdict tone-${outcome ? 'muted' : c.tone}`} data-testid="verdict">
@@ -249,7 +248,7 @@ function Verdict(p: {
         </p>
       ) : null}
       <p className="verdict-decisive" data-testid="decisive">
-        {decisiveText(view)}
+        {hidden ? AUTO_HIDDEN : decisiveText(view)}
       </p>
       {next ? (
         <p className="next-step" role="note" data-testid="next-step">
@@ -469,18 +468,24 @@ function Knowledge(p: { k: KnowledgeEvidence; promote: boolean }) {
 function Details(p: { view: WorkView; e: EvidenceBundle; unit?: string; integration?: boolean }) {
   const { e, view } = p
   const gate = view.gate
+  const ends = useShadowEnds(view, gate?.shadow === true)
+  const end = ends.find((x) => x.unit === (p.unit ?? null))
+  const hidden = gate !== null && hideAuto(gate, { end, outcome: outcomeOf(view) !== null })
+  const reasons = hidden ? [] : (gate?.reasons ?? [])
   const findings = e.review?.findings ?? []
   const review = reviewNote(e.review, view.reviewRunning, view.reviewDisabled)
   const missing = missingOf(e)
   return (
     <div className="details">
       {gate ? (
-        <Fold title="사람에게 보낸 까닭" count={gate.reasons.length} open>
-          {gate.reasons.length === 0 ? (
-            <p className="muted">없음</p>
+        <Fold title="사람에게 보낸 까닭" count={reasons.length} open>
+          {reasons.length === 0 ? (
+            <p className="muted" data-testid="reasons-none">
+              {hidden ? AUTO_HIDDEN : '없음'}
+            </p>
           ) : (
             <ul className="plain-list">
-              {gate.reasons.map((r, i) => (
+              {reasons.map((r, i) => (
                 <li key={i}>{factText(r, view)}</li>
               ))}
             </ul>

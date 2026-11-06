@@ -9,7 +9,6 @@
 // 관문 판의 파일이 아니다(결론을 바꾸지 않고 끝 줄의 칸과 불일치 갈래만 정한다).
 
 import type { SessionStats } from '../shared/api.ts'
-import { RELAY_AUTHOR } from './debt-record.ts'
 import { isConclusionLine } from './follow.ts'
 import { exportKey, type AfterCommits, type LedgerEntry, type SessionSetSummary } from './ledger.ts'
 
@@ -116,7 +115,8 @@ export function trailerGitOk(text: string): boolean {
 }
 
 /**
- * 세션 PTY 환경에 더할 변수(m4-design 7.2): core.hooksPath를 심 폴더로(물려받은 GIT_CONFIG_COUNT가 있으면 그 뒤에 붙인다),
+ * 세션 PTY 환경에 더할 변수(m4-design 7.2): core.hooksPath를 심 폴더로(물려받은 GIT_CONFIG_COUNT가 있으면 그 뒤에 붙인다.
+ * 물려받은 환경이 이미 relay 세션의 것이면 그 심 자리를 바꾼다),
  * 심이 원래 훅을 찾을 때 쓸 앞 설정의 수, 심 폴더, 이 Work의 레포(git common dir), 심이 사고를 적는 파일. 세션 프로세스와 그
  * 자식만 물려받는다(사람의 셸, 앱의 확인 실행기는 물려받지 않는다)
  */
@@ -127,9 +127,19 @@ export function trailerEnv(o: {
   hookLog: string
 }): Record<string, string> {
   const n = Number(o.inherited['GIT_CONFIG_COUNT'] ?? '0')
-  const base = Number.isInteger(n) && n >= 0 ? n : 0
+  const count = Number.isInteger(n) && n >= 0 ? n : 0
+  // 이미 relay 세션 환경 안이면(앱이나 시험을 세션 안에서 띄움) 그 심 자리를 이 심으로 바꾼다: 두 심이 서로를 원래 훅으로 부르며
+  // 끝없이 돌지 않게, 원래 훅 자리는 바깥 심을 뺀 설정으로 찾는다
+  const prev = Number(o.inherited['RELAY_GIT_CONFIG_BASE'] ?? NaN)
+  const nested =
+    Number.isInteger(prev) &&
+    prev >= 0 &&
+    prev < count &&
+    o.inherited[`GIT_CONFIG_KEY_${String(prev)}`] === 'core.hooksPath' &&
+    o.inherited[`GIT_CONFIG_VALUE_${String(prev)}`] === o.inherited['RELAY_HOOKS_DIR']
+  const base = nested ? prev : count
   return {
-    GIT_CONFIG_COUNT: String(base + 1),
+    GIT_CONFIG_COUNT: String(nested ? count : count + 1),
     [`GIT_CONFIG_KEY_${String(base)}`]: 'core.hooksPath',
     [`GIT_CONFIG_VALUE_${String(base)}`]: o.shimDir,
     RELAY_GIT_CONFIG_BASE: String(base),
@@ -160,6 +170,8 @@ export interface ClassifyCommit {
   sha: string
   /** 작성자 이메일 */
   author: string
+  /** 앱이 쓴 빚 커밋(V40, engine/follow.ts BetweenCommit.relay: 앱이 적은 SHA. 작성자만으로는 정하지 않는다) */
+  relay?: boolean
   /** 깨끗한 기준 맞춤 머지 */
   baseUpdate: boolean
   /** 메시지의 Relay-Work 트레일러 값 */
@@ -175,7 +187,7 @@ export const NO_COMMITS: Readonly<AfterCommits> = {
 }
 
 /**
- * 머지 뒤 커밋의 갈래(m4-design 7.3). relay(작성자 relay@localhost, V40), base_update(깨끗한 기준 맞춤 머지), session(집합에
+ * 머지 뒤 커밋의 갈래(m4-design 7.3). relay(앱이 쓴 빚 커밋, V40: relay 칸), base_update(깨끗한 기준 맞춤 머지), session(집합에
  * 있고 이 Work의 트레일러가 있음), human(나머지). trailer가 거짓(트레일러를 켜지 않은 세션이 있음)이면 집합만으로 가른다.
  * 집합과 트레일러가 다르게 가르면 human으로 세고 disagree에 더한다(엄격)
  */
@@ -185,7 +197,7 @@ export function classifyCommits(
 ): AfterCommits {
   const out = { ...NO_COMMITS }
   for (const c of commits) {
-    if (c.author === RELAY_AUTHOR.email) out.relay++
+    if (c.relay === true) out.relay++
     else if (c.baseUpdate) out.base_update++
     else {
       const inSet = o.set.has(c.sha)
@@ -280,13 +292,14 @@ export function sessionSummary(s: SessionSet, incidents: number): SessionSetSumm
 /**
  * 세션 커밋 가르기의 장치 지표(devices.md '세션 커밋 가르기'): 머지마다 그 내보내기의 첫 결론 줄('준비됨') head 뒤 머지된
  * head까지의 커밋을 가른 것(끝 줄의 head면 after_commits, 앞 head면 after_heads)의 수와 사람 교정(사람 커밋이 하나라도 있는
- * 머지, philosophy 8.1), 갈래 합, 집합과 트레일러가 다름, 집합만으로 가른 머지. Work마다 마지막 끝 줄의 session_set으로 트레일러
+ * 머지, philosophy 8.1), 가르지 못한 머지(분모에 넣지 않고 따로 셈: 빠진 것이 보이게), 갈래 합, 집합과 트레일러가 다름, 집합만으로 가른 머지. Work마다 마지막 끝 줄의 session_set으로 트레일러
  * 덮임과 훅 위임 사고. 판은 보지 않는다(장치의 지표다)
  */
 export function sessionStats(entries: readonly LedgerEntry[]): SessionStats {
   const out: SessionStats = {
     merges: 0,
     corrected: 0,
+    unclassified: 0,
     commits: { session: 0, human: 0, relay: 0, base_update: 0 },
     disagree: 0,
     set_only: 0,
@@ -305,8 +318,17 @@ export function sessionStats(entries: readonly LedgerEntry[]): SessionStats {
     if (e.session_set) sets.set(JSON.stringify([e.project, e.work]), e.session_set)
     if (!e.merged_head) continue
     const from = first.get(key) ?? e.head
-    const a = from === e.head ? e.after_commits : e.after_heads?.[from]
-    if (!a) continue
+    // 첫 head 그대로 머지했으면 사이 커밋이 없다(M4e 앞의 끝 줄도)
+    const a =
+      from === e.merged_head
+        ? NO_COMMITS
+        : from === e.head
+          ? e.after_commits
+          : e.after_heads?.[from]
+    if (!a) {
+      out.unclassified++
+      continue
+    }
     out.merges++
     if (a.human > 0) out.corrected++
     out.commits.session += a.session

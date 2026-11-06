@@ -97,7 +97,8 @@ function conditionLines(s: ConditionStats): string[] {
 /** 세션 커밋 가르기(M4e)의 지표 한 줄 */
 function sessionLine(s: SessionStats): string {
   return (
-    `세션 커밋 · 내보낸 뒤 사람 교정 ${s.corrected}/${s.merges} · 내보낸 뒤 커밋: ${nonZero(s.commits)}` +
+    `세션 커밋 · 내보낸 뒤 사람 교정 ${s.corrected}/${s.merges} (가르지 못한 머지 ${s.unclassified})` +
+    ` · 내보낸 뒤 커밋: ${nonZero(s.commits)}` +
     ` · 집합과 트레일러가 다름 ${s.disagree} · 집합만으로 가름 ${s.set_only}` +
     ` · 트레일러 덮임 ${s.trailered}/${s.watched} (Work ${s.works}) · 훅 위임 사고 ${s.incidents}`
   )

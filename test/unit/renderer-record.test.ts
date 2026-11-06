@@ -6,7 +6,9 @@ import type { GateResult } from '../../src/core/types.ts'
 import { recordStats } from '../../src/engine/shadow.ts'
 import {
   afterText,
+  autoJudged,
   conditionHead,
+  hideAuto,
   conditionRest,
   epochText,
   footText,
@@ -47,6 +49,34 @@ test('그림자 줄: 끝이 정해지기 전에는 가리고, 끝난 뒤 일치�
   expect(
     shadowLine(SHADOW, { unit: null, conditions: [], result: 'miss', why: 'closed' }),
   ).not.toMatch(/자동이었으면/)
+})
+
+test('자동 조건의 판정(조건을 채움·못 채움)은 끝이 정해질 때까지 같은 글로 가린다(Q6). 사람 머지 사실은 가리지 않는다', () => {
+  const met: GateResult = {
+    ...SHADOW,
+    reasons: ['프로젝트에서 자동 머지가 꺼져 있음', '조건 small의 그림자 실적이 기준에 못 미침'],
+  }
+  const missed: GateResult = {
+    conclusion: 'human_merge',
+    decisive: '채운 자동 조건 없음',
+    reasons: ['채운 자동 조건 없음', '조건 small: 바뀐 줄 120 > 100'],
+    condition: null,
+    shadow: false,
+  }
+  const fact: GateResult = { ...missed, decisive: '리뷰가 올림', reasons: ['리뷰가 올림'] }
+  const noConditions: GateResult = {
+    ...missed,
+    reasons: ['채운 자동 조건 없음', '정책에 자동 조건이 없음'],
+  }
+  expect([met, missed, fact, noConditions].map(autoJudged)).toEqual([true, true, false, false])
+  const open = { end: undefined, outcome: false }
+  expect(hideAuto(met, open)).toBe(true)
+  expect(hideAuto(missed, open)).toBe(true)
+  expect(hideAuto(fact, open)).toBe(false)
+  // 그림자 표본의 끝이 정해졌거나 Work가 끝나면 보인다
+  const end = { unit: null, conditions: ['small'], result: 'match' as const, why: null }
+  expect(hideAuto(met, { end, outcome: false })).toBe(false)
+  expect(hideAuto(missed, { end: undefined, outcome: true })).toBe(false)
 })
 
 const AFTER: AfterStats = {
@@ -124,16 +154,17 @@ test('조건 줄과 CLI 표에 할 일 글(진행 막대, M5까지, 남은 주)�
       ...r.sessions,
       merges: 4,
       corrected: 1,
+      unclassified: 2,
       commits: { session: 2, human: 1, relay: 0, base_update: 0 },
       watched: 9,
       trailered: 9,
       works: 4,
     }),
   ).toBe(
-    '세션 커밋 · 내보낸 뒤 사람 교정 1/4 · 내보낸 뒤 커밋: 세션 2, 사람 1 · 집합과 트레일러가 다름 0 · 트레일러 덮임 9/9 (Work 4) · 훅 위임 사고 0',
+    '세션 커밋 · 내보낸 뒤 사람 교정 1/4 (가르지 못한 머지 2) · 내보낸 뒤 커밋: 세션 2, 사람 1 · 집합과 트레일러가 다름 0 · 트레일러 덮임 9/9 (Work 4) · 훅 위임 사고 0',
   )
   expect(recordText('p1', r).at(-2)).toBe(
-    '세션 커밋 · 내보낸 뒤 사람 교정 0/0 · 내보낸 뒤 커밋: 없음 · 집합과 트레일러가 다름 0 · 집합만으로 가름 0 · 트레일러 덮임 0/0 (Work 0) · 훅 위임 사고 0',
+    '세션 커밋 · 내보낸 뒤 사람 교정 0/1 (가르지 못한 머지 0) · 내보낸 뒤 커밋: 없음 · 집합과 트레일러가 다름 0 · 집합만으로 가름 0 · 트레일러 덮임 0/0 (Work 0) · 훅 위임 사고 0',
   )
   expect(footText(r)).toBe('판을 모르는 결론 줄 0/1 · 읽지 못한 장부 줄 1')
   expect(recordText('p1', r)[1]).toBe(

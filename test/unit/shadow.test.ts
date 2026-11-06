@@ -226,7 +226,7 @@ describe('머지 뒤 30일과 실적', () => {
     expect(s?.after).toMatchObject({ merges: 20, closed: 1, watching: 19, reverts: 0, upper: 1 })
   })
 
-  test('귀속 되돌림이나 귀속 main 실패가 있으면 trackRecord는 거짓, 이의를 달면 셈에서 빠진다', () => {
+  test('귀속 되돌림, 귀속 main 실패, 미정 main이 있으면 trackRecord는 거짓, 이의를 달면 셈에서 빠진다', () => {
     expect(trackRecord(twenty, 'p1', 20, EPOCH)).toEqual({ small: true })
     const revert = closedAfter({ revert: { sha: 'r', form: 'this_reverts' } })
     expect(trackRecord(twenty, 'p1', 20, EPOCH, { after: [revert] })).toEqual({ small: false })
@@ -235,9 +235,12 @@ describe('머지 뒤 30일과 실적', () => {
       main_run: { name: 'ci', sha: 'm-w0', attempts: 2 },
     })
     expect(trackRecord(twenty, 'p1', 20, EPOCH, { after: [main] })).toEqual({ small: false })
-    // 미정은 실적을 막지 않는다(M5 규칙이 따로 본다)
+    // 미정 1건도 실적을 막는다(devices.md '자동 머지': 미정 1건도 열지 않는다). 물려받음·모름은 막지 않는다
     expect(
       trackRecord(twenty, 'p1', 20, EPOCH, { after: [closedAfter({ main: 'pending' })] }),
+    ).toEqual({ small: false })
+    expect(
+      trackRecord(twenty, 'p1', 20, EPOCH, { after: [closedAfter({ main: 'inherited' })] }),
     ).toEqual({ small: true })
     const dispute: DisputeLine = {
       kind: 'dispute',
@@ -302,6 +305,37 @@ describe('recordStats', () => {
     expect(all.conditions.find((c) => c.id === 'small')?.match).toBe(2)
     // legacy는 끝이 없어 분모 밖이다
     expect(all.human).toMatchObject({ n: 1, as_is: 1 })
+  })
+
+  test('지금 판은 판 칸을 모두 아는 마지막 결론 줄의 판: 다시 켠 뒤 effort를 모르는 결론 줄이 표를 비우지 않는다', () => {
+    const entries = [
+      line('a', 'h', ['small'], { ts: daysAgo(3) }),
+      merge('a', 'h'),
+      line('b', 'h', [], { ts: daysAgo(1), effort: undefined }),
+    ]
+    const r = recordStats({
+      entries,
+      scope: { project: 'p1' },
+      now: NOW,
+      allEpochs: false,
+      broken: 0,
+    })
+    expect(r.epoch).toBe('current')
+    expect(r.current?.effort).toBe('medium')
+    expect(r.conditions.find((c) => c.id === 'small')).toMatchObject({
+      match: 1,
+      n: 1,
+      outside: { other_epoch: 0 },
+    })
+    // 판 칸을 모두 아는 줄이 없으면 모든 판
+    const none = recordStats({
+      entries: [line('b', 'h', ['small'], { effort: undefined })],
+      scope: { project: 'p1' },
+      now: NOW,
+      allEpochs: false,
+      broken: 0,
+    })
+    expect(none.epoch).toBe('all')
   })
 
   test('여러 레포 합침(pool)은 프로젝트를 넘어 센다', () => {

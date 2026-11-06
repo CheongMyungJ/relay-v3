@@ -1,6 +1,6 @@
 # M4 설계: 그림자 실적
 
-- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절), M4e(7.4절), M4f(8.1절), M4g(9.1절)를 만들었다(M4f·M4g는 측정 도구이고, (A)·(B) 5회 측정과 M4 규약 15절은 아직이다). M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
+- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절), M4e(7.4절), M4f(8.1절), M4g(9.1절)를 만들었다(M4f·M4g는 측정 도구이고, (A)·(B) 5회 측정과 M4 규약 15절은 아직이다). 리뷰 지적 11개를 고쳤다(9b절, V54). M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
 - **사용자 결정(2026-11-06, ✅):**
   - Q10 자기 실행: **도구만 만들고 relay-v3 자기 실행은 나중에 따로 정한다.** quality.json PR, main 보호·필수 검사, 앱으로 relay-v3 개발하기는 하지 않는다. 그래서 M4h(10절)는 '나중'이고, M4의 숫자는 재생과 평가 자료로만 낸다.
   - Q2 M5 숫자: **12절의 안 그대로**(일치 ≥ 20, V3 그대로; 끝이 정해진 n ≥ 30; 일치율 ≥ 0.95; lift > 0; 창 30일; 창이 닫힌 이 조건의 머지 ≥ 20에서 귀속 0·미정 0; 결정론 5회 갈림 0; 지금 관문 판의 재생 거짓 자동 0). M5 규약이 이것을 그대로 쓴다.
@@ -284,7 +284,7 @@ interface ConditionStats {
 - **불일치 갈래:** M4e 전이라 '더 커밋'은 모두 `more_unknown`이다(`more_session`·`more_human`은 0). 마지막이 아닌 결론 줄의 head(뒤에 다시 내보냄)도 `more_unknown`이다.
 - **판 칸 빈 비율(M4a의 열린 문제)을 여기서 센다:** `RecordStats.unknown_epoch`(결론 줄 가운데 판 칸을 하나라도 모르는 줄 / 결론 줄 전체). M4a 앞의 줄도 분자에 든다.
 - **[귀속이 틀림]의 커밋은 링크가 아니라 짧은 SHA다.** 장부에 PR URL이나 레포 URL이 없다.
-- **그림자 줄만 가린다.** 결론 칸의 decisive('프로젝트에서 자동 머지가 꺼져 있음')와 '사람에게 보낸 까닭'의 '조건 small의 그림자 실적이 기준에 못 미침'은 그대로 보인다(설계: 결론과 열린 것은 그대로). 이 둘도 조건을 채웠다는 뜻을 담는다(열린 문제).
+- **그림자 줄만 가린다.** 결론 칸의 decisive('프로젝트에서 자동 머지가 꺼져 있음')와 '사람에게 보낸 까닭'의 '조건 small의 그림자 실적이 기준에 못 미침'은 그대로 보인다(설계: 결론과 열린 것은 그대로). 이 둘도 조건을 채웠다는 뜻을 담는다(열린 문제) → V54(9b절)에서 이 둘과 못 채운 까닭도 끝이 정해질 때까지 가린다.
 - **`relay record`의 글은 화면의 글과 따로 만든다**(cli는 renderer를 가져갈 수 없고 shared에는 런타임 코드를 두지 않는다). 셈은 같은 `recordStats`다.
 
 ## 6. M4d 머지 뒤 30일
@@ -436,6 +436,34 @@ V31처럼 이름표가 붙은 측정 자료다. 장치가 아니므로 화면에
 - **표 3의 귀속은 대리다.** 평가에는 push CI 실행과 되돌림이 없어 6절의 규칙(되돌림 세 꼴, 부모 통과·다시 시도도 실패)을 그대로 돌릴 수 없다. 'main 레포 시험이 실패하고 바로 앞 main은 통과'(시험이 결정론이라 다시 시도도 실패로 봄, 첫 Work의 앞은 통과로 봄)를 귀속으로 두고 누적 숨긴 시험의 새 깨뜨림(`regressed`)을 이름표로 정밀도·재현율을 센다. 지금 자료에서는 둘 다 0이다.
 - **`after-merge.ts`의 고정 자료로는 쓰지 못했다**(평가 장부에 after 줄이 없다). `shadowStats`는 이 자료로 [단위]에서 돈다.
 
+
+## 9b. M4b~M4e 리뷰 고침 (V54)
+
+M4a~M4g를 만든 뒤 받은 리뷰 지적 11개를 코드로 다시 일으켜 보고(시험이 고치기 전에 실패함을 봄) 모두 고쳤다. 버린 지적은 없다.
+
+### 9b.1 만든 것 (V54)
+
+- **PR 없이 끝난 Work의 로컬 머지(4.2, 지적 1):** `works-record.ts reached`가 'head가 기준의 조상'만으로 같은 변경이라 하지 않는다. 기준 first-parent 커밋(내보낸 때 하루 앞부터 100개)에서 head를 처음 담은 커밋을 이분해 찾는다(`landingOf`). head 자신이면 fast-forward(같은 변경, 머지 커밋 없음), merge면 head를 담은 둘째(이후) 부모가 머지된 끝(`merged_head`)이고 `merge_commit`은 그 머지다. 그 부모가 head가 아니면 `changeFacts(head, 그 부모, 그 머지)`로 `sameChange`와 사이 커밋의 갈래(`afterOf`)를 적는다(사람이 head 뒤에 더 커밋해 `--no-ff`로 합치면 `same_change: false`, `after_commits.human`). 목록 안에서 찾지 못하면 끝을 정하지 않는다. 앞 결론 줄 head의 `after_heads`도 적는다. [흐름] `works-record-local.test.ts`에 '사람이 head 뒤에 더 커밋해 merge' 시험을 더했고, 앞 merge 시험은 이제 `merge_commit`을 적는다.
+- **no_pr의 90일(지적 5):** `unmerged`는 no_pr 줄을 쓴 때가 아니라 그 내보내기의 첫 결론 줄(`since`)부터 90일이다(`shadow.ts`의 추적 잃음과 같은 시계). [흐름] `works-record.test.ts`의 '늦게 처음 따라감'(85일 뒤 처음 따라가 91일에 unmerged). 앞 시험의 가짜 시계는 실제 오늘 다음 날 0시부터로 바꿨다(90일이 실제 결론 줄의 때부터라서).
+- **빚 커밋은 앱이 쓴 SHA로(지적 9):** `BetweenCommit`·`ClassifyCommit`에 `relay`(앱이 쓴 빚 커밋). `works-session-log.ts sessionOf`가 events.jsonl `debt_recorded`의 head를 `debts`로 주고, 거울의 사이 커밋은 그 SHA이고 작성자가 relay@localhost일 때만 `relay`다. `sameChange` (2)와 `classifyCommits`는 작성자를 보지 않는다(작성자만 지은 커밋은 사람·세션 갈래로 간다).
+- **앞 head의 Update branch(지적 2):** `shadow.ts verdict`가 앞 결론 줄의 head이고 `after_heads[head]`에 사람·세션 커밋이 없으면(기준 맞춤 머지와 빚 커밋뿐) 일치로 센다(`sameChange` (2)와 같은 규칙).
+- **사람 교정의 분모(지적 3):** `sessionStats`에 `unclassified`(첫 head 뒤를 가르지 못한 머지: 분모에 넣지 않고 [실적]과 `relay record`에 '가르지 못한 머지 u'로 보임). 첫 head를 그대로 머지한 끝 줄은 갈래 칸이 없어도 0으로 센다. `earlierAfter`는 20개를 넘으면 첫 head와 최근 19개를 가른다(`works-change.ts earlierPick`).
+- **지금 판(지적 4):** `recordStats`의 지금 판은 판 칸을 모두 아는 마지막 결론 줄이다(없으면 모든 판).
+- **세션 커밋 집합(지적 6):** `adapters/git.ts newCommits`가 커미터 시각을 돌려주고, `SessionLog`가 창을 연 때(실제 시계) 2초보다 앞선 커미터 시각의 커밋을 넣지 않는다(git pull로 받은 GitHub 웹 고침, 다른 브랜치 checkout). [어댑터] `session-log.test.ts`.
+- **겹친 세션 환경(지적 8):** `trailerEnv`가 물려받은 환경이 이미 relay 세션의 것이면(`RELAY_GIT_CONFIG_BASE`의 자리가 `core.hooksPath`이고 `RELAY_HOOKS_DIR`을 가리킴) 하나 더 붙이지 않고 그 자리를 이 심으로 바꾼다. 원래 훅은 바깥 심을 뺀 설정으로 찾는다. [어댑터] `git-hooks.test.ts`의 겹친 환경 커밋(고치기 전에는 15초 시간 초과로 끝나지 않음), [단위] `session-commits.test.ts`.
+- **되돌림 (다)(지적 7):** 본문에 `This reverts commit`이 있는데 (가)가 아니면 제목 꼴로 세지 않는다(같은 흔한 제목의 다른 커밋을 되돌림).
+- **미정(지적 11):** `trackRecord`가 이 조건의 머지에 미정 main이 하나라도 있으면 거짓(devices.md '자동 머지'의 '미정 1건도 열지 않는다'. 엄격하게만). 앞 시험의 '미정은 막지 않는다'를 바꿨다.
+- **결론 칸(지적 10, Q6):** `renderer/src/record.ts autoJudged`·`hideAuto`. 관문이 자동 조건의 판정만으로 사람에게 보낸 결과(그림자: 조건을 채웠는데 스위치·서버 보호·실적이 막음, 또는 정책에 조건이 있는데 채운 조건이 없음)는 [증거]의 결론 칸(decisive)과 '사람에게 보낸 까닭'을 '사람에게 보낼 사실 없음: 자동 조건의 판정은 끝이 정해진 뒤 보입니다'로 가린다. 그림자는 그 표본의 끝이, 둘 다 Work의 결과(끝남·버림)가 정해지면 보인다. [스모크] `app.spec.ts`(열린 동안 '그림자 표본|자동 머지가 꺼져|조건 small'이 없음), `smoke-07-evidence.png`·`smoke-11-merged.png`를 열어 봤다(열린 동안 가린 글, 머지 뒤 '프로젝트에서 자동 머지가 꺼져 있음'과 까닭 셋).
+- **자리:** `works-record.ts`가 600줄을 넘어 거울의 사실(`Mirror`, `changeFacts`, `earlierPick`, `earlierAfter`)을 새 파일 `main/works-change.ts`로 옮겼다(works-exports.ts, works-after.ts, mirror.test.ts가 가져오는 곳을 바꿈). core는 고치지 않았다(4,850줄). `works.ts`(598)·`works-evidence.ts`(599)는 그대로다.
+- **시험:** [단위] `shadow.test.ts`(미정, 지금 판), `session-commits.test.ts`(겹친 환경, 작성자만 relay, Update branch 앞 head 일치, unclassified, earlierPick), `follow.test.ts`(작성자만 relay는 같은 변경이 아님), `after-merge.test.ts`(다른 커밋을 되돌린 같은 제목), `renderer-record.test.ts`(가림, 가르지 못한 머지 글). [어댑터] `git-hooks.test.ts`, `session-log.test.ts`, `mirror.test.ts`(적어 둔 SHA만 빚 커밋). [흐름] `works-record-local.test.ts`, `works-record.test.ts`. [스모크] `app.spec.ts`, `record.spec.ts`(세션 커밋 줄이 '1/5 (가르지 못한 머지 1)').
+
+### 9b.2 설계와 다른 것 (V54)
+
+- **조건을 못 채운 결과도 가린다.** 지적은 그림자 결과만 가리자고 했지만, 그러면 '채운 자동 조건 없음 · 조건 small: …'이 보이는 Work와 가린 글의 Work가 갈려 가린 것 자체가 '조건을 채웠다'를 말한다. 그래서 두 경우를 같은 글로 가리고, 못 채운 까닭은 Work의 결과가 정해진 뒤 보인다. 그 까닭은 [끝내기] 상자에도 원래 들어가지 않는다(V25: 자동 조건을 못 채운 까닭은 열린 것이 아님). 진행 중 Work의 단위 내보내기는 그 단위가 머지돼도 Work가 끝날 때까지 못 채운 까닭이 가려진다(그림자 표본은 그 단위의 끝에서 보인다).
+- **남은 맹점(로컬 머지):** head가 기준 first-parent에 그대로 올라간 fast-forward 뒤에 사람이 같은 브랜치에서 더 커밋해 함께 fast-forward했으면, 뒤 커밋은 기준에 바로 한 커밋과 가를 수 없어 head까지를 같은 변경으로 본다.
+- **남은 맹점(세션 집합):** 창 안에서 남이 만들어 받은 커밋(창을 연 뒤 2초 넘게 지나 만들어짐)과 커미터 시각을 꾸민 커밋은 가르지 못한다. 시계가 2초 넘게 어긋난 기계에서 만든 커밋도 그렇다.
+- **빚 커밋의 SHA를 모르면(events.jsonl이 없거나 깨짐) 빚 커밋도 사람으로 센다**(엄격). M4e 앞의 Work는 `after_heads`가 없어 앞 head의 Update branch는 여전히 `more_unknown`이다.
+- **스모크의 머지 뒤 보임:** `app.spec.ts`가 600줄 상한이라 머지 뒤 결론 칸이 다시 보이는 것은 [단위](`hideAuto`)와 찍은 그림으로만 확인했다.
 
 ## 10. M4h relay-v3 자신부터 돌리기
 

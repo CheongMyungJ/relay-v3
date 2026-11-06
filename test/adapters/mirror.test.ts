@@ -17,7 +17,7 @@ import {
   workRef,
 } from '../../src/adapters/mirror.ts'
 import { sameChange } from '../../src/engine/follow.ts'
-import { changeFacts } from '../../src/main/works-record.ts'
+import { changeFacts } from '../../src/main/works-change.ts'
 import { cleanupAll, makeRepo, makeTempDir, runGit, type TestRepo } from '../support/repo.ts'
 
 afterAll(cleanupAll)
@@ -169,14 +169,26 @@ describe('같은 변경의 사실(changeFacts → sameChange)', () => {
     expect(sameChange(f)).toBe(true)
   })
 
-  test('relay 빚 커밋(작성자 relay@localhost)만 더했으면 같다', async () => {
+  test('앱이 쓴 relay 빚 커밋(적어 둔 SHA, 작성자 relay@localhost)만 더했으면 같다. 작성자만 같으면 다르다', async () => {
     await r.branch('debt', head)
     await r.write({ '.relay/debt/d1.md': '빚\n' })
     await r.git('add', '--all')
     await r.git('commit', '--quiet', '-m', '빚', '--author', 'relay <relay@localhost>')
     const debt = await r.sha()
     await r.checkout('main')
-    expect(sameChange(await facts(debt))).toBe(true)
+    const known = await changeFacts(r.dir, 'refs/heads/main', {
+      head,
+      merged: debt,
+      mergeCommit: null,
+      baseSha: base0,
+      debts: new Set([debt]),
+    })
+    expect(known.between).toMatchObject([{ sha: debt, relay: true }])
+    expect(sameChange(known)).toBe(true)
+    // 세션이 작성자를 relay@localhost로 지어 커밋함(앱이 적은 SHA가 아님)
+    const forged = await facts(debt)
+    expect(forged.between).toMatchObject([{ sha: debt, relay: false }])
+    expect(sameChange(forged)).toBe(false)
   })
 
   test('rebase로 맞춤(조상이 아님): 머지 커밋의 첫 부모에서 잰 patch-id가 같으면 같다', async () => {

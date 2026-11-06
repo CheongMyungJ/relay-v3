@@ -64,6 +64,11 @@ describe('revertsOf', () => {
       form: 'revert_title',
     })
     expect(revertsOf(commits, { ...o, subjects: ['다른 제목'] })).toBeNull()
+    // 같은 흔한 제목의 다른 커밋을 git revert한 것(본문의 oid가 올린 커밋이 아님)은 이 머지의 되돌림이 아니다
+    const other = [
+      { sha: 'r', body: `Revert "fix lint"\n\nThis reverts commit ${'9'.repeat(40)}.` },
+    ]
+    expect(revertsOf(other, { ...o, subjects: ['fix lint'] })).toBeNull()
   })
 
   test('창 안의 첫 되돌림(오래된 것부터 준다)', () => {

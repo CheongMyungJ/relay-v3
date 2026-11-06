@@ -225,6 +225,46 @@ describe('원래 훅에 넘김', () => {
     expect(await r.git('config', '--local', 'core.hooksPath')).toBe('.husky/_')
   })
 
+  test('relay 세션 안에서 띄운 세션(겹친 세션 환경): 끝없이 돌지 않고 레포의 훅에 넘기며 안쪽 트레일러만 붙는다', async () => {
+    const r = await makeRepo({ files: { 'a.txt': 'a\n' } })
+    await hook(r, '.git/hooks/pre-commit', 'echo pre >> "$(git rev-parse --git-dir)/ran"')
+    // 바깥 세션(다른 RELAY_HOME, 다른 레포)의 환경을 물려받은 앱이 안쪽 세션의 환경을 만든다
+    const outerHome = await makeTempDir('relay-home-outer-')
+    const outerShims = await writeShims(outerHome, shimFiles())
+    const outerEnv = trailerEnv({
+      inherited: process.env,
+      shimDir: sh(outerShims),
+      gitCommon: await gitCommonDir(other.dir),
+      hookLog: sh(join(outerHome, 'hooks.log')),
+    })
+    const outer = { ...outerEnv, RELAY_WORK_ID: 'outer' }
+    const innerEnv = trailerEnv({
+      inherited: { ...process.env, ...outer },
+      shimDir: sh(shims),
+      gitCommon: await gitCommonDir(r.dir),
+      hookLog: sh(hookLog),
+    })
+    const inner = { ...innerEnv, RELAY_WORK_ID: 'inner' }
+    const res = await new Promise<number>((resolve) => {
+      execFile(
+        'git',
+        ['commit', '-q', '--allow-empty', '-m', 'nested'],
+        {
+          cwd: r.dir,
+          env: { ...process.env, ...outer, ...inner },
+          timeout: 15_000,
+          windowsHide: true,
+        },
+        (error) => resolve(error ? Number(error.code ?? 1) || 1 : 0),
+      )
+    })
+    expect(res).toBe(0)
+    expect(innerEnv['GIT_CONFIG_COUNT']).toBe(outerEnv['GIT_CONFIG_COUNT'])
+    expect(await r.read('.git/ran')).toBe('pre\n')
+    expect(workTrailers(await body(r))).toEqual(['inner'])
+    expect(await readFile(hookLog, 'utf8')).toBe('')
+  }, 30_000)
+
   test('원래 훅 자리를 찾지 못하면(심 폴더를 가리킴) 사고를 적고 커밋을 그만둔다', async () => {
     const head = await repo.sha()
     // 앞 설정의 수를 하나 많게 주면 원래 자리를 찾는 git도 심 폴더를 본다

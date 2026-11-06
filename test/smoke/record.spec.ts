@@ -171,7 +171,7 @@ test('[실적]: 조건 줄, 사람 경로 줄, 판, 모든 판, [귀속이 틀�
   )
   // 세션 커밋 가르기(M4e)의 지표와 트레일러 스위치(기본 켬)
   await expect(record.getByTestId('record-sessions')).toHaveText(
-    '세션 커밋 · 내보낸 뒤 사람 교정 1/2 · 내보낸 뒤 커밋: 사람 1 · 집합과 트레일러가 다름 0 · 트레일러 덮임 3/3 (Work 2) · 훅 위임 사고 0',
+    '세션 커밋 · 내보낸 뒤 사람 교정 1/5 (가르지 못한 머지 1) · 내보낸 뒤 커밋: 사람 1 · 집합과 트레일러가 다름 0 · 트레일러 덮임 3/3 (Work 2) · 훅 위임 사고 0',
   )
   await expect(
     page.getByRole('dialog').getByRole('switch', { name: /세션 커밋 트레일러/ }),

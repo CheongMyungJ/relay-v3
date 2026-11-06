@@ -360,20 +360,26 @@ export async function refTips(repo: string, refs: readonly string[]): Promise<st
 }
 
 /**
- * tips에서 닿고 not에서 닿지 않는 커밋과 그 메시지(새 것부터). max개가 넘으면 null(끝 모음을 모른 채 레포 이력 전부를 읽지
- * 않게). tips가 비면 빈 것
+ * tips에서 닿고 not에서 닿지 않는 커밋과 그 메시지, 커미터 시각(유닉스 초)(새 것부터). max개가 넘으면 null(끝 모음을 모른 채
+ * 레포 이력 전부를 읽지 않게). tips가 비면 빈 것
  */
 export async function newCommits(
   repo: string,
   o: { tips: readonly string[]; not: readonly string[]; max: number },
-): Promise<{ sha: string; body: string }[] | null> {
+): Promise<{ sha: string; body: string; time: number }[] | null> {
   if (o.tips.length === 0) return []
   for (const ref of [...o.tips, ...o.not]) checkRef(ref)
-  const args = ['log', '-z', '--format=%H%x1f%B', '--no-color', `--max-count=${String(o.max + 1)}`]
+  const args = [
+    'log',
+    '-z',
+    '--format=%H%x1f%ct%x1f%B',
+    '--no-color',
+    `--max-count=${String(o.max + 1)}`,
+  ]
   args.push(...o.tips, ...o.not.map((r) => `^${r}`), '--')
   const out = splitNul(await git(args, repo)).map((record) => {
-    const [sha = '', ...body] = record.split('\x1f')
-    return { sha: sha.trim(), body: body.join('\x1f') }
+    const [sha = '', time = '', ...body] = record.split('\x1f')
+    return { sha: sha.trim(), body: body.join('\x1f'), time: Number(time) }
   })
   return out.length > o.max ? null : out
 }

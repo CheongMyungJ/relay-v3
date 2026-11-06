@@ -3,7 +3,6 @@
 // 아니다(engine/track.ts에 두면 GATE_VERSION을 올려야 한다): 결론을 바꾸지 않고 끝 줄만 쓴다.
 
 import type { Conclusion } from '../core/types.ts'
-import { RELAY_AUTHOR } from './debt-record.ts'
 import { exportKey, type LedgerEntry } from './ledger.ts'
 
 /** PR 없이 [끝내기]한 내보내기의 head가 기준에 닿기를 보는 날 수(m4-design 4.2, Q8) */
@@ -100,6 +99,11 @@ export interface BetweenCommit {
   sha: string
   /** 작성자 이메일 */
   author: string
+  /**
+   * 앱이 쓴 빚 커밋(V40): 이 Work의 events.jsonl debt_recorded가 적은 head이고 작성자가 relay@localhost. 작성자만으로는 정하지
+   * 않는다(세션도 그 작성자로 커밋할 수 있다)
+   */
+  relay?: boolean
   /** 깨끗한 기준 맞춤 머지: 부모 둘 가운데 하나가 기준 브랜치에 있고 tree가 `git merge-tree --write-tree`의 결과와 같다 */
   baseUpdate: boolean
   /** 메시지의 Relay-Work 트레일러 값(M4e 커밋 가르기, engine/session-commits.ts) */
@@ -122,14 +126,14 @@ export interface ChangeFacts {
 
 /**
  * 머지된 head가 내보낸 head와 같은 변경인가(m4-design 4.3). 차례대로: (1) 같은 SHA. (2) head가 merged의 조상이고 사이 커밋이
- * 모두 relay 빚 커밋(작성자 relay@localhost, V40)이거나 깨끗한 기준 맞춤 머지(GitHub Update branch). (3) patch-id가 같음(rebase로
+ * 모두 앱이 쓴 relay 빚 커밋(V40, relay: 앱이 적은 SHA)이거나 깨끗한 기준 맞춤 머지(GitHub Update branch). (3) patch-id가 같음(rebase로
  * 맞춤, squash). (4) 사이에 다른 커밋이 있거나 patch-id가 다르면 다르다. (5) 그 밖(객체를 못 읽음)은 null: 모름(일치로 세지
  * 않는다)
  */
 export function sameChange(f: ChangeFacts): boolean | null {
   if (f.head === f.merged) return true
   const between = f.ancestor === true ? f.between : null
-  if (between?.every((c) => c.author === RELAY_AUTHOR.email || c.baseUpdate)) return true
+  if (between?.every((c) => c.relay === true || c.baseUpdate)) return true
   const { head, merged } = f.patch
   if (head !== null && head === merged) return true
   if (between !== null) return false

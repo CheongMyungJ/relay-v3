@@ -33,6 +33,7 @@ Electron main
   ├─ gate·ledger  core.gate, 실적 장부 $RELAY_HOME/ledger.jsonl
   ├─ record       끝까지 따라가기(M4b): 끝난 Work의 PR·PR 없이 끝남. 앱 시작, 새 Work, 6시간마다. 거울 $RELAY_HOME/mirror
   │              머지 뒤 30일(M4d, works-after.ts): 되돌림·main 실패를 같은 계기에. [실적]은 works-stats.ts(M4c)
+  │              거울에서 읽는 같은 변경의 사실과 머지 뒤 커밋의 갈래는 works-change.ts(V54)
   ├─ session log  세션 기록(works-session-log.ts): 훅의 effort(M4a), 셸 도구 사이의 세션 커밋 집합과 트레일러 심(M4e)
   └─ gh           PR 찾기·읽기·머지 (gh CLI)
 Renderer (React)

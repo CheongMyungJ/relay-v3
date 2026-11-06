@@ -120,6 +120,10 @@ function verdict(
   if (end.head === line.head && end.same === null) return { kind: 'miss', why: 'unknown_change' }
   // 더 커밋한 갈래(M4e): 이 head 뒤 커밋에 사람 커밋이 하나라도 있으면 사람, 세션 커밋만이면 세션, 가르지 못했으면 모름
   const after = end.head === line.head ? end.after : end.heads?.[line.head]
+  // 앞 head 뒤에 relay 빚 커밋과 깨끗한 기준 맞춤 머지만 있으면 같은 변경이다(follow.ts sameChange 2: Update branch를 받아 다시
+  // 내보낸 head). 끝 줄의 head는 same_change가 이미 정했다
+  if (end.head !== line.head && after && after.human === 0 && after.session === 0)
+    return { kind: 'match' }
   if (after && after.human > 0) return { kind: 'miss', why: 'more_human' }
   if (after && after.session > 0) return { kind: 'miss', why: 'more_session' }
   return { kind: 'miss', why: 'more_unknown' }
@@ -357,7 +361,7 @@ function blank(id: string, hash: string | null): ConditionStats {
 /**
  * 조건 id → 그림자 실적이 기준을 넘었나(관문의 track_record_ok, V3). 지금 판(current)의 결론 줄만 센다. 끝이 정해진 표본이 있는
  * 조건만 결과에 있다(관문은 없음을 거짓으로 본다). 일치 수 ≥ minShadow, 일치율 ≥ 95%, 그리고 이 조건의 머지에 이의 없는 귀속
- * 되돌림·귀속 main 실패가 0이면 참(되돌림 0은 엄격하게만 바꾼다, V5)
+ * 되돌림·귀속 main 실패가 0이고 미정 main이 0이면 참(되돌림 0과 미정 0은 엄격하게만 바꾼다, V5. devices.md '자동 머지')
  */
 export function trackRecord(
   entries: readonly LedgerEntry[],
@@ -370,7 +374,8 @@ export function trackRecord(
   const out: Record<string, boolean> = {}
   for (const [id, s] of Object.entries(stats)) {
     if (s.n === 0) continue
-    const clean = s.after.reverts === 0 && s.after.main.attributed === 0
+    const clean =
+      s.after.reverts === 0 && s.after.main.attributed === 0 && s.after.main.pending === 0
     out[id] = s.match >= minShadow && (s.rate ?? 0) >= MATCH_RATE && clean
   }
   return out
@@ -396,7 +401,8 @@ const FIELD_NAMES: Record<keyof EpochView, string> = {
 }
 
 /**
- * 설정 대화상자의 [실적]과 `relay record`의 표(m4-design 5.2): 지금 판(이 프로젝트의 마지막 M4a 결론 줄의 판) 또는 모든 판의
+ * 설정 대화상자의 [실적]과 `relay record`의 표(m4-design 5.2): 지금 판(이 프로젝트에서 판 칸을 모두 아는 마지막 결론 줄의 판)
+ * 또는 모든 판의
  * 조건별 실적, 사람 경로 비교 줄, 판이 바뀐 자리(최근 것부터 다섯), 판을 모르는 결론 줄의 수
  */
 export function recordStats(
@@ -404,7 +410,8 @@ export function recordStats(
 ): RecordStats {
   const c = counter({ ...input, epoch: 'all' })
   const lines = c.conclusions
-  const current = lines.findLast((e) => e.gate_version !== undefined) ?? null
+  // 판 칸을 모두 아는 마지막 결론 줄(앱을 다시 켠 뒤 훅 전의 결론 줄은 effort를 몰라 어떤 판과도 같지 않다)
+  const current = lines.findLast((e) => epochBase(e) !== null) ?? null
   const epoch = input.allEpochs || current === null ? 'all' : current
   const stats = shadowStats({ ...input, epoch })
   // 사람 경로: 어느 조건도 채우지 못한 Work. 조건이 없어 판 열쇠 대신 조건과 상관없는 판으로 고른다

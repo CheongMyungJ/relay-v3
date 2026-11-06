@@ -122,7 +122,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `hasWord(repo, sha, word, exclude): Promise<boolean>` — sha의 파일에 낱말이 있나(`git grep -q -I -w -F`, exclude 아래와 바이너리는 뺀다. 못 찾음(종료 1)은 거짓, 다른 실패는 던진다). 지식 항목의 anchor(V38).
 - `changedPaths(repo, a, b): Promise<string[]>` — 두 커밋 사이 바뀐 파일(`diff --name-only --no-renames`: 옮김은 지움과 새로 생김). 기록 안 된 나빠짐(M3b).
 - 거울 읽기(M4b, m4-design 4.3·4.4. 앱 로컬 거울에서 쓴다): `logRange(repo, { from?, to, since?, until?, firstParent?, max?, exclude? }): Promise<LogCommit[]>`(`git log -z`, 필드 `%H %P %ae %T %ct %B`. since·until은 ISO를 `@<유닉스 초>`로 넘긴다: git의 날짜 읽기는 먼 해를 틀리게 읽는다. exclude는 `^ref`), `isAncestor(repo, a, b): Promise<boolean>`(`merge-base --is-ancestor`, 객체가 없으면 던짐), `mergeTree(repo, a, b): Promise<string | null>`(합친 트리, 충돌이면 null), `patchId(repo, from, to): Promise<string | null>`(`git diff`를 `git patch-id --stable`에. 바뀐 것이 없으면 null).
-- 세션 커밋 집합 읽기(M4e, m4-design 7.1, main/works-session-log.ts): `refTips(repo, refs): Promise<string[]>`(있는 ref의 커밋, 없으면 건너뜀), `newCommits(repo, { tips, not, max }): Promise<{ sha; body }[] | null>`(`git log -z` tips `^not…`, max가 넘으면 null).
+- 세션 커밋 집합 읽기(M4e, m4-design 7.1, main/works-session-log.ts): `refTips(repo, refs): Promise<string[]>`(있는 ref의 커밋, 없으면 건너뜀), `newCommits(repo, { tips, not, max }): Promise<{ sha; body; time }[] | null>`(`git log -z` tips `^not…`, time은 커미터 시각(유닉스 초), max가 넘으면 null).
 
 ### `src/adapters/git-write.ts` — git 쓰기 (M3b, V40)
 git.ts는 읽기만 한다. 앱이 레포에 쓰는 것은 빚 기록 하나다.

@@ -57,7 +57,8 @@ export interface BaseCommit {
 /**
  * 창 안의 기준 커밋 가운데 이 머지를 되돌린 첫 커밋(m4-design 6절): (가) 본문 `This reverts commit <oid>`의 oid가 이 머지가 기준에
  * 올린 커밋(landed)에 있음, (나) `Reverts <owner>/<repo>#<pr>`(GitHub 되돌림 PR 본문. slug를 모르면 owner/repo는 보지 않는다),
- * (다) 제목이 `Revert "<올린 커밋의 제목>"`(GitHub가 되돌림 PR과 git revert가 짓는 제목. PR 제목은 녹화본에 없어 커밋 제목을 쓴다).
+ * (다) 제목이 `Revert "<올린 커밋의 제목>"`(GitHub가 되돌림 PR과 git revert가 짓는 제목. PR 제목은 녹화본에 없어 커밋 제목을 쓴다)이고
+ * 본문에 `This reverts commit`이 없음(있는데 (가)가 아니면 같은 제목의 다른 커밋을 되돌린 것).
  * 손으로 한 부분 되돌림은 놓친다(낙관 쪽 맹점)
  */
 export function revertsOf(
@@ -72,7 +73,8 @@ export function revertsOf(
   const landed = o.landed.map((s) => s.toLowerCase())
   const subjects = new Set(o.subjects.filter((s) => s !== '').map((s) => `Revert "${s}"`))
   for (const c of commits) {
-    for (const m of c.body.matchAll(/This reverts commit ([0-9a-f]{7,64})/gi)) {
+    const named = [...c.body.matchAll(/This reverts commit ([0-9a-f]{7,64})/gi)]
+    for (const m of named) {
       const oid = (m[1] ?? '').toLowerCase()
       if (landed.some((l) => l.startsWith(oid))) return { sha: c.sha, form: 'this_reverts' }
     }
@@ -81,8 +83,9 @@ export function revertsOf(
         const slugOk = o.slug === null || (m[1] ?? '').toLowerCase() === o.slug.toLowerCase()
         if (slugOk && Number(m[2]) === o.pr) return { sha: c.sha, form: 'reverts_pr' }
       }
+    // (다)는 되돌린 커밋을 본문에 적지 않은 되돌림만: 적었는데 올린 커밋이 아니면 같은 제목의 다른 커밋을 되돌린 것이다
     const title = c.body.split('\n')[0]?.trim() ?? ''
-    if (subjects.has(title)) return { sha: c.sha, form: 'revert_title' }
+    if (named.length === 0 && subjects.has(title)) return { sha: c.sha, form: 'revert_title' }
   }
   return null
 }

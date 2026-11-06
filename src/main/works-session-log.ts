@@ -2,7 +2,8 @@
 // - M4a: 세션 훅 본문의 effort.level(relay-v2 녹화본의 PreToolUse·PostToolUse·PostToolUseFailure·Stop 본문에 있음)의 마지막
 //   값을 Work마다 메모리에 둔다: 내보내기 결론 줄의 effort 칸과 지금 판(판 열쇠)이 읽는다. 앱을 다시 켜면 다음 훅까지 모른다.
 // - M4e 첫 겹(세션 커밋 집합): 셸 도구의 PreToolUse에서 Work 브랜치·단위 브랜치·worktree HEAD의 끝을 읽고, 그 도구의
-//   PostToolUse(실패도)나 Stop에서 그 뒤 새로 닿는 커밋(기준 ref에서 닿는 것은 뺌)을 works/<id>/session-commits.jsonl에 적는다.
+//   PostToolUse(실패도)나 Stop에서 그 뒤 새로 닿는 커밋(기준 ref에서 닿는 것과 창을 열기 전의 커미터 시각인 것은 뺌: 받은
+//   커밋)을 works/<id>/session-commits.jsonl에 적는다.
 //   도구 경계에서 보지 못한 커밋은 세션 밖이다(사람이 직접, GitHub 웹 고침, 다른 곳의 push). 셸 도구가 겹치면 하나의 창으로 본다.
 // - M4e 둘째 겹(트레일러, Q7): 세션을 띄울 때 심을 $RELAY_HOME/git-hooks에 쓰고 세션 PTY 환경에만 core.hooksPath를 준다
 //   (prepareLaunch, engine/session-commits.ts trailerEnv). 집합에 든 커밋에 이 Work의 트레일러가 없으면 events.jsonl에
@@ -29,6 +30,8 @@ import type { Store, WorkRecord } from './store.ts'
 
 /** 한 창(셸 도구 사이)에서 적는 새 커밋의 상한. 넘으면 적지 않는다(끝 모음을 잃고 이력 전부를 읽지 않게) */
 const WINDOW_MAX = 500
+/** 창을 연 때보다 이만큼 앞의 커미터 시각까지 창 안에서 만든 커밋으로 본다(git 시각은 초 단위) */
+const WINDOW_SLACK_MS = 2000
 
 const SESSION_FILE = 'session-commits.jsonl'
 
@@ -77,8 +80,8 @@ function refsOf(w: SessionWork): string[] {
 export class SessionLog {
   private readonly efforts = new Map<string, string>()
   private readonly deps: SessionLogDeps | null
-  /** Work마다 열린 창: 창을 연 때의 끝 모음과 열린 셸 도구(tool_use_id) */
-  private readonly open = new Map<string, { tips: string[]; tools: Set<string> }>()
+  /** Work마다 열린 창: 창을 연 때(실제 시계, 커밋의 커미터 시각과 견줌)와 그때의 끝 모음, 열린 셸 도구(tool_use_id) */
+  private readonly open = new Map<string, { at: number; tips: string[]; tools: Set<string> }>()
   /** Work마다 지금 세션의 트레일러가 켜졌나(띄울 때 정함) */
   private readonly trailerOn = new Map<string, boolean>()
   /** Work마다 다룬 hooks.log 줄 수 */
@@ -183,8 +186,9 @@ export class SessionLog {
       w.tools.add(tool)
       return
     }
+    const at = Date.now()
     const tips = await refTips(work.worktree, refsOf(work))
-    this.open.set(workId, { tips, tools: new Set([tool]) })
+    this.open.set(workId, { at, tips, tools: new Set([tool]) })
   }
 
   /** 셸 도구 하나가 끝났다(tool null이면 Stop: 열린 창을 모두 닫는다). 창 사이의 새 커밋을 적는다 */
@@ -200,10 +204,12 @@ export class SessionLog {
         not: [...w.tips, work.base_ref],
         max: WINDOW_MAX,
       })
-      if (found === null) deps.log?.(`세션 커밋이 너무 많아 적지 않음 (${workId})`)
-      else if (found.length > 0) {
+      // 창을 열기 전에 만든 커밋은 세션이 받은 것이다(git pull로 받은 사람의 GitHub 웹 고침, 다른 브랜치 checkout): 세션 밖
+      const made = found?.filter((c) => c.time * 1000 >= w.at - WINDOW_SLACK_MS) ?? null
+      if (made === null) deps.log?.(`세션 커밋이 너무 많아 적지 않음 (${workId})`)
+      else if (made.length > 0) {
         const on = this.trailerOn.get(workId) ?? false
-        const commits = found.map((c) => ({
+        const commits = made.map((c) => ({
           sha: c.sha,
           trailer: workTrailers(c.body).includes(workId),
         }))
@@ -242,13 +248,33 @@ export class SessionLog {
 
 // ── 끝 줄의 칸(works-record.ts, works-exports.ts) ───────────────────────────
 
-/** 이 Work의 세션 커밋 집합과 심의 사고 수, 다룬 사고 줄 수 */
+/** events.jsonl에서 앱이 쓴 빚 커밋(V40)의 SHA: debt_recorded의 head */
+function debtHeads(events: string): Set<string> {
+  const out = new Set<string>()
+  for (const line of events.split(/\r?\n/)) {
+    if (!line.includes('"debt_recorded"')) continue
+    try {
+      const v: unknown = JSON.parse(line)
+      if (isObject(v) && v['type'] === 'debt_recorded' && typeof v['head'] === 'string')
+        out.add(v['head'])
+    } catch {
+      // 끊긴 줄
+    }
+  }
+  return out
+}
+
+/**
+ * 이 Work의 세션 커밋 집합과 심의 사고 수, 다룬 사고 줄 수, 앱이 쓴 빚 커밋의 SHA(머지 뒤 커밋을 가를 때 relay 빚 커밋은 작성자가
+ * 아니라 이 SHA로 정한다)
+ */
 export async function sessionOf(
   store: Pick<Store, 'readText'>,
   workId: string,
-): Promise<{ set: SessionSet; incidents: number; handled: number }> {
+): Promise<{ set: SessionSet; incidents: number; handled: number; debts: Set<string> }> {
   const text = (await store.readText(workId, SESSION_FILE)) ?? ''
   const log = (await store.readText(workId, 'hooks.log')) ?? ''
+  const events = (await store.readText(workId, 'events.jsonl')) ?? ''
   let handled = 0
   for (const line of text.split(/\r?\n/)) {
     if (!line.includes('"incidents"')) continue
@@ -263,6 +289,7 @@ export async function sessionOf(
     set: parseSessionLog(text),
     incidents: log.split(/\r?\n/).filter((l) => l.trim() !== '').length,
     handled,
+    debts: debtHeads(events),
   }
 }
 

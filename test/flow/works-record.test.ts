@@ -1,6 +1,6 @@
 // [흐름] 끝까지 따라가기(M4b, docs/m4-design.md 4절, src/main/works-record.ts): Work가 [끝내기]로 끝난 뒤 GitHub에서 Update
 // branch를 거쳐 머지된 PR(같은 변경, 머지 커밋·때), 사람이 더 커밋해 squash로 머지한 PR(같은 변경이 아님), PR 없이 끝난 Work의
-// no_pr와 90일 뒤 unmerged(가짜 시계), [버림]의 discarded, 새 Work가 따라가기를 부름. 거울은 $RELAY_HOME에만 생기고 사용자
+// no_pr와 90일 뒤 unmerged(가짜 시계, 90일은 첫 결론 줄부터), [버림]의 discarded, 새 Work가 따라가기를 부름. 거울은 $RELAY_HOME에만 생기고 사용자
 // 레포의 ref는 그대로다. 로컬에서 합친 경우는 works-record-local.test.ts. 바탕은 test/support/works-flow.ts.
 import { existsSync } from 'node:fs'
 import { appendFile } from 'node:fs/promises'
@@ -154,7 +154,9 @@ test('사람이 PR에 더 커밋하고 squash로 머지했으면 같은 변경�
 
 test('PR 없이 끝난 Work는 no_pr, 기준에 닿지 않고 90일이 지나면 unmerged(가짜 시계). [버림]은 discarded. 새 Work가 따라가기를 부른다', async () => {
   await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
-  let clock = Date.parse('2026-11-08T00:00:00Z')
+  // 가짜 시계는 실제 오늘(결론 줄의 때) 다음 날 0시부터: 90일은 결론 줄의 때부터 센다
+  const start = Math.ceil(Date.now() / DAY) * DAY
+  let clock = start
   const app = await kit.openApp(await makeTempDir('relay-home-'), {
     follow: true,
     recordNow: () => new Date(clock).toISOString(),
@@ -172,7 +174,7 @@ test('PR 없이 끝난 Work는 no_pr, 기준에 닿지 않고 90일이 지나면
   )
   await app.record.follow(project)
   expect(fates(await app.store.readLedger(), id)).toEqual([
-    expect.objectContaining({ head, ended: 'no_pr', ts: '2026-11-08T00:00:00.000Z' }),
+    expect.objectContaining({ head, ended: 'no_pr', ts: new Date(start).toISOString() }),
   ])
 
   // 30일: 아직 기준에 닿지 않았지만 끝을 정하지 않는다
@@ -204,4 +206,22 @@ test('PR 없이 끝난 Work는 no_pr, 기준에 닿지 않고 90일이 지나면
     expect.objectContaining({ head: line.head, ended: 'discarded' }),
   ])
   expect(trackRecord(ledger, project, 0, flowEpoch())).toEqual({ small: false })
+})
+
+test('늦게 처음 따라가도 no_pr의 90일은 내보내기의 첫 결론 줄부터 센다(분모 밖 추적 잃음과 같은 시계)', async () => {
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }])
+  const start = Date.now()
+  let clock = start + 85 * DAY
+  const app = await kit.openApp(await makeTempDir('relay-home-'), {
+    recordNow: () => new Date(clock).toISOString(),
+  })
+  const { id, project } = await startWork(app, false)
+  await endWork(app, id)
+  // 앱이 꺼져 있다가 85일 뒤 처음 따라감: no_pr
+  await app.record.follow(project)
+  expect(fates(await app.store.readLedger(), id).map((e) => e.ended)).toEqual(['no_pr'])
+  // 첫 결론 줄에서 90일이 지났다(no_pr 줄을 쓴 때부터는 6일)
+  clock = start + 91 * DAY
+  await app.record.follow(project)
+  expect(fates(await app.store.readLedger(), id).map((e) => e.ended)).toEqual(['no_pr', 'unmerged'])
 })

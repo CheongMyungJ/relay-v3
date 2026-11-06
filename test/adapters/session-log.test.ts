@@ -164,6 +164,28 @@ describe('세션 커밋 집합', () => {
     })
   })
 
+  test('창 안에서 받은 커밋(pull, 다른 브랜치 checkout)은 창을 열기 전에 만든 것이라 들지 않는다', async () => {
+    // 사람이 GitHub 웹에서 고친 커밋: 창을 열기 한 시간 앞에 만들어졌다
+    const old = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const web = await new Promise<string>((resolve, reject) =>
+      execFile(
+        'git',
+        ['commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'web edit'],
+        { cwd: wt, env: { ...process.env, GIT_COMMITTER_DATE: old, GIT_AUTHOR_DATE: old } },
+        (e, out) => (e ? reject(e) : resolve(out.trim())),
+      ),
+    )
+    await log.noteHook(work.id, 'PreToolUse', bash('u9'))
+    // 세션의 git pull: 웹 고침을 받고 그 위에 세션이 커밋한다
+    await runGit(wt, ['merge', '--ff-only', '-q', web])
+    await sessionCommit('s9')
+    const mine = await head()
+    await log.noteHook(work.id, 'PostToolUse', bash('u9'))
+    const s = await sessionOf(store, work.id)
+    expect(s.set.commits.has(mine)).toBe(true)
+    expect(s.set.commits.has(web)).toBe(false)
+  })
+
   test('심의 사고: hook_incident를 적고 프로젝트의 트레일러를 끈다. 다시 켠 앱은 같은 사고로 다시 끄지 않는다', async () => {
     await appendFile(
       store.workPath(work.id, 'hooks.log'),

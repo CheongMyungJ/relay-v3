@@ -29,7 +29,7 @@ import { QUALITY_PATH } from '../engine/check.ts'
 import { exportKey, type LedgerEntry } from '../engine/ledger.ts'
 import type { MainState } from '../shared/api.ts'
 import type { ProjectRecord, Store, WorkRecord } from './store.ts'
-import type { Mirror } from './works-record.ts'
+import type { Mirror } from './works-change.ts'
 
 /** 머지 하나가 올린 커밋을 셀 때 읽는 PR 커밋의 상한 */
 const PR_COMMITS_MAX = 200

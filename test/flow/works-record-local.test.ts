@@ -1,5 +1,6 @@
 // [흐름] 끝까지 따라가기(M4b, docs/m4-design.md 4.2, src/main/works-record.ts): PR 없이 [끝내기]한 Work를 사람이 로컬에서
-// 기준에 합쳐 push했으면 human-override 머지로 쓴다. squash(같은 patch-id의 기준 커밋을 찾음)와 merge(head가 기준의 조상).
+// 기준에 합쳐 push했으면 human-override 머지로 쓴다. squash(같은 patch-id의 기준 커밋을 찾음)와 merge(head가 기준의 조상: 기준
+// first-parent에서 head를 처음 담은 머지의 둘째 부모가 머지된 끝이고, 사람이 head 뒤에 더 커밋했으면 같은 변경이 아니다).
 // works-record.test.ts와 origin을 나누지 않으려고(기준에 변경이 들어간다) 파일을 갈랐다. 바탕은 test/support/works-flow.ts.
 import { expect, test } from 'vitest'
 import type { LedgerEntry } from '../../src/engine/ledger.ts'
@@ -90,6 +91,37 @@ test('[그래도 끝내기]로 PR 없이 끝난 Work를 사람이 merge로 합�
     ['no_pr', null, null],
     [null, 'human-override', head],
   ])
-  expect(last[1]).toMatchObject({ same_change: true })
-  expect(last[1]).not.toHaveProperty('merge_commit')
+  expect(last[1]).toMatchObject({
+    same_change: true,
+    merge_commit: await g('rev-parse', 'HEAD'),
+  })
+})
+
+test('PR 없이 끝난 Work를 사람이 head 뒤에 더 커밋해 merge로 합쳤으면 더 커밋한 머지(일치가 아님)로 쓴다', async () => {
+  const docs = { do: 'commit', message: '문서 둘', files: { 'docs/more.md': '둘\n' } }
+  await scenario([SUBMIT, docs, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { id, project, head } = await endedWork(app)
+
+  // 사람의 clone에서 Work 브랜치 위에 고침 하나를 더하고 --no-ff로 합친다
+  const { g, write } = await kit.github()
+  await g('fetch', '--quiet', kit.repo.dir, app.works.find(id)?.branch ?? '')
+  await g('checkout', '--quiet', '-b', 'fixup', 'FETCH_HEAD')
+  const fixup = await write('docs/more-fix.md', '사람이 고침\n', '사람이 더 고침')
+  await g('checkout', '--quiet', 'main')
+  await g('merge', '--quiet', '--no-ff', '--no-edit', 'fixup')
+  const merge = await g('rev-parse', 'HEAD')
+  await g('push', '--quiet', 'origin', 'main')
+
+  await app.record.follow(project)
+  const ledger = await app.store.readLedger()
+  const last = fates(ledger, id).at(-1)
+  expect(last).toMatchObject({
+    head,
+    by: 'human-override',
+    merged_head: fixup,
+    merge_commit: merge,
+    same_change: false,
+  })
+  expect(last?.after_commits).toMatchObject({ human: 1, session: 0 })
 })

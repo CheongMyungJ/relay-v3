@@ -332,7 +332,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
     timeout: 60_000,
   })
   await expect(evidence.getByTestId('shadow-line')).toHaveCount(0) // Q6: 끝까지 가림
-  await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
+  await expect(evidence.getByTestId('decisive')).toHaveText(/^사람에게 보낼 사실 없음: 자동 조건의/)
   // PR이 없으면 다음 할 일을 말한다
   await expect(evidence.getByTestId('next-step')).toContainText('PR이 열리면')
   await expect(evidence.getByText('줄 판정')).toBeVisible()
@@ -345,8 +345,8 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await page.keyboard.type('go')
   await page.keyboard.press('Enter')
   await expect(evidence.getByRole('link', { name: '#1' })).toBeVisible({ timeout: 60_000 })
-  await expect(evidence.getByTestId('shadow-line')).toHaveCount(0) // Q6: 끝까지 가림
-  await expect(evidence.getByTestId('decisive')).toHaveText('프로젝트에서 자동 머지가 꺼져 있음')
+  await expect(evidence).not.toContainText(/그림자 표본|자동 머지가 꺼져|조건 small/) // Q6: 가림
+  await expect(evidence.getByTestId('decisive')).toHaveText(/^사람에게 보낼 사실 없음: 자동 조건의/)
   await expect(evidence.getByTestId('next-step')).toBeHidden()
   // 리뷰 지적은 올림과 메모로 나뉜다(V26): 둘 다 메모라 올림 묶음이 없고, 구조/low에는 갈래를 붙인다
   await evidence.locator('summary', { hasText: '리뷰 지적' }).click()

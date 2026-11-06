@@ -22,7 +22,12 @@ const facts = (over: Partial<ChangeFacts> = {}): ChangeFacts => ({
   ...over,
 })
 
-const commit = (author: string, baseUpdate = false) => ({ sha: 'c', author, baseUpdate })
+const commit = (author: string, baseUpdate = false, relay = false) => ({
+  sha: 'c',
+  author,
+  baseUpdate,
+  relay,
+})
 
 describe('sameChange', () => {
   test('(1) 같은 SHA면 같다(거울 없이)', () => {
@@ -30,8 +35,11 @@ describe('sameChange', () => {
   })
 
   test('(2) 사이 커밋이 깨끗한 기준 맞춤 머지(Update branch)나 relay 빚 커밋뿐이면 같다', () => {
-    const between = [commit('x@example.com', true), commit('relay@localhost')]
+    const between = [commit('x@example.com', true), commit('relay@localhost', false, true)]
     expect(sameChange(facts({ ancestor: true, between }))).toBe(true)
+    // 작성자만 relay@localhost인 커밋(앱이 적은 빚 커밋이 아님: 세션도 그 작성자로 커밋할 수 있다)은 빚 커밋이 아니다
+    const forged = [commit('relay@localhost')]
+    expect(sameChange(facts({ ancestor: true, between: forged }))).toBe(false)
   })
 
   test('(3) 조상이 아니어도(rebase, squash) patch-id가 같으면 같다', () => {

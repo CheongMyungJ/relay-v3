@@ -441,6 +441,8 @@ export interface SessionStats {
   merges: number
   /** 그 가운데 사람 커밋이 하나라도 있는 머지(사람 교정, philosophy 8.1) */
   corrected: number
+  /** 첫 내보내기 뒤 커밋을 가르지 못한 머지(rebase, 사이가 너무 많음, M4e 앞 등): 분모 밖으로 따로 보인다 */
+  unclassified: number
   /** 그 커밋의 갈래 합 */
   commits: { session: number; human: number; relay: number; base_update: number }
   /** 세션 커밋 집합과 트레일러가 다르게 가른 커밋(사람으로 셈) */
