@@ -225,12 +225,22 @@ export interface ExampleEvidence {
   base?: TestStatus | 'missing' | 'not_run'
 }
 
+/**
+ * 줄 판정에 붙는 고칠 길(V33). keep_base_api: 지킴 줄의 예시(examples) 시험이 기준에서 결과가 없고 기준에서 시험 파일을
+ * 불러오지 못했다. 지킴 시험은 기준에 있는 API만 불러야 한다. 판정은 바꾸지 않고 글만 붙인다
+ */
+export interface LineFix {
+  kind: 'keep_base_api'
+  examples: string[]
+}
+
 export interface LineVerdict {
   line: string
   kind: LineKind
   status: LineStatus
   detail: string
   examples: ExampleEvidence[]
+  fix?: LineFix
 }
 
 export type GroundingCheck = { line: string; ground: Grounding; ok: boolean; detail: string }

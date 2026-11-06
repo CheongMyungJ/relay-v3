@@ -93,6 +93,33 @@ describe('feedbackFacts (V24)', () => {
     expect(keep?.text).toContain('An example fails on the base')
   })
 
+  test('지킴 줄의 시험 파일을 기준에서 불러오지 못했으면(V33) 고칠 길을 영어로 붙인다', () => {
+    const keep = (fix?: LineVerdict['fix']): LineVerdict => ({
+      line: 'C2',
+      kind: 'keep',
+      status: 'missing_evidence',
+      detail: '기준에서 시험 파일을 불러오지 못함: C2.1. 고칠 길: …',
+      examples: [
+        { id: 'C2.1', head: 'passed', base: 'missing' },
+        { id: 'C2.2', head: 'passed', base: 'missing' },
+      ],
+      ...(fix ? { fix } : {}),
+    })
+    const [fact] = feedbackFacts(
+      evidence({ lines: [keep({ kind: 'keep_base_api', examples: ['C2.1', 'C2.2'] })] }),
+    )
+    expect(fact?.key).toBe('line:C2:missing_evidence')
+    expect(fact?.text).toContain('- C2.1: head passed, base missing')
+    expect(fact?.text).toContain(
+      'No base result for C2.1, C2.2: a test file failed to load on the base. A keep test may call only the API the base already has: put it in a different file from the tests that call new functions.',
+    )
+    // 사람용 detail(한국어)은 넣지 않는다
+    expect(fact?.text).not.toContain('고칠 길')
+    const [plain] = feedbackFacts(evidence({ lines: [keep()] }))
+    expect(plain?.text).not.toContain('a keep test')
+    expect(plain?.text).not.toContain('A keep test')
+  })
+
   test('실패했거나 돌지 못한 명령(끝 출력, 실패한 시험), 나빠진 래칫, 예시 자료의 차이는 칸마다 모두', () => {
     const e = evidence({
       commands: [

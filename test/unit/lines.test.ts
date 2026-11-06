@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import { allLinesTestedAndMet, confirmFailures, judgeLines } from '../../src/core/lines.ts'
+import {
+  allLinesTestedAndMet,
+  confirmFailures,
+  judgeLines,
+  lineFixText,
+} from '../../src/core/lines.ts'
 import type {
   Contract,
   ContractLine,
+  LineFix,
   LineKind,
   LineVerdict,
   TestCase,
@@ -209,6 +215,68 @@ describe('judgeLines: 새로(new)·지킴(keep)·없앰(remove)', () => {
       expect(v.status).toBe('missing_evidence')
       expect(v.detail).toContain('기준에서 통과를 확인하지 못함')
     }
+  })
+
+  test('keep이 기준에서 시험 파일을 불러오지 못했으면(V33) 증거 없음 그대로이고 그렇게 적고 고칠 길을 붙인다', () => {
+    const file = 'test/keep.test.ts'
+    const l = line('C3', 'keep', ['C3.1', 'C3.2'])
+    const head = [
+      tc('[C3.1] 옛 동작', 'passed', { classname: file }),
+      tc('[C3.2] 옛 동작', 'passed', { classname: file }),
+    ]
+    const base = [raw(file, 'failed', { classname: file })]
+    const v = one(l, head, base)
+    const fix: LineFix = { kind: 'keep_base_api', examples: ['C3.1', 'C3.2'] }
+    expect(v).toEqual({
+      line: 'C3',
+      kind: 'keep',
+      status: 'missing_evidence',
+      detail: `기준에서 시험 파일을 불러오지 못함: C3.1, C3.2. ${lineFixText(fix)}`,
+      examples: [
+        { id: 'C3.1', head: 'passed', base: 'missing' },
+        { id: 'C3.2', head: 'passed', base: 'missing' },
+      ],
+      fix,
+    })
+    expect(lineFixText(fix)).toBe(
+      '고칠 길: 지킴 시험은 기준에 있는 API만 불러야 한다. 새 함수를 부르는 시험과 다른 파일에 둔다',
+    )
+  })
+
+  test('keep: 불러오지 못한 예시와 다른 까닭의 예시를 나눠 적고, 파일을 모르면(node:test) 그렇다고 적는다', () => {
+    const l = line('C3', 'keep', ['C3.1', 'C3.2'])
+    const head = [tc('[C3.1]', 'passed', { classname: 'test' }), tc('[C3.2]', 'passed')]
+    const base = [
+      raw('test/keep.test.mjs', 'failed', { classname: 'test' }),
+      tc('[C3.2]', 'skipped'),
+    ]
+    const v = one(l, head, base)
+    expect(v.status).toBe('missing_evidence')
+    expect(v.detail).toBe(
+      '기준에서 시험 파일을 불러오지 못함(파일은 확인하지 못함): C3.1. ' +
+        `기준에서 통과를 확인하지 못함: C3.2(skipped). ${lineFixText({ kind: 'keep_base_api', examples: [] })}`,
+    )
+    expect(v.fix).toEqual({ kind: 'keep_base_api', examples: ['C3.1'] })
+  })
+
+  test('keep: 불러오지 못한 파일이 다른 파일이거나 파일 단위 실패가 없으면 고칠 길을 붙이지 않는다', () => {
+    const l = line('C3', 'keep', ['C3.1'])
+    const head = [tc('[C3.1]', 'passed', { classname: 'test/a.test.ts' })]
+    const other = [raw('test/other.test.ts', 'failed', { classname: 'test/other.test.ts' })]
+    for (const base of [other, [tc('다른 시험', 'passed')]]) {
+      const v = one(l, head, base)
+      expect(v.status).toBe('missing_evidence')
+      expect(v.detail).toBe('기준에서 통과를 확인하지 못함: C3.1(missing)')
+      expect(v).not.toHaveProperty('fix')
+    }
+  })
+
+  test('바뀜 줄은 기준에서 불러오지 못해도 고칠 길을 붙이지 않는다(기준 실패로 본다)', () => {
+    const file = 'test/b.test.ts'
+    const head = [tc('[C1.1]', 'passed', { classname: file })]
+    const v = one(line('C1', 'change', ['C1.1']), head, [raw(file, 'failed', { classname: file })])
+    expect(v.status).toBe('met')
+    expect(v).not.toHaveProperty('fix')
   })
 
   test('keep도 결과에서 실패하면 not_met', () => {

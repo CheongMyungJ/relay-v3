@@ -274,6 +274,10 @@ export function feedbackFacts(e: Omit<EvidenceBundle, 'review'>): FeedbackFact[]
   ]
 }
 
+/** 고칠 길(V33, 영어). 사람용 글은 core lines.ts lineFixText */
+const KEEP_BASE_API_FIX =
+  'No base result for <ids>: a test file failed to load on the base. A keep test may call only the API the base already has: put it in a different file from the tests that call new functions.'
+
 function lineFact(v: LineVerdict, contractId: string, cases: TestCase[]): FeedbackFact {
   const ex = v.examples
   const out = [`**Contract line ${v.line} (${v.kind}): ${v.status.replace('_', ' ')}.**`]
@@ -286,6 +290,8 @@ function lineFact(v: LineVerdict, contractId: string, cases: TestCase[]): Feedba
     out.push('Every example passes on the base too: a change line needs one that fails there.')
   if (v.kind === 'keep' && ex.some((x) => x.base === 'failed'))
     out.push('An example fails on the base: the examples of a keep line must pass there.')
+  if (v.fix?.kind === 'keep_base_api')
+    out.push(KEEP_BASE_API_FIX.replace('<ids>', v.fix.examples.join(', ')))
   if (ex.some((x) => x.head === 'missing'))
     out.push(
       `missing: no test has the example's tag, such as \`[${contractId}:${ex[0]?.id}]\`, in its name.`,

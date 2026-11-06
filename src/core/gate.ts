@@ -6,7 +6,7 @@
 import { contractHash, exampleValueText } from './contract.ts'
 import { isStale } from './evidence.ts'
 import { matchAny } from './glob.ts'
-import { allLinesTestedAndMet } from './lines.ts'
+import { allLinesTestedAndMet, lineFixText } from './lines.ts'
 import { hasRealLimit } from './quality.ts'
 import { raises } from './review.ts'
 import type {
@@ -209,9 +209,17 @@ function bundleContractFacts(e: EvidenceBundle, contract: Contract | null): stri
   return []
 }
 
+/** 줄의 detail. 끝에 붙은 고칠 길(V33)은 자르지 않고 그 앞만 자른다 */
+function lineDetail(v: LineVerdict): string {
+  const fix = v.fix ? lineFixText(v.fix) : ''
+  if (fix === '' || !v.detail.endsWith(fix)) return clip(v.detail)
+  const cause = v.detail.slice(0, -fix.length).replace(/[.\s]+$/, '')
+  return cause === '' ? fix : `${clip(cause)}. ${fix}`
+}
+
 const LINE_FACTS: [LineStatus, (v: LineVerdict) => string][] = [
-  ['not_met', (v) => `줄 ${v.line} 못 미침: ${clip(v.detail)}`],
-  ['missing_evidence', (v) => `줄 ${v.line} 증거 없음: ${clip(v.detail)}`],
+  ['not_met', (v) => `줄 ${v.line} 못 미침: ${lineDetail(v)}`],
+  ['missing_evidence', (v) => `줄 ${v.line} 증거 없음: ${lineDetail(v)}`],
   ['human', (v) => `줄 ${v.line}은 사람이 확인`],
   ['observe', (v) => `줄 ${v.line}은 관찰로 확인`],
 ]

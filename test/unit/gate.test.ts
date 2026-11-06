@@ -2,6 +2,7 @@
 import { describe, expect, test } from 'vitest'
 import { contractHash } from '../../src/core/contract.ts'
 import { openItems } from '../../src/core/gate.ts'
+import { judgeLines, lineFixText } from '../../src/core/lines.ts'
 import type { Contract, EvidenceBundle, Policy } from '../../src/core/types.ts'
 import {
   C2,
@@ -428,6 +429,34 @@ describe('열린 것(V25)은 관문이 사람에게 보내는 사실 그대로�
     expect(open({ review: null, missing: ['ci'] })).toEqual(r.reasons)
     expect(open({}, contract({ change_requested: 'C2를 빼자' }))).toEqual([
       '계약 변경 요청: C2를 빼자',
+    ])
+  })
+
+  test('지킴 줄의 고칠 길(V33)은 자르지 않고 까닭만 자른다', () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `C2.${i + 1}`)
+    const c = withLine({ ...C2, kind: 'keep', examples: ids })
+    const file = 'test/keep.test.ts'
+    const head = ids.map((id) => ({
+      name: `[w1:${id}] 옛 동작`,
+      status: 'passed' as const,
+      classname: file,
+    }))
+    const base = [{ name: file, classname: file, status: 'failed' as const }]
+    const lines = judgeLines(c, head, base).map((v) => (v.line === 'C1' ? met('C1') : v))
+    const keep = lines[1]
+    if (keep?.fix === undefined) throw new Error('고칠 길이 없음')
+    const fix = lineFixText(keep.fix)
+    const [fact] = open({ lines }, c)
+    expect(
+      fact?.startsWith('줄 C2 증거 없음: 기준에서 시험 파일을 불러오지 못함: C2.1, C2.2'),
+    ).toBe(true)
+    expect(fact).toContain('…')
+    expect(fact?.endsWith(`. ${fix}`)).toBe(true)
+    // 짧으면 detail 그대로
+    const short = judgeLines(withLine({ ...C2, kind: 'keep' }), head, base)[1]
+    if (short === undefined) throw new Error('판정이 없음')
+    expect(open({ lines: [met('C1'), short] }, withLine({ ...C2, kind: 'keep' }))).toEqual([
+      `줄 C2 증거 없음: ${short.detail}`,
     ])
   })
 

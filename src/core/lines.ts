@@ -4,6 +4,7 @@ import type {
   Contract,
   ContractLine,
   ExampleEvidence,
+  LineFix,
   LineStatus,
   LineVerdict,
   TestCase,
@@ -81,13 +82,22 @@ function loadFailure(headCases: TestCase[], failures: string[]): 'same_file' | '
   return files.some((f) => failures.some((g) => samePath(f, g))) ? 'same_file' : null
 }
 
-function verdict(
-  line: ContractLine,
-  status: LineStatus,
-  detail: string,
-  examples: ExampleEvidence[],
-): LineVerdict {
-  return { line: line.id, kind: line.kind, status, detail, examples }
+function verdict(line: ContractLine, r: Judged, examples: ExampleEvidence[]): LineVerdict {
+  const v: LineVerdict = {
+    line: line.id,
+    kind: line.kind,
+    status: r.status,
+    detail: r.detail,
+    examples,
+  }
+  return r.fix === undefined ? v : { ...v, fix: r.fix }
+}
+
+/** 고칠 길의 글(V33, 사람용). 줄의 detail 끝에 붙고, 관문의 사실은 이 글을 자르지 않는다 */
+export function lineFixText(fix: LineFix): string {
+  return fix.kind === 'keep_base_api'
+    ? '고칠 길: 지킴 시험은 기준에 있는 API만 불러야 한다. 새 함수를 부르는 시험과 다른 파일에 둔다'
+    : ''
 }
 
 const list = (evs: ExampleEvidence[], side: (e: ExampleEvidence) => string): string =>
@@ -113,7 +123,7 @@ function judgeHead(evs: ExampleEvidence[]): Judged | null {
   return null
 }
 
-type Judged = { status: LineStatus; detail: string }
+type Judged = { status: LineStatus; detail: string; fix?: LineFix }
 
 interface BaseContext {
   head: Index | null
@@ -161,7 +171,11 @@ function judgeChange(evs: ExampleEvidence[], ctx: BaseContext): Judged {
   return { status: 'met', detail: `결과에서 통과. ${notes.join('. ')}` }
 }
 
-function judgeKeep(evs: ExampleEvidence[]): Judged {
+/**
+ * 지킴 줄: 예시가 모두 기준에서도 통과해야 met. 기준에 결과가 없는 예시가 기준에서 시험 파일을 불러오지 못해서라면(새 함수를
+ * 부르는 시험과 한 파일에 있음) 그렇게 적고 고칠 길을 붙인다(V33). 판정은 그대로 missing_evidence다
+ */
+function judgeKeep(evs: ExampleEvidence[], ctx: BaseContext): Judged {
   if (evs.every((e) => e.base === 'not_run'))
     return { status: 'met', detail: '결과에서 통과(기준에서는 돌리지 않음)' }
   const broken = evs.filter((e) => e.base === 'failed')
@@ -171,12 +185,23 @@ function judgeKeep(evs: ExampleEvidence[]): Judged {
       detail: `기준에서 실패: 지킬 동작이 아니라 바뀐 동작을 시험함 (${broken.map((e) => e.id).join(', ')})`,
     }
   const unknown = evs.filter((e) => e.base !== 'passed')
-  if (unknown.length > 0)
-    return {
-      status: 'missing_evidence',
-      detail: `기준에서 통과를 확인하지 못함: ${list(unknown, (e) => e.base ?? 'not_run')}`,
-    }
-  return { status: 'met', detail: '기준과 결과에서 모두 통과' }
+  if (unknown.length === 0) return { status: 'met', detail: '기준과 결과에서 모두 통과' }
+  const load = (e: ExampleEvidence) =>
+    e.base === 'missing' ? loadFailure(ctx.head?.get(e.id) ?? [], ctx.failures) : null
+  const unloaded = unknown.filter((e) => load(e) !== null)
+  const rest = unknown.filter((e) => load(e) === null)
+  const parts: string[] = []
+  if (unloaded.length > 0) {
+    const unsure = unloaded.some((e) => load(e) === 'some_file') ? '(파일은 확인하지 못함)' : ''
+    parts.push(
+      `기준에서 시험 파일을 불러오지 못함${unsure}: ${unloaded.map((e) => e.id).join(', ')}`,
+    )
+  }
+  if (rest.length > 0)
+    parts.push(`기준에서 통과를 확인하지 못함: ${list(rest, (e) => e.base ?? 'not_run')}`)
+  if (unloaded.length === 0) return { status: 'missing_evidence', detail: parts.join('. ') }
+  const fix: LineFix = { kind: 'keep_base_api', examples: unloaded.map((e) => e.id) }
+  return { status: 'missing_evidence', detail: `${parts.join('. ')}. ${lineFixText(fix)}`, fix }
 }
 
 function evidenceOf(line: ContractLine, head: Index | null, base: Index | null): ExampleEvidence[] {
@@ -202,7 +227,7 @@ function judgeTestLine(
   const fromHead = judgeHead(examples)
   if (fromHead !== null) return fromHead
   if (line.kind === 'change') return judgeChange(examples, ctx)
-  if (line.kind === 'keep') return judgeKeep(examples)
+  if (line.kind === 'keep') return judgeKeep(examples, ctx)
   return { status: 'met', detail: '결과에서 통과' }
 }
 
@@ -227,10 +252,11 @@ export function judgeLines(
   return contract.lines.map((line) => {
     const examples = evidenceOf(line, headIndex, baseIndex)
     const other = untested(line)
-    if (other === 'human') return verdict(line, 'human', '사람이 확인하는 줄', examples)
-    if (other === 'observe') return verdict(line, 'observe', '시험 대신 보고 확인하는 줄', examples)
-    const r = judgeTestLine(line, examples, head !== null, ctx)
-    return verdict(line, r.status, r.detail, examples)
+    if (other === 'human')
+      return verdict(line, { status: 'human', detail: '사람이 확인하는 줄' }, examples)
+    if (other === 'observe')
+      return verdict(line, { status: 'observe', detail: '시험 대신 보고 확인하는 줄' }, examples)
+    return verdict(line, judgeTestLine(line, examples, head !== null, ctx), examples)
   })
 }
 
