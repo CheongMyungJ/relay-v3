@@ -1,14 +1,10 @@
 // [스모크] 빌드한 앱 (docs/m2-modules.md 5절). Playwright _electron으로 out/의 앱을 띄워 화면을 누른다.
-// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 쉬면 미리 리뷰(V23)가 돌고, PR을 열면 그 리뷰로 내보낸다. 가짜 gh, 임시
-// RELAY_HOME, 임시 git 레포와 bare origin.
-// 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
-// Work로 갔다 와도 남음) → [그래도 끝내기](V25).
+// 가짜 claude(CLAUDE_BIN)가 계약을 내고 커밋하고 쉬면 미리 리뷰(V23)가 돌고, PR을 열면 그 리뷰로 내보낸다. 가짜 gh, 임시 RELAY_HOME, 임시 git 레포와 bare origin.
+// 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른 Work로 갔다 와도 남음) → [그래도 끝내기](V25). 메모를 남기고 끝난 Work는 그 메모를 접어 보인다(V37).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
 // 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내도 제출 때 기준에서 돌리지 않는다(V32: V28을 뺌). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
-// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의
-// 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다. 상자의 넘기기는 끝을 다시 건다(V35).
-// 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것.
-// 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
+// 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다. 상자의 넘기기는 끝을 다시 건다(V35).
+// 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것. 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
 import { readFile, writeFile } from 'node:fs/promises'
@@ -531,6 +527,10 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(head).toContainText('끝남', { timeout: 30_000 })
   await expect(evidence.getByTestId('outcome')).toHaveText('머지 없이 끝남')
   await expect(endBox).toBeHidden()
+  // 끝낼 때의 메모(V37): 메모(구조/low, 요청과 어긋남)를 남기고 끝났으니 끝난 Work의 [증거] 맨 위에 접혀 있다
+  const memos = evidence.getByTestId('end-memos')
+  await memos.locator('summary', { hasText: '끝낼 때의 메모 3개' }).click()
+  await expect(memos.getByTestId('end-memo')).toHaveCount(3)
   await shot('ended')
 
   // 프로젝트 설정

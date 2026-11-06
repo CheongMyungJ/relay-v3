@@ -8,6 +8,7 @@ import type {
   EvidenceBundle,
   GateResult,
   GroundingCheck,
+  ReviewFinding,
 } from '../core/types.ts'
 
 export type { SessionState, WorkState }
@@ -131,6 +132,11 @@ export interface WorkView {
   endPending: EndPending | null
   /** HEAD가 바뀌어 지운 걸린 끝이나 상자의 head(화면이 '[끝내기] 뒤 세션이 새로 커밋'을 보인다). 다시 누르면 null */
   endMoved: string | null
+  /**
+   * [끝내기]로 끝난 Work(done)가 끝낼 때 남긴 리뷰 메모(V37: 관문 사실이 아닌 지적, 머지되지 않은 내보내기마다). 끝을 막지
+   * 않았으므로 끝난 Work의 [증거]에 접어 보인다. 끝나지 않았거나 다른 길로 끝났으면(PR 머지·닫힘, 버림) 빈 것
+   */
+  endMemos: EndMemo[]
   /** 쉬는 세션에 준 되먹임(V24) */
   feedback: FeedbackView
   /** 단위 브랜치의 내보내기(V22, branch_per_unit). one_branch는 빈 목록이다(위 칸들이 Work 브랜치의 내보내기다) */
@@ -210,6 +216,12 @@ export interface EndPending {
   tips?: Record<string, string | null>
   /** 상자에서 세션에 넘겨 다시 건 끝(V35). 없으면 거짓 */
   handed?: true
+}
+
+/** [끝내기]가 끝낼 때 남긴 리뷰 메모 하나(V37). unit은 그 내보내기의 단위(V22 branch_per_unit), one_branch는 없다 */
+export interface EndMemo {
+  unit?: string
+  finding: ReviewFinding
 }
 
 /** 상자의 [세션에 넘기기](V35)가 보낼 리뷰 지적: 내보내기마다(unit은 단위 브랜치의 내보내기, V22) */

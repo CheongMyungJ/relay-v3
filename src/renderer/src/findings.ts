@@ -35,6 +35,20 @@ export function findingGroups(findings: ReviewFinding[]): {
   }
 }
 
+/**
+ * 끝낼 때의 메모(V37): [끝내기]로 끝난 Work에 남은 리뷰 메모(관문 사실이 아니라 끝을 막지 않은 지적)를 접어 보일 칸의 제목과
+ * 설명. 끝나지 않았거나 메모가 없으면 null
+ */
+export function endMemosText(
+  v: Pick<WorkView, 'state' | 'endMemos'>,
+): { title: string; note: string } | null {
+  if (v.state !== 'done' || v.endMemos.length === 0) return null
+  return {
+    title: `끝낼 때의 메모 ${v.endMemos.length}개`,
+    note: '관문에 들어가지 않아 끝을 막지 않은 리뷰 지적입니다. 고칠 것이 있으면 새 Work로 하세요.',
+  }
+}
+
 /** 지적의 갈래 이름. 갈래가 없으면 null, 모르는 갈래는 그 값 그대로 */
 export function raiseLabel(f: Pick<ReviewFinding, 'raise'>): string | null {
   if (f.raise === undefined) return null

@@ -80,6 +80,7 @@ describe('upgradeWork', () => {
       notice: null,
       session_started: true,
       end_pending: null,
+      end_memos: [],
       feedback: { rounds: 0, sent: [] },
     })
   })

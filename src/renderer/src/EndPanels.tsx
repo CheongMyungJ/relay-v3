@@ -2,10 +2,12 @@
 // 보인다(V22: 통합 증거와 내보내기마다의 열린 것, 없는 단위 브랜치). 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다.
 // 상자의 [세션에 넘기기](V24, V35)는 열린 것에 보이는 올림과 저절로 가지 않은 세션 몫 사실을 보내고, 끝을 '고친 뒤 끝냄'으로
 // 다시 건다: 세션이 고치고 쉬면 메인이 끝내거나 상자를 다시 띄운다. 그동안은 걸린 끝의 칸에 그 글과 [취소]가 보인다.
+// [끝내기]로 끝난 Work는 끝낼 때 남은 리뷰 메모(V37)를 접어 보인다.
 import type { WorkView } from '../../shared/api.ts'
 import { handable, passByExport } from './exports.ts'
-import { endHanded, endTexts, openText } from './format.ts'
-import { ErrorLine, useAction } from './ui.tsx'
+import { endMemosText, raiseLabel } from './findings.ts'
+import { SEVERITY, endHanded, endTexts, openText } from './format.ts'
+import { ErrorLine, Tag, useAction } from './ui.tsx'
 
 /**
  * 걸린 끝(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. 세션에 넘겨 다시 건 끝(V35)은 세션이 고치고 쉬기를
@@ -92,5 +94,38 @@ export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
       </div>
       <ErrorLine text={act.error} />
     </div>
+  )
+}
+
+/**
+ * 끝낼 때의 메모(V37): [끝내기]가 메모(관문 사실이 아닌 지적)를 남기고 끝냈으면 끝난 Work의 [증거] 맨 위에 접어 보인다(끝을
+ * 막지 않았으므로 사람이 지나치지 않게). 지적마다 심각도, 단위(V22), 갈래, 글, 파일:줄
+ */
+export function EndMemos({ view }: { view: WorkView }) {
+  const t = endMemosText(view)
+  if (t === null) return null
+  return (
+    <details className="fold end-memos" data-testid="end-memos">
+      <summary>{t.title}</summary>
+      <div className="fold-body">
+        <p className="muted small">{t.note}</p>
+        <ul className="fact-list">
+          {view.endMemos.map(({ unit, finding: f }, i) => (
+            <li key={i} data-testid="end-memo">
+              <Tag tone={SEVERITY[f.severity].tone}>{SEVERITY[f.severity].label}</Tag>
+              {unit === undefined ? null : <Tag>단위 {unit}</Tag>}
+              {f.raise === undefined ? null : <Tag>{raiseLabel(f)}</Tag>}
+              <span>{f.text}</span>
+              {f.file ? (
+                <code>
+                  {f.file}
+                  {f.line === undefined ? '' : `:${f.line}`}
+                </code>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
   )
 }

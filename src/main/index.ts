@@ -106,7 +106,7 @@ async function start(): Promise<void> {
         if (!bw.isDestroyed()) bw.webContents.send(event, payload)
     },
     relayVersion: app.getVersion(),
-    // 스모크 시험이 Stop 뒤 20초를 기다리지 않게 줄일 수 있다
+    // 스모크 시험이 Stop 뒤 5초를 기다리지 않게 줄일 수 있다
     ...(debounceMs > 0 ? { debounceMs } : {}),
     ...(version ? { claudeVersion: version } : {}),
     log,

@@ -491,6 +491,12 @@
   transform: rotate(45deg);
 }
 
+/* 끝낼 때의 메모(V37): 끝난 Work의 [증거] 맨 위에서 지나치지 않게 */
+.fold.end-memos {
+  background: var(--info-soft);
+  border-color: transparent;
+}
+
 .count {
   margin-left: auto;
   font-size: 12px;

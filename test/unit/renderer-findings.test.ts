@@ -1,10 +1,12 @@
 // [단위] 렌더러의 리뷰 올림과 메모(V26, src/renderer/src/findings.ts). 렌더러는 core를 가져오지 않으므로 같은 규칙을 다시
 // 쓴다: core review.ts `raises`, gate의 '리뷰 올림(…)' 이름과 견준다. 되먹임(V24)의 상태 한 줄과 지적마다의 표시, 사람이
-// 넘길 수 있는 지적(사람 몫, 저절로 가지 않는 세션 몫)과 상자의 [세션에 넘기기]가 보낼 지적. 화면은 [스모크]가 이어지는지만 본다.
+// 넘길 수 있는 지적(사람 몫, 저절로 가지 않는 세션 몫)과 상자의 [세션에 넘기기]가 보낼 지적, 끝낼 때의 메모(V37) 칸의 글.
+// 화면은 [스모크]가 이어지는지만 본다.
 import { describe, expect, test } from 'vitest'
 import { raises } from '../../src/core/review.ts'
 import type { RaiseReason, ReviewFinding } from '../../src/core/types.ts'
 import {
+  endMemosText,
   feedbackStatus,
   findingGroups,
   findingRoute,
@@ -164,4 +166,17 @@ describe('되먹임(V24)', () => {
     expect(passableFindings(at({}, { head: HEAD, armed: false, open: ['x'] }))).toEqual(['R1'])
     expect(passable(at({ rounds: 3, held: 'cap' }), sent)).toBe(false)
   })
+})
+
+test('endMemosText(V37): [끝내기]로 끝난 Work에 메모가 있을 때만 제목(수)과 설명', () => {
+  const memos = [
+    { finding: finding({ id: 'R1' }) },
+    { unit: 'csv', finding: finding({ id: 'R2' }) },
+  ]
+  expect(endMemosText({ state: 'done', endMemos: memos })).toEqual({
+    title: '끝낼 때의 메모 2개',
+    note: '관문에 들어가지 않아 끝을 막지 않은 리뷰 지적입니다. 고칠 것이 있으면 새 Work로 하세요.',
+  })
+  expect(endMemosText({ state: 'done', endMemos: [] })).toBeNull()
+  expect(endMemosText({ state: 'working', endMemos: memos })).toBeNull()
 })

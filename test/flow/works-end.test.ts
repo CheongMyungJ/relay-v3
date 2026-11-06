@@ -95,7 +95,7 @@ test('열린 것이 없으면 [끝내기] 한 번에 끝난다: 내보내기 증
   expect(reviewed).toMatchObject([{ trigger: 'end', status: 'done' }])
   expect(await ends(app, id)).toEqual([
     { type: 'end_armed', head },
-    { type: 'ended', how: 'armed', head },
+    { type: 'ended', how: 'armed', head, memos: 1 },
   ])
   await until(() => !app.sessions.isRunning(id), '세션 끝')
   // 리뷰 결과는 세션에 넣지 않는다(V4, V8)
@@ -121,7 +121,7 @@ test('PR 내보내기로 이미 잰 깨끗한 head는 [끝내기]가 다시 재�
   expect(works.view(id).state).toBe('done')
   expect(await exportsOf(app, id)).toEqual(exported)
   expect(await reviews()).toBe(1)
-  expect(await ends(app, id)).toEqual([{ type: 'ended', how: 'once', head }])
+  expect(await ends(app, id)).toEqual([{ type: 'ended', how: 'once', head, memos: 1 }])
 })
 
 test('올림이 있으면 상자(work.json에 남음): [더 고치기]로 닫고, 세션이 고친 head는 [그래도 끝내기]가 먼저 내보내기로 재고(안전망) 끝낸다', async () => {
@@ -175,7 +175,7 @@ test('올림이 있으면 상자(work.json에 남음): [더 고치기]로 닫고
     { type: 'end_box', head: first, open: 1 },
     { type: 'end_box', head: first, open: 1 },
     { type: 'end_cancelled', head: first, armed: false, reason: 'human' },
-    { type: 'ended', how: 'box', head: second, open: 1 },
+    { type: 'ended', how: 'box', head: second, open: 1, memos: 0 },
   ])
 })
 
@@ -350,7 +350,7 @@ test('리뷰가 실패하면 상자의 열린 것이고 앱을 다시 켜도 상
   await second.works.idle()
   expect(second.works.view(id).evidence?.review).toMatchObject({ status: 'done' })
   expect(await reviews()).toBe(2)
-  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
+  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head, memos: 1 })
 })
 
 test('앱을 닫아 끊긴 리뷰는 내보내기(exported_head, 장부, export 기록)로 남지 않는다. 걸린 끝은 남아 다시 켜면 이어 재고 끝낸다', async () => {
@@ -380,7 +380,7 @@ test('앱을 닫아 끊긴 리뷰는 내보내기(exported_head, 장부, export 
   await second.works.idle()
   expect(second.works.view(id).evidence?.review).toMatchObject({ status: 'done' })
   expect(await exportsOf(second, id)).toEqual([false, true])
-  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
+  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head, memos: 1 })
 })
 
 test('[끝내기]의 재기가 도는 사이 세션이 커밋하고 사람이 새 head에서 다시 [끝내기]하면, 앞 재기(다른 head)가 끝난 뒤 새 head를 내보내기로 재서 끝낸다', async () => {
@@ -437,7 +437,7 @@ test('[끝내기]의 재기가 도는 사이 세션이 커밋하고 사람이 �
     { type: 'end_armed', head: first },
     { type: 'end_moved', from: first, to: second, armed: true },
     { type: 'end_armed', head: second },
-    { type: 'ended', how: 'armed', head: second },
+    { type: 'ended', how: 'armed', head: second, memos: 1 },
   ])
 })
 
@@ -470,7 +470,7 @@ test('PR head를 다시 내보내기로 재는 동안(리뷰 중)의 [끝내기]
   expect(await reviews()).toBe(2)
   expect(await ends(app, id)).toEqual([
     { type: 'end_armed', head },
-    { type: 'ended', how: 'armed', head },
+    { type: 'ended', how: 'armed', head, memos: 1 },
   ])
 })
 
@@ -506,7 +506,7 @@ test('PR head를 다시 재는 리뷰 중 앱을 닫으면 그 head는 내보내
   await works.idle()
   expect(works.view(id).evidence?.review).toMatchObject({ status: 'done' })
   expect(await reviews()).toBe(3)
-  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head })
+  expect((await ends(second, id)).at(-1)).toEqual({ type: 'ended', how: 'armed', head, memos: 1 })
 })
 
 test('계약 바꾸기를 받아들일 때 앞 묶음이 내보내기였어도 새 head는 내보내기로 재지 않는다(장부, exported_head, end 리뷰 없음)', async () => {

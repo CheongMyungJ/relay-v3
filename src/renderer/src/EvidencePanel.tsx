@@ -2,14 +2,15 @@
 // 끝난 Work는 결과(머지됨, 머지 없이 끝남, 버림)를 먼저 쓰고 관문 결론은 '그때의 결론'으로 낮춘다. 구현 중이면 다음 할 일
 // 한 줄(PR이 지금 HEAD를 가리키지 않음, PR 없음, 품질 기준 없음). 펼침: 까닭, 명령, 줄 판정, 래칫, 신호, 리뷰 지적(올림과
 // 메모를 나눠, V26), 없는 증거, 낡음. [증거 다시 재기], PR이 있으면 [머지]. 그 위에 품질 기준 알림(V20)과 [끝내기]의 걸린
-// 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다). 결론 아래 되먹임 상태 한
+// 끝·상자(V25: 상자는 열린 것만 보인다. 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다), 끝난 Work는 끝낼 때의
+// 메모(V37, 접힘). 결론 아래 되먹임 상태 한
 // 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시와 [세션에 넘기기](사람 몫, 그리고 저절로 가지 않는
 // 세션 몫), 상자에도 [세션에 넘기기](걸린 끝과 상자는 EndPanels.tsx). 단위 브랜치로 내보내면(V22) Work 브랜치의 통합 증거
 // 칸 하나(열린 것, 명령·줄·래칫·신호, 리뷰 없음)와 내보내기마다 칸 하나(결론, 되먹임, PR과 [머지], 펼침)를 보인다.
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
-import { EndArmed, EndBox } from './EndPanels.tsx'
+import { EndArmed, EndBox, EndMemos } from './EndPanels.tsx'
 import { exportSection, integrationText } from './exports.ts'
 import {
   LINE_STATUS,
@@ -51,6 +52,7 @@ export function EvidencePanel(p: { view: WorkView; project: ProjectView | null }
       {p.project ? <QualityNotice project={p.project} /> : null}
       {armed ? <EndArmed view={view} /> : null}
       {box ? <EndBox view={view} head={box.head} open={box.open} /> : null}
+      <EndMemos view={view} />
       {moved ? (
         <p className="stale" role="note" data-testid="end-moved">
           {moved}

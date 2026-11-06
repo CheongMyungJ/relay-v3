@@ -116,7 +116,7 @@ test('넘기면 지적과 보내지 않은 사실이 세션에 가고 끝이 다
     { type: 'end_box', head: first, open: expect.any(Number) as number },
     { type: 'end_handed', head: first, facts: 3, findings: 1 },
     { type: 'end_armed', head: second, handed: true },
-    { type: 'ended', how: 'handed', head: second },
+    { type: 'ended', how: 'handed', head: second, memos: 1 },
   ])
 })
 
@@ -233,7 +233,7 @@ test('넘긴 끝을 재는 동안 세션이 다시 움직이면 끝내지 않고
       { type: 'end_handed', head: first, facts: 0, findings: 1 },
       { type: 'end_armed', head: second, handed: true },
       { type: 'end_waiting', head: second },
-      { type: 'ended', how: 'handed', head: second },
+      { type: 'ended', how: 'handed', head: second, memos: 1 },
     ])
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')

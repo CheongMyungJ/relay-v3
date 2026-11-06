@@ -44,7 +44,7 @@ import {
 
 export { blockingChecks, exportable, type MergeOutcome } from './works-exports.ts'
 
-const DEBOUNCE_MS = 20_000
+const DEBOUNCE_MS = 5_000
 
 /** 세션이 PR을 열거나 갱신했을 수 있는 Bash 명령 */
 const EXPORT_COMMAND = /\bgit\b[^;&|\n]*\bpush\b|\bgh\b[^;&|\n]*\bpr\b/

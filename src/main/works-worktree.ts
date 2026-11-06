@@ -203,6 +203,7 @@ export async function newWork(
     error: null,
     notice: null,
     end_pending: null,
+    end_memos: [],
     feedback: { rounds: 0, sent: [] },
   }
   const text = hint ? `${request}\n\n## 일의 성격 제안\n\n${hint}\n` : `${request}\n`

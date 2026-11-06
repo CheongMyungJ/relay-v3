@@ -102,7 +102,7 @@ test('미리 리뷰가 끝난 head의 [끝내기]는 걸리지 않고 한 번에
   expect((await app.store.readLedger()).map((e) => [e.work, e.head, e.conclusion])).toEqual([
     [id, head, 'human_merge'],
   ])
-  expect(await events(app, id, 'ended')).toEqual([{ type: 'ended', how: 'once', head }])
+  expect(await events(app, id, 'ended')).toEqual([{ type: 'ended', how: 'once', head, memos: 1 }])
   // 리뷰 결과는 세션에 넣지 않는다(V4, V8)
   expect((await fake()).filter((e) => e.type === 'input')).toEqual([])
 })
@@ -127,7 +127,9 @@ test('미리 리뷰가 도는 동안의 [끝내기]는 걸리고, 리뷰가 끝�
       ['end', true, false],
     ])
     expect((await events(app, id, 'evidence')).map((e) => e.export)).toEqual([false, true])
-    expect(await events(app, id, 'ended')).toEqual([{ type: 'ended', how: 'armed', head }])
+    expect(await events(app, id, 'ended')).toEqual([
+      { type: 'ended', how: 'armed', head, memos: 1 },
+    ])
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
   }

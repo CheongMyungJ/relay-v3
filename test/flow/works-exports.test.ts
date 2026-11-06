@@ -211,6 +211,14 @@ test('단위 브랜치마다 조각으로 재고 미리 리뷰, Work 브랜치�
     tips: { [`${branch}--clamp`]: clampTip, [`${branch}--sub`]: subTip },
   })
   expect(done).toEqual({ head, ended: true, armed: false, open: [] })
+  // 끝낼 때의 메모(V37): 내보내기마다 리뷰 메모에 그 단위를 붙인다
+  const memo = { severity: 'low', text: '이름이 짧음' }
+  expect(works.view(id).endMemos).toMatchObject([
+    { unit: 'clamp', finding: memo },
+    { unit: 'sub', finding: memo },
+  ])
+  const ended = (await app.store.readEvents(id)).filter((e) => e.type === 'ended')
+  expect(ended).toMatchObject([{ how: 'once', memos: 2 }])
   ledger = await app.store.readLedger()
   expect(ledger.map((e) => [e.export, e.head])).toEqual([
     ['clamp', clampTip],

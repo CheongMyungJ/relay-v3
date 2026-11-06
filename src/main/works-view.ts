@@ -37,6 +37,7 @@ export function workView(ctx: WorkCtx, rec: WorkRecord, feedback: FeedbackDesk):
     createdAt: rec.created_at,
     error: rec.error,
     ...endView(ctx, rec),
+    endMemos: rec.state === 'done' ? rec.end_memos : [],
     feedback: feedback.view(rec),
     exports: units ? rec.exports.flatMap((x) => exportView(ctx, rec, x, feedback)) : [],
     // 통합 칸의 열린 것: 마지막 재기의 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치와 묶음의 열린 것(리뷰 빼고)

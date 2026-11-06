@@ -10,10 +10,13 @@
 // 상자의 [세션에 넘기기](V35)는 지적과 사실을 세션에 보내고 끝을 '고친 뒤 끝냄'(end_pending.handed)으로 다시 건다: head가
 // 바뀌어도 지우지 않고 새 head로 옮기며, 세션이 쉬면(Stop 뒤 몰아 두기 끝, rest) 그 head로 [끝내기]처럼 정한다. 열린 것이
 // 없으면 끝내고(ended.how handed), 있으면 상자를 다시 띄운다. 그 재기 중 세션이 다시 움직이면 다음 쉼을 기다린다. [취소]로 푼다.
+// 끝낼 때 내보내기 증거의 리뷰 메모(V37: 관문 사실이 아니라 끝을 막지 않은 지적)는 WorkRecord.end_memos에 두고 ended에 수를
+// 남긴다: 끝난 Work의 [증거]가 접어 보인다.
 
 import { integrationFacts, openItems } from '../core/gate.ts'
+import { raises } from '../core/review.ts'
 import { nextState } from '../core/work.ts'
-import type { EndInput, EndPending, PreparedEnd } from '../shared/api.ts'
+import type { EndInput, EndMemo, EndPending, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import {
@@ -305,7 +308,7 @@ export class EndDesk {
     const open = await this.openOf(rec, head, tips)
     if (open === null) throw new Error('증거가 없음: 끝내기를 다시 누르세요')
     if (open.length === 0) {
-      await this.ctx.transition(rec, { type: 'ended' }, { how, head })
+      await this.finish(rec, head, tips, { how, head })
       return { head, ended: true, armed: false, open }
     }
     rec.end_pending = { head, armed: false, open, ...this.tipsOf(rec, tips) }
@@ -338,8 +341,35 @@ export class EndDesk {
     await this.sameHead(id, head)
     await this.checkTips(id, tips)
     const open = (await this.openOf(rec, head, tips)) ?? []
-    await this.ctx.transition(rec, { type: 'ended' }, { how: 'box', head, open: open.length })
+    await this.finish(rec, head, tips, { how: 'box', head, open: open.length })
     return { head, ended: true, armed: false, open }
+  }
+
+  /** 끝낸다(V37): 이 끝들의 리뷰 메모를 Work에 두고 ended에 그 수를 남긴다 */
+  private async finish(
+    rec: WorkRecord,
+    head: string,
+    tips: Tips,
+    extra: { how: How; head: string; open?: number },
+  ): Promise<void> {
+    rec.end_memos = this.memosOf(rec, head, tips)
+    await this.ctx.transition(rec, { type: 'ended' }, { ...extra, memos: rec.end_memos.length })
+  }
+
+  /**
+   * 이 끝들의 내보내기 증거에 남은 리뷰 메모(V26 raises가 아닌 지적, 리뷰어가 낸 차례). 머지되지 않은 내보내기마다 그 끝을 잰
+   * 묶음의 것만 본다(V22: 통합 증거는 리뷰하지 않는다). 단위 브랜치의 내보내기는 그 단위를 붙인다
+   */
+  private memosOf(rec: WorkRecord, head: string, tips: Tips): EndMemo[] {
+    const rt = this.ctx.runtime(rec.id)
+    return rec.exports.flatMap((x) => {
+      const b = rt.bundles.get(x.branch)
+      if (delivered(x) || !b || b.head !== tipOf(x, head, tips)) return []
+      const unit = x.unit === null ? {} : { unit: x.unit }
+      return (b.review?.findings ?? [])
+        .filter((f) => !raises(f))
+        .map((f) => ({ ...unit, finding: f }))
+    })
   }
 
   /** 지금 HEAD를 돌려준다. head가 아니면 화면의 HEAD를 고치고(상자를 지운다) 던진다. HEAD를 읽지 못하면 보지 않는다 */

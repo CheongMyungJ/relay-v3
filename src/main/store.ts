@@ -21,7 +21,7 @@ import { readJson, relayHome } from '../adapters/store.ts'
 import { parseLedger, type LedgerEntry } from '../core/ledger.ts'
 import type { Contract, GateResult, GroundingCheck } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
-import type { EndPending, FeedbackRound, PrInfo, ProjectSettings } from '../shared/api.ts'
+import type { EndMemo, EndPending, FeedbackRound, PrInfo, ProjectSettings } from '../shared/api.ts'
 
 export interface ProjectRecord {
   id: string
@@ -92,6 +92,8 @@ export interface WorkRecord {
   notice: string | null
   /** [끝내기]의 걸린 끝이나 상자(V25, works-end.ts). 옛 기록에는 없다(읽을 때 null) */
   end_pending: EndPending | null
+  /** [끝내기]로 끝낼 때 남은 리뷰 메모(V37, works-end.ts). 끝내기 전이나 다른 길로 끝났으면 빈 것. 옛 기록에는 없다(읽을 때 빈 것) */
+  end_memos: EndMemo[]
   /**
    * 쉬는 세션에 준 되먹임(V24, works-feedback.ts). rounds는 relay가 저절로 보낸 라운드(두 종류를 합쳐 Work마다 3까지), sent는
    * 보낸 파일마다 한 줄(사람의 [세션에 넘기기]도). 옛 기록에는 없다(읽을 때 빈 것)
@@ -178,6 +180,7 @@ export function upgradeWork(raw: WorkRecord): WorkRecord {
     notice: rec.notice ?? null,
     session_started: rec.session_started ?? true,
     end_pending: rec.end_pending ?? null,
+    end_memos: rec.end_memos ?? [],
     feedback: rec.feedback ?? { rounds: 0, sent: [] },
     exports,
     integration_path: rec.integration_path ?? null,

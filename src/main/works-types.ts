@@ -58,7 +58,7 @@ export interface WorksDeps {
   newId: () => string
   emit: (event: string, payload: unknown) => void
   relayVersion: string
-  /** Stop 뒤 증거를 재기까지 몰아서 기다리는 시간. 기본 20,000ms */
+  /** Stop 뒤 증거를 재기까지 몰아서 기다리는 시간. 기본 5,000ms(V36) */
   debounceMs?: number
   /** 사람이 터미널에 입력한 뒤 되먹임(V24)을 보내지 않는 시간. 기본 60,000ms */
   humanQuietMs?: number

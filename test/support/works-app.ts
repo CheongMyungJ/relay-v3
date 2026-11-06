@@ -31,7 +31,7 @@ export interface OpenAppOptions {
   home: string
   relayVersion?: string
   claudeVersion?: string
-  /** 기본 200ms (앱은 20초) */
+  /** 기본 200ms (앱은 5초, V36) */
   debounceMs?: number
   /** 열린 PR을 다시 읽는 간격. 기본 60초(시험이 기다리지 않게) */
   prPollMs?: number
