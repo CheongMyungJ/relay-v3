@@ -14,7 +14,13 @@ import type {
   Policy,
   ReviewFinding,
 } from '../../src/core/types.ts'
-import { bundleName, readReplay, type ReplayBundle } from '../support/gate-replay.ts'
+import {
+  bundleName,
+  readReplay,
+  reasonKind,
+  RUN_MET,
+  type ReplayBundle,
+} from '../support/gate-replay.ts'
 
 const BUNDLES = readReplay(fileURLToPath(new URL('../fixtures/gate-replay/', import.meta.url)))
 
@@ -51,12 +57,6 @@ type Rule = 'V4' | 'V26' | 'V30-memo'
 
 /** 규약마다 평가 빌드가 쓴 올림 규칙. 묶음을 더한 규약은 여기에 적는다 */
 const RECORDED_RULE: Record<string, Rule> = { m2: 'V4', 'm2.1': 'V30-memo' }
-
-/**
- * 규약마다 실행 단위의 '자동 조건을 채움'. any: 실행의 내보내기 묶음 가운데 하나라도 채웠으면(M2). all: 모두 채웠을 때만
- * (V22, M2.1 규약 5.1의 G1·G2). 묶음을 더한 규약은 여기에 적는다
- */
-const RUN_MET: Record<string, 'any' | 'all'> = { m2: 'any', 'm2.1': 'all' }
 
 /** V4를 지금 관문으로 흉내 낸다: 지금 올림이 아닌 raise 지적(구조/low)의 심각도를 올림이 되는 medium으로 */
 function asV4(f: ReviewFinding): ReviewFinding {
@@ -190,10 +190,7 @@ function byRun(rs: Replayed[]): Row[] {
   })
 }
 
-/** 사람 머지 까닭의 갈래: 첫 ': ', ' (', ' — ' 앞. 줄 id는 뺀다('줄 C2 못 미침' → '줄 못 미침') */
-function kind(reason: string): string {
-  return (reason.split(/: | \(| — /)[0] ?? reason).replace(/^줄 \S+/, '줄')
-}
+const kind = reasonKind
 
 /**
  * V30의 온라인 잡음(M2.1 규약 5.3): 리뷰가 요청을 본(기록에 request가 참인) 묶음에서, request_gap을 메모로 본(V30-memo) 관문이

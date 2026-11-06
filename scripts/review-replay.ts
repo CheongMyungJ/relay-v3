@@ -165,7 +165,8 @@ export function sameDiff(numstat: string, d: EvidenceBundle['diff']): boolean {
   return sum(0) === d.added && sum(1) === d.deleted && paths.join('\n') === want.join('\n')
 }
 
-async function makeCheckout(b: Bundle, scenarios: string, ev: EvidenceBundle) {
+/** 평가 묶음의 임시 checkout: base(시나리오 레포 + 품질 기준 덧씌우기)와 head(final diff) 두 커밋. 부른 쪽이 지운다 */
+export async function makeCheckout(b: Bundle, scenarios: string, ev: EvidenceBundle) {
   const dir = mkdtempSync(path.join(tmpdir(), 'relay-review-replay-'))
   try {
     const filter = (src: string) => !SKIP.has(path.basename(src))

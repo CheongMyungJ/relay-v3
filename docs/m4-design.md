@@ -1,6 +1,6 @@
 # M4 설계: 그림자 실적
 
-- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절), M4e(7.4절)를 만들었다. M4f~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
+- 상태: **만드는 중**(2026-11-06). M4-0(2.1절), M4a(3.4절), M4b(4.5절), M4c(5.3절), M4d(6.1절), M4e(7.4절), M4f(8.1절), M4g(9.1절)를 만들었다(M4f·M4g는 측정 도구이고, (A)·(B) 5회 측정과 M4 규약 15절은 아직이다). M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
 - **사용자 결정(2026-11-06, ✅):**
   - Q10 자기 실행: **도구만 만들고 relay-v3 자기 실행은 나중에 따로 정한다.** quality.json PR, main 보호·필수 검사, 앱으로 relay-v3 개발하기는 하지 않는다. 그래서 M4h(10절)는 '나중'이고, M4의 숫자는 재생과 평가 자료로만 낸다.
   - Q2 M5 숫자: **12절의 안 그대로**(일치 ≥ 20, V3 그대로; 끝이 정해진 n ≥ 30; 일치율 ≥ 0.95; lift > 0; 창 30일; 창이 닫힌 이 조건의 머지 ≥ 20에서 귀속 0·미정 0; 결정론 5회 갈림 0; 지금 관문 판의 재생 거짓 자동 0). M5 규약이 이것을 그대로 쓴다.
@@ -386,6 +386,30 @@ V31처럼 이름표가 붙은 측정 자료다. 장치가 아니므로 화면에
 - **(C) 생성 안정성 (8.2, 같은 요청 5회):** 새 실행 없이 지난 n=5 자료에서 시나리오마다 줄 종류 다중집합, '사람' 줄 유무, 결론, 조건 채움 횟수를 센다. 설계 때 센 갈림은 셋이다(결정에 쓰지 않음): m2 `10-invoice-rounding/relay3`(5회 가운데 1회 조건 채움), `14-double-notify/relay3`(4회), m2.1 `07-two-bugs`. 생성 분산이라 관문에서 뺄 입력이 아니고 보고만 한다. 사실별로 귀인하려면 재생 자료에 `reasons`가 필요하므로 `scripts/gate-replay-fixture.ts`가 지금 관문으로 다시 계산한 reasons를 함께 적게 한다.
 - CLI에는 두지 않는다(평가 도구). 계기는 마일스톤마다, `GATE_VERSION`을 올릴 때, Claude Code major.minor가 바뀔 때(8.3).
 
+### 8.1 만든 것 (M4f, V52)
+
+- **셈(순수):** 새 파일 `engine/stability.ts`. `checkDigest(묶음, 관문 결과, met)`(결정론 입력의 칸: `commands.<id>`, `ratchets.<id>`(상태와 head 값), `lines.<id>`, `examples_file`, `signals`, `test_weakening`, `diff`, `missing`, `met`, `conclusion`, `decisive`), `stabilityOf(runs)`(갈린 칸과 반복마다의 값, `conclusion_changed`: 결론이나 met이 갈림), `reviewStability(runs)`(올림 유무 갈림, 올린 갈래 집합 갈림. 실패한 반복은 견주지 않음), `generationSpread(runs)`·`kindsKey`(무리마다 줄 종류 다중집합, 사람 줄, 결론, 조건 채움, 일부 실행에만 있는 까닭, 갈림을 칸마다). 관문 판의 파일이 아니다.
+- **도구:** 새 파일 `scripts/gate-repeat.ts`(CLI·화면에 없음).
+  - `targets --bundle <시나리오/쪽-회/Work>… --into <폴더>`: relay-v2 평가 결과(`results/m2-main-*`)의 묶음에서 `review-replay.ts`의 checkout(시나리오 레포 + 품질 기준 덧씌우기가 base, final diff가 head. `makeCheckout`을 내놓게 한 줄 고침)을 만들고 계약·요청을 옆에 복사해 `targets.json`을 쓴다. relay-v3 Work의 head는 손으로 적는다(`[{ name, repo, base, head, contract?, request?, options? }]`, 경로는 그 파일 기준).
+  - `check --targets … [--repeats 5]`(A): 대상마다 원래 레포를 임시 `git clone --shared --no-checkout`하고, 반복마다 새 임시 `RELAY_HOME`으로 engine `check`(rerun)를 돌린다. 고정 리뷰(지적 없음, 요청을 봄, 지금 프롬프트 판)를 넣고 초안 정책(`DRAFT_POLICY`)으로 `gate`와 `conditionsMet`을 불러 digest를 JSONL에 쓴다. 요약은 대상마다 '같음 / 칸이 갈림(결론은 같음) / 결론이 갈림'과 갈린 칸, 끝에 '결정론 입력만으로 결론(또는 채운 조건)이 갈린 head k/K'(12절 3).
+  - `review --targets … [--repeats 5] [--dry]`(B): check를 한 번 돌려 앱처럼 프롬프트(`reviewPrompt`, 사람이 쓴 요청만, `evidenceFacts`, base..head diff)를 만들고 리뷰만 반복한다. 리뷰어는 `review-replay.ts`의 것(`claude -p`, 같은 스키마·도구·시간 상한, 호출마다 새 설정 폴더, 운영자의 `CLAUDE*`·`ANTHROPIC_*` 변수는 뺌, `--pass-env`), `--dry`는 가짜 리뷰어. 줄은 상태, 올림(`갈래/심각도`별 수), 지적이고 모델 이름은 쓰지 않는다. `review --from <jsonl>`은 이미 있는 반복 자료(`review-replay.ts`의 줄)를 세기만 한다.
+  - `generation [자료…]`(C): 재생 자료(기본 `test/fixtures/gate-replay/`)를 `test/support/gate-replay.ts generationRuns`로 실행마다 모아(같은 Work의 같은 줄 id는 한 번, 조건 채움은 규약의 `RUN_MET`, 까닭은 지금 관문으로 다시 계산) 표를 찍는다. 사용자 결정 Q13의 새 5회 실행도 `gate-replay-fixture.ts`로 자료를 만들면 같은 명령으로 읽는다.
+  - 결과는 기본 `docs/experiments/m4/gate-repeat-<check|review>.jsonl`(있으면 `--resume`으로 잇고, 아니면 덮지 않는다. `--dry`는 임시 폴더에 쓴다). `--summary`는 돌리지 않고 요약만.
+- **함께 쓰는 것:** `RUN_MET`과 까닭의 갈래(`reasonKind`)를 `gate-replay.test.ts`에서 `test/support/gate-replay.ts`로 옮겼고, 지금 관문으로 다시 도는 `replayNow`와 `DRAFT_POLICY`를 두었다. `test/support/gate-version.ts replayLines`가 `replayNow`를 쓴다(재생 digest는 그대로, `gate-version.test.ts` 지남).
+- **시험:** [단위] `stability.test.ts`(칸, 갈린 칸과 '-', 결론 갈림, 리뷰 유무·갈래, 실패한 반복, 다중집합, 무리 셈, `generationRuns`의 단위 조각과 실행 단위, 지난 리뷰 자료와 재생 자료의 요약). [흐름] `gate-repeat.test.ts`(실제 git 임시 레포: (A) 2회에서 같은 입력은 digest가 같고 처음 한 번만 실패하는 시험은 `commands.unit: unstable | pass`로 갈림, `--resume`과 덮지 않음, (B) `--dry` 2회와 줄에 모델 칸 없음, (B) `--from`, `targets`로 만든 대상에서 (A)가 돎, 원래 레포의 ref·worktree 등록 그대로). 비용이 드는 (A)·(B) 5회 측정은 돌리지 않았다. 렌더러는 바뀌지 않아 [스모크]는 두지 않았다. `npm run test:replay` 그대로 지남.
+- **도구 확인으로 본 값(판정에 쓰지 않음, 규약에서 다시 센다):** (B) `docs/experiments/m2.1/review-replay.jsonl`의 3회 반복 8묶음에서 올림 유무 갈림 0, 올린 갈래 갈림 7. (C) 재생 자료의 실행이 둘 이상인 30무리 가운데 조건 채움이 갈림 7(m2.1 07 3/5, m2 07 4/5, 08 2/5, 10 1/5, 14 4/5, 45 relay3 1/5, 45 hands-off 1/5), 사람 줄이 갈림 5, 결론이 갈림 0(초안 정책은 스위치가 꺼져 늘 사람 머지), 줄 종류 다중집합은 30무리 모두 갈림.
+- core는 고치지 않았다(4,850줄 그대로). `works.ts`(598)·`works-evidence.ts`(599)는 그대로다.
+
+### 8.2 설계와 다른 것 (M4f)
+
+- **(A)는 리뷰를 끄지 않고 고정한다.** 리뷰가 없는 묶음은 관문이 늘 '리뷰 없음'으로 사람 머지라 결론이 결정론 입력을 말하지 못한다. 지적 없음·요청을 본 리뷰를 넣어 나머지 입력만으로 결론과 met이 정해지게 했다.
+- **(C)의 까닭은 자료에 적지 않는다.** 설계는 `gate-replay-fixture.ts`가 지금 관문으로 다시 계산한 reasons를 함께 적게 했지만, 자료에 이미 관문의 입력이 있어 읽을 때 `replayNow`로 다시 계산한다(관문을 고쳐도 자료를 다시 만들 일이 없다). `gate-replay-fixture.ts`와 자료는 바꾸지 않았다.
+- **대상 고르기(head K개)는 규약에 남겼다.** 도구는 `targets.json`을 받는다. 평가 묶음에서 만드는 `targets`는 M2 main 배치(relay3·relay3-noreview, `review-replay-plan.ts readBundles`)만 읽는다: M2.1 배치와 단위 브랜치 내보내기는 아직 못 만든다. 다시 만든 head는 base 위의 커밋 하나라 평가의 SHA·이력과 다르다(같은 입력의 반복을 견주는 데는 상관없다).
+- **원래 레포를 건드리지 않게** 대상마다 임시 `git clone --shared`에서 돈다(check worktree의 등록이 원래 레포의 `.git/worktrees`에 남지 않게). 설계에 없던 것이다.
+- **(B)의 리뷰어가 읽는 곳**은 head를 꺼낸 그 clone이다(앱은 Work의 worktree).
+- **설계 때 센 값과 다르다.** (B) 갈래 갈림은 설계 때 8개 가운데 4였는데 도구는 7을 센다(올린 갈래의 집합을 심각도 없이 견줌. 설계 때의 정의는 남아 있지 않다). (C) 조건 채움이 갈린 무리는 설계 때 셋이었는데 지금 관문(V26 올림 규칙, 다시 잰 래칫)으로는 7이다. 규약에서 정의를 먼저 고정한다. 줄 종류 다중집합은 모든 무리에서 갈려 이것만으로는 가르는 힘이 없어 '갈림'을 칸마다 따로 보인다.
+
+
 ## 9. M4g 재생 실적 (지난 평가, 모델 호출 없음)
 
 - **자료:** `scripts/track-replay.ts`가 relay-v2 `app/eval/results/`의 relay3 쪽 Work 장부(`works/*/ledger.jsonl`, 설계 때 센 수 318개)와 work.json, M3 순차 실행의 sequence 기록을 읽어 칸만 `test/fixtures/track-replay/<규약>.jsonl`에 둔다: 시나리오, 쪽, 회차, work, head, conclusion, met, 끝(AI 사람 역할의 머지·닫힘), 숨긴 시험 통과, M3 순차라면 뒤 Work의 누적 숨긴 시험에서 이 Work의 시험이 계속 통과했는지. 숨긴 시험 본문, 정답, 봉인 글은 넣지 않는다(M3 runs의 봉인 확인 방식).
@@ -393,6 +417,25 @@ V31처럼 이름표가 붙은 측정 자료다. 장치가 아니므로 화면에
 - **쓰임:** `track.ts`·`after-merge.ts`의 [단위] 고정 자료, M5 판단의 사전 자료, 13절 끄는 조건 (가)의 입력.
 - **섞지 않는다:** 사람이 AI이고 레포도 시나리오 레포다. 제품 장부(`$RELAY_HOME/ledger.jsonl`)에 넣지 않고 `trackRecord`에 쓰지 않는다. `relay record`의 `--pool`도 `RELAY_HOME`이 다른 장부를 합치지 않는다.
 - 설계 때 손으로 센 값(결정에 쓰지 않음): 재생 묶음에서 조건을 채운 비율은 m2 relay3 5/65(7.7%), m2.1 8/50(16%)이고, M3 순차 실행 90개 가운데 그림자는 2개(일치 1, 불일치 1)였다. 표본이 이만큼 작다는 것 자체가 결과다.
+
+### 9.1 만든 것 (M4g, V53)
+
+- **자료:** 새 파일 `scripts/track-replay.ts`(쓰기)와 `test/support/track-replay.ts`(꼴, 읽기, 표). `test/fixtures/track-replay/m2.jsonl`(158), `m2.1.jsonl`(40), `m3.jsonl`(90). 한 줄이 Work 하나: `protocol`, `scenario`, `arm`, `run`, `seq`(M3), `work`(앞 8자), `hidden_pass`, `ledger`(이 Work의 장부 줄: ts, head, conclusion, condition, shadow, export, by, merged_head, closed, met, ended, same_change, accepted), `end`(`merged` / `ended`와 `same_as_export` / `abandoned` / `open`), M3만 `later`(그때 자기 숨긴 시험 통과, 뒤 Work에서 다시 본 수, 처음 깨진 차례)와 `main`(그 Work를 머지한 main의 레포 시험, 새로 깨뜨린 앞 Work 시험 수). 배치 고르기는 `gate-replay-fixture.ts`와 같다(report.json이 있는 배치, 오류 없고 숨긴 시험 결과가 있는 실행, M3는 complete인 순차 실행).
+- **네 표(`report`, `npm run test:track`):** (1) `precisionTable`: 규약·쪽·조건마다 Work, 숨긴 시험 통과, 조건 채움(그 Work의 결론 줄 가운데 그림자나 자동 후보이고 met/condition에 그 조건), 거짓 자동, G1, G2. 아래 줄에 지금 관문의 V31 재생(`replayPrecision`: 묶음의 거짓 자동, 실행 단위 G1·G2). (2) `agreementTable`: 규약마다 engine `shadowStats`(실행을 넘어 합침, 모든 판, 시계 없음)를 장부 그대로(2a)와 'PR 없이 [끝내기]를 머지로 봄'(2b) 둘로. (3) `afterProxy`: M3 순차의 깨뜨림, 뒤에서 깨짐, 귀속 대리와 그 정밀도·재현율, 그림자 표본의 깨뜨림. (4) `generationTable`: 관문 5회 (C)와 같은 셈.
+- **시험:** [단위] `track-replay.test.ts`: 자료(이름 겹침 없음, 정한 칸만, 장부 줄로 바꾸면 모두 engine 장부 줄 모양, M3만 later), 설계 때 손으로 센 값(m2 relay3 조건 채움 5/65, M3 순차 90개의 그림자 2개 일치 1·불일치 1)이 다시 나옴, 표 1·2b·3의 셈(지은 Work로), 평가 diff의 줄 수(`diffStats`), 네 표 찍기.
+- **자료 확인으로 본 값(판정에 쓰지 않음):** 표 1의 평가 빌드 결론으로 m2 relay3 거짓 자동 3(G1 40%), m2.1 0(G1 100%, 8/40), M3 순차 각 쪽 1/45. 표 2a는 M2·M2.1이 모두 열림(끝 줄 없음), M3 순차 1/2. 표 2b는 m2 5/5, m2.1 8/8, 비교군 '그대로'는 m2 121/153, m2.1 14/32. 표 3은 M3 순차 90개에 새로 깨뜨림·레포 시험 실패가 0이라 귀속 대리의 정밀도·재현율은 잴 수 없음.
+- core·앱 코드는 고치지 않았다.
+
+### 9.2 설계와 다른 것 (M4g)
+
+- **Work 288개(설계 때 센 장부 318개).** 시범·끊긴 배치(`*-pilot-*`, `m21-aborted`, `m22-pilot-*`, `*.aborted-restart`, 날짜 이름 폴더)와 M2.1 기준 빌드 쪽(`relay3-m2p`)은 넣지 않았다(관문 재생과 같은 고르기).
+- **결론 줄은 내보내기 계기의 것만 남긴다.** M2 빌드는 관문을 낼 때마다 장부 줄을 썼다(지금 앱은 V23대로 내보내기 계기에서만 쓴다). 그 Work의 events.jsonl에서 export가 참인 evidence 사건과 head가 같고 때가 5초 안인 결론 줄만 둔다(m2에서 391줄을 뺐다). M2.1과 M3 빌드는 이미 내보내기 줄만 썼다.
+- **M2·M2.1의 끝:** 평가에 gh가 없어 AI 사람 역할은 PR 없이 [끝내기]했고 장부에 끝 줄이 없다. 그래서 끝을 `ended`로 적고, 실행 끝의 작업 트리(final diff)의 파일·줄 수가 마지막 Work 브랜치 결론 줄의 증거 diff와 같은지(`same_as_export`, 단위 브랜치 내보내기가 있으면 null)를 함께 적는다. 표 2는 장부 그대로(제품의 셈: 모두 열림)와, 끝 줄을 지어 붙여 [끝내기]를 머지로 본 것(그대로면 같은 head, 다르면 더 커밋, 모르면 같은 변경을 모름)을 둘 다 보인다. 같은 변경을 거울로 가르는 4.3의 길은 평가 레포가 없어 쓰지 않는다.
+- **옛 결론 줄에 조건 hash가 없어** 비교군과 lift가 0이 된다. 평가의 품질 기준은 relay init 초안(`auto: [small]`)이라 결론 줄마다 `conds: { small: 'draft' }`를 채워 센다(`REPLAY_CONDITIONS`).
+- **숨긴 시험:** M3 순차의 `hidden_pass`는 그 Work의 `outcome.success`(그 Work를 머지한 main의 누적 숨긴 시험 전부)이고, 자기 시험만의 통과는 `later.own_pass`다. 표 1의 단위는 Work다(V31 재생은 묶음과 실행).
+- **표 3의 귀속은 대리다.** 평가에는 push CI 실행과 되돌림이 없어 6절의 규칙(되돌림 세 꼴, 부모 통과·다시 시도도 실패)을 그대로 돌릴 수 없다. 'main 레포 시험이 실패하고 바로 앞 main은 통과'(시험이 결정론이라 다시 시도도 실패로 봄, 첫 Work의 앞은 통과로 봄)를 귀속으로 두고 누적 숨긴 시험의 새 깨뜨림(`regressed`)을 이름표로 정밀도·재현율을 센다. 지금 자료에서는 둘 다 0이다.
+- **`after-merge.ts`의 고정 자료로는 쓰지 못했다**(평가 장부에 after 줄이 없다). `shadowStats`는 이 자료로 [단위]에서 돈다.
+
 
 ## 10. M4h relay-v3 자신부터 돌리기
 

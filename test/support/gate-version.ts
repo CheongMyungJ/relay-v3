@@ -6,11 +6,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { gate } from '../../src/core/gate.ts'
-import { DRAFT_AUTO } from '../../src/core/quality.ts'
-import type { EvidenceBundle, Policy } from '../../src/core/types.ts'
-import { conditionsMet } from '../../src/engine/track.ts'
-import { bundleName, readReplay } from './gate-replay.ts'
+import { bundleName, readReplay, replayNow } from './gate-replay.ts'
 
 export interface GateVersionFixture {
   version: number
@@ -51,27 +47,14 @@ export function fileHashes(): Record<string, string> {
   return out
 }
 
-/** 초안 정책: 스위치 꺼짐, 서버 보호 모름, 실적 없음, 초안 조건(V19). gate-replay.test.ts와 같다 */
-const POLICY: Policy = {
-  auto_merge_enabled: false,
-  conditions: [{ ...DRAFT_AUTO }],
-  server: null,
-  track_record_ok: {},
-}
-
 /**
  * 재생 줄(이름, 결론, condition, met)과 그 digest. 리뷰는 요청을 본 것으로 두고(기록에 있으면 그 값), 지금 관문의 올림
- * 규칙(V26 그대로)과 지금 코드로 다시 잰 래칫을 쓴다(gate-replay.test.ts의 'now'·V26과 같다)
+ * 규칙(V26 그대로)과 지금 코드로 다시 잰 래칫을 쓴다(gate-replay.ts replayNow, gate-replay.test.ts의 'now'·V26과 같다)
  */
 export function replayLines(): string[] {
   return readReplay(REPLAY_DIR)
     .map((b) => {
-      const e = b.evidence
-      const review: EvidenceBundle['review'] =
-        e.review === null ? null : { request: true, ...e.review }
-      const evidence = { ...e, review }
-      const g = gate(evidence, b.contract, POLICY, e.head, b.integration)
-      const met = conditionsMet(evidence, b.contract, POLICY, e.head, b.integration)
+      const { g, met } = replayNow(b)
       return [bundleName(b), g.conclusion, g.condition ?? '-', met.join(',')].join('\t')
     })
     .sort()

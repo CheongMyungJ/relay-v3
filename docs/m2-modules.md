@@ -211,6 +211,25 @@ function sessionStats(entries: LedgerEntry[]): SessionStats   // shared/api.ts
 - `sessionStats`(shared `SessionStats`): 머지 끝 줄마다 그 내보내기의 첫 결론 줄('준비됨') head의 갈래(끝 줄의 head면 `after_commits`, 아니면 `after_heads[head]`)가 있으면 merges, 사람 커밋이 있으면 corrected(사람 교정), 갈래 합, disagree, `trailer === false`면 set_only. (프로젝트, Work)마다 마지막 `session_set`으로 works, session_commits, watched, trailered, incidents.
 - 관문 판의 파일이 아니다(결론을 바꾸지 않는다). 렌더러가 보이는 모양(`SessionStats`)은 shared/api.ts.
 
+### `src/engine/stability.ts` — 관문 5회 반복 안정성의 순수한 셈 (M4f, V52, m4-design 8절)
+앱 장치가 아니라 측정 도구 `scripts/gate-repeat.ts`가 쓴다(화면·CLI에 없음).
+```ts
+type RunDigest = Record<string, string>                       // 칸 → 값
+function checkDigest(e: EvidenceBundle, g: GateResult, met: readonly string[]): RunDigest
+interface Stability { runs: number; diverged: { field: string; values: string[] }[]; conclusion_changed: boolean }
+function stabilityOf(runs: readonly RunDigest[]): Stability    // (A)
+interface ReviewRun { status: 'done' | 'failed'; raises: Record<'갈래/심각도', number> }
+function reviewStability(runs: readonly ReviewRun[]): { done; failed; presence_flip; kind_flip; kinds: string[][] }   // (B)
+interface GenerationRun { group; run; kinds: LineKind[]; conclusions: string[]; met: boolean; facts: string[] }
+function generationSpread(runs: readonly GenerationRun[]): GenerationSpread[]   // (C) 무리마다
+function kindsKey(kinds: readonly LineKind[]): string          // 'change×2,keep×1'
+```
+- `checkDigest`의 칸(결정론 입력): `commands.<id>`(결과. 흔들리는 시험 규칙의 unstable·pre_existing 포함), `ratchets.<id>`(상태와 head 값), `lines.<id>`, `examples_file`, `signals`(갈래:경로), `test_weakening`(수), `diff`(파일 +더함 -뺌), `missing`, `met`, `conclusion`, `decisive`. 시각과 출력 꼬리는 넣지 않는다.
+- `stabilityOf`: 반복마다 값이 다른 칸(한 반복에 없는 칸은 '-'). `conclusion_changed`는 `conclusion`이나 `met`이 갈렸을 때(8.4 일곱째 조건).
+- `reviewStability`: 끝난 반복끼리 올림 유무(`presence_flip`)와 올린 갈래의 집합(심각도는 보지 않음, `kind_flip`)을 따로 본다. 실패한 반복은 견주지 않는다.
+- `generationSpread`: 무리(규약/시나리오/쪽)마다 줄 종류 다중집합 → 실행 수, 사람 줄이 있는 실행 수, 결론의 모음 → 실행 수, 조건을 채운 실행 수, 일부 실행에만 있는 사람 머지 까닭(사실별 귀인), `diverged`(줄 종류·사람 줄·결론·조건 채움마다). 입력은 `test/support/gate-replay.ts generationRuns`(재생 묶음을 실행마다 모음: 같은 Work의 같은 줄 id는 한 번, 조건 채움은 규약의 `RUN_MET`, 까닭은 지금 관문으로 다시 계산).
+- 관문 판의 파일이 아니다(결론을 바꾸지 않는다).
+
 ## 2. adapters
 
 ### `src/adapters/pty.ts`

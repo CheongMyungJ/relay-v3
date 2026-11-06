@@ -29,6 +29,7 @@ npm run format:check
 npm run limits             # 파일 600줄, src/core 5,000줄
 npm test                   # [단위], [어댑터], [흐름]
 npm run test:replay        # 관문 재생(V31)만 돌리고 G1·G2 표를 찍는다
+npm run test:track         # 재생 실적(M4g, V53)의 네 표를 찍는다
 ```
 
 관문 재생의 자료(`test/fixtures/gate-replay/<규약>.jsonl`)는 저장된 평가 결과에서 만듭니다. 새 규약의 묶음을 더하거나 래칫 코드를 바꿨으면 다시 만들고, 시험의 규약마다의 표(`RECORDED_RULE`, `FALSE_AUTO_MAX`, `RUN_MET`)를 봅니다.
@@ -47,6 +48,27 @@ npm run replay:review                                   # docs/experiments/m2.1/
 npm run replay:review -- --resume                       # 끊긴 뒤 끝난 호출을 건너뛰고 잇는다
 npm run replay:review -- --summary                      # 부르지 않고 요약만
 ```
+
+재생 실적(M4g, `docs/m4-design.md` 9절)의 자료(`test/fixtures/track-replay/<규약>.jsonl`)는 저장된 평가의 relay3 쪽 Work 장부에서 만듭니다(모델 호출 없음). 새 평가 배치를 더했으면 다시 만들고 `npm run test:track`의 표를 봅니다.
+
+```bash
+R=../relay-v2/app/eval/results
+node scripts/track-replay.ts test/fixtures/track-replay/m2.jsonl $R/m2-*
+node scripts/track-replay.ts test/fixtures/track-replay/m2.1.jsonl $R/m21-sealed-* $R/m21-design-*
+node scripts/track-replay.ts test/fixtures/track-replay/m3.jsonl $R/m3-seq
+```
+
+관문 5회 반복 안정성(M4f, `docs/m4-design.md` 8절)은 평가 도구입니다(앱에 없음). (A)는 대상마다 check를 5번(반복마다 새 임시 `RELAY_HOME`, 고정 리뷰, 초안 정책), (B)는 리뷰만 5번(`claude -p`, 비용이 듭니다. `--dry`로 먼저 봅니다), (C)는 재생 자료만 읽습니다. 대상의 레포는 임시 `git clone --shared`에서 돌아 원래 레포의 ref와 worktree 등록을 바꾸지 않습니다. 결과는 `docs/experiments/m4/gate-repeat-<check|review>.jsonl`에 쓰고, 이미 있으면 `--resume`으로 잇습니다.
+
+```bash
+node scripts/gate-repeat.ts targets --bundle 14-double-notify/relay3-2/a20b4044 --into /tmp/m4f   # 평가 묶음에서 대상과 targets.json
+node scripts/gate-repeat.ts check --targets /tmp/m4f/targets.json            # (A) 5회
+node scripts/gate-repeat.ts review --targets /tmp/m4f/targets.json --dry     # (B) 가짜 리뷰어
+node scripts/gate-repeat.ts review --from docs/experiments/m2.1/review-replay.jsonl   # (B) 이미 있는 반복 자료
+node scripts/gate-repeat.ts generation                                       # (C) test/fixtures/gate-replay/
+```
+
+targets.json은 `[{ "name", "repo", "base", "head", "contract"?, "request"?, "options"?: { "effort"? } }]`이고 경로는 그 파일 기준입니다. relay-v3 Work의 head는 손으로 적습니다.
 
 ## 문서
 

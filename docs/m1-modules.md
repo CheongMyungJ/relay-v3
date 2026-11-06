@@ -182,6 +182,9 @@ M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. `trackRecord
 ### `src/engine/session-commits.ts` — 세션 커밋 가르기의 순수한 셈 (M4e, V51)
 순수 함수다. `shimText`·`shimFiles`(심의 글), `trailerEnv`(세션 PTY 환경의 core.hooksPath), `trailerGitOk`, `workTrailers`, `classifyCommits`, `parseSessionLog`, `sessionSummary`, `sessionStats`. 관문 판의 파일이 아니다. 약속은 [m2-modules.md](m2-modules.md) 1a절.
 
+### `src/engine/stability.ts` — 관문 5회 반복 안정성의 순수한 셈 (M4f, V52)
+순수 함수다. `checkDigest`, `stabilityOf`(A), `reviewStability`(B), `generationSpread`·`kindsKey`(C). 측정 도구 `scripts/gate-repeat.ts`만 쓴다(앱 장치가 아님). 관문 판의 파일이 아니다. 약속은 [m2-modules.md](m2-modules.md) 1a절.
+
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
 - `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).
 - `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 `M3_DEFAULT`의 값.
