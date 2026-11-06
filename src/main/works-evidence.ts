@@ -173,7 +173,8 @@ export class EvidenceRunner {
   /**
    * Stop: 지금 계약으로 재지 않은 끝, 또는 잰 묶음에 미리 리뷰(V23)를 돌릴 끝이 있으면 debounceMs 뒤 미리 리뷰를 허락한
    * 재기를 줄 세운다(그사이 Stop이 또 오면 다시 기다린다). 그때 이미 쟀고 미리 리뷰할 것도 없으면 재기가 바로 그만둔다. 잴
-   * 것이 없으면 debounceMs 뒤 되먹임만 본다(V24: 세션이 그때도 쉬고 있어야 보낸다)
+   * 것이 없으면 debounceMs 뒤 되먹임만 본다(V24: 세션이 그때도 쉬고 있어야 보낸다). 그때 세션에 넘겨 다시 건 끝(V35)이
+   * 기다리고 있으면 둘 대신 그 끝을 정한다(works-end.ts rest)
    */
   async onStop(id: string): Promise<void> {
     const rec = this.ctx.record(id)
@@ -185,7 +186,13 @@ export class EvidenceRunner {
     this.cancelDebounce(id)
     rt.debounce = setTimeout(() => {
       rt.debounce = null
-      const next = idle ? this.ctx.offerFeedback(id) : this.run(id, { prepare: true })
+      // 세션에 넘겨 다시 건 끝(V35)은 미리 리뷰 대신 그 head를 내보내기로 정한다
+      const handed = rec.end_pending?.handed === true
+      const next = handed
+        ? this.ctx.restEnd(id)
+        : idle
+          ? this.ctx.offerFeedback(id)
+          : this.run(id, { prepare: true })
       void next.catch((e) => this.ctx.log('증거 실패', e))
     }, this.debounceMs)
   }

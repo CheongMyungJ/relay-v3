@@ -251,12 +251,20 @@ const ending = (v: Pick<WorkView, 'state'>) => v.state === 'working' || v.state 
 
 /** [끝내기]의 상자(V25)를 보일 때: 구현 중이고 지금 HEAD에 열린 것이 있는 상자가 있다(메인이 work.json에 둔다) */
 export function showEndBox(v: WorkView): boolean {
-  return ending(v) && v.endPending?.armed === false
+  return ending(v) && v.endPending?.armed === false && v.endPending.handed !== true
 }
 
-/** [끝내기]가 걸려 있다(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다 */
+/**
+ * [끝내기]가 걸려 있다(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. 상자에서 세션에 넘겨 다시 건
+ * 끝(V35)도 걸린 끝이다: 세션이 고치고 쉬면 메인이 정한다
+ */
 export function endArmed(v: WorkView): boolean {
-  return ending(v) && v.endPending?.armed === true
+  return ending(v) && (v.endPending?.armed === true || v.endPending?.handed === true)
+}
+
+/** 세션에 넘겨 다시 건 끝(V35)이 세션의 고침을 기다린다(아직 재지 않음) */
+export function endHanded(v: WorkView): boolean {
+  return ending(v) && v.endPending?.handed === true && !v.endPending.armed
 }
 
 /**
@@ -281,9 +289,16 @@ export function endTexts(v: Pick<WorkView, 'reviewDisabled'>): {
   waiting: string
   armed: string
   box: string
+  handedButton: string
+  handed: string
+  hand: string
 } {
   const off = v.reviewDisabled
+  const what = off ? '내보내기 증거' : '내보내기 증거와 리뷰'
   return {
+    handedButton: '고치면 끝냄',
+    handed: `세션에 넘겼습니다: 세션이 고치고 쉬면 그 head의 ${what}를 보고, 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 상자가 다시 뜹니다.`,
+    hand: '열린 것의 리뷰 올림과 세션 몫 사실을 세션에 보내고, 세션이 고치고 쉬면 다시 끝내기를 봅니다',
     button: `${off ? '내보내기 증거' : '내보내기 증거(리뷰 포함)'}를 재고, 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 [증거]에 보입니다`,
     waiting: off ? '재면 끝냄' : '리뷰 끝나면 끝냄',
     armed: `끝내기가 걸려 있습니다: ${off ? '내보내기 증거를 다 재고' : '내보내기 증거와 리뷰가 끝나고'} 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 여기에 보입니다.`,

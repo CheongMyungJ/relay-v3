@@ -210,6 +210,8 @@ export interface WorkCtx {
   seeHead(id: string, head: string | null): Promise<void>
   /** 증거 재기 job이 하나 끝났다(works-evidence.ts의 줄 안에서): 걸린 끝을 다시 본다(V25, works-end.ts) */
   settleEnd(id: string, job: MeasureJob): Promise<void>
+  /** 세션이 쉰다(Stop 뒤 몰아 두기 끝): 세션에 넘겨 다시 건 끝(V35, works-end.ts)을 지금 head로 정한다. 실패는 삼킨다 */
+  restEnd(id: string): Promise<void>
   /**
    * 세션이 쉴 수 있는 때(Stop 뒤 몰아 두기 끝, 재기가 끝날 때마다, [끝내기]를 거둔 뒤, 사람의 입력 창이 끝날 때): 세션 몫의
    * 사실이 있으면 되먹임을 보낸다(V24). 실패는 삼킨다

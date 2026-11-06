@@ -5,6 +5,7 @@ import type { ExportView, FeedbackView, WorkView } from '../../src/shared/api.ts
 import {
   endTips,
   exportSection,
+  handable,
   integrationText,
   passByExport,
 } from '../../src/renderer/src/exports.ts'
@@ -87,6 +88,19 @@ test('passByExport: 상자의 [세션에 넘기기]는 내보내기마다 넘길
   const one = work({ exports: [], evidence: csv.evidence, feedback: human })
   expect(passByExport(one)).toEqual([{ ids: ['R1'] }])
   expect(passByExport(work())).toEqual([])
+})
+
+test('handable: 상자의 [세션에 넘기기](V35)는 넘길 올림이나 저절로 가지 않은 세션 몫 사실이 있을 때', () => {
+  const raised = finding({ id: 'R1', raise: 'out_of_contract', severity: 'low' })
+  const human: FeedbackView = { ...NO_FEEDBACK, findings: { R1: { route: 'human', sent: false } } }
+  const one = work({ exports: [], evidence: evidence({ review: reviewed([raised]) }) })
+  expect(handable(one)).toBe(false)
+  expect(handable({ ...one, feedback: human })).toBe(true)
+  // 통합 증거나 내보내기의 보내지 않은 사실
+  expect(handable(work({ feedback: { ...NO_FEEDBACK, pending: 2 } }))).toBe(true)
+  const fact = exp('money', { feedback: { ...NO_FEEDBACK, pending: 1 } })
+  expect(handable(work({ exports: [exp('csv'), fact] }))).toBe(true)
+  expect(handable(work())).toBe(false)
 })
 
 test('integrationText: 아직 재지 않음, 열린 것 없음, 열린 것 n개', () => {

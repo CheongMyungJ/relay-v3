@@ -6,7 +6,7 @@
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
 // 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내도 제출 때 기준에서 돌리지 않는다(V32: V28을 뺌). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
 // 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의
-// 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다.
+// 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다. 상자의 넘기기는 끝을 다시 건다(V35).
 // 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것.
 // 폴더 고르기 대화상자는 메인에서 바꿔 끼운다. 단계마다 test-results/smoke-*.png(1400x900)를 남긴다.
 //
@@ -102,6 +102,7 @@ const SCENARIO = {
     { do: 'print', text: '커밋했습니다. PR을 열까요? (Enter)' },
     { do: 'stop' },
     { do: 'waitInput' },
+    { do: 'sleep', ms: 2000 }, // 둘째 Work의 넘긴 끝(V35)을 찍을 틈
     { do: 'bash', command: 'git push -u origin HEAD' },
     { do: 'bash', command: 'gh pr create --title "clamp 고침" --body b --base main' },
     { do: 'print', text: 'PR을 열었습니다.' },
@@ -516,9 +517,16 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(raisedGroup.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(2)
   await evidence.getByTestId('feedback-status').scrollIntoViewIfNeeded()
   await shot('feedback-human-findings')
-  // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [그래도 끝내기]
+  // 다시 [끝내기] → 이미 잰 head라 곧바로 상자 → [세션에 넘기기](V35): 올림 둘을 보내고 끝을 '고친 뒤 끝냄'으로 다시 건다
   await head.getByRole('button', { name: '끝내기' }).click()
   await expect(endBox).toBeVisible({ timeout: 30_000 })
+  await endBox.getByRole('button', { name: '세션에 넘기기' }).click()
+  const handed = evidence.getByTestId('end-handed')
+  await expect(handed).toContainText('세션에 넘겼습니다: 세션이 고치고 쉬면')
+  await expect(head.getByRole('button', { name: '고치면 끝냄' })).toBeDisabled()
+  await shot('end-handed')
+  // 세션이 받아 쉬면 그 head를 다시 본다: 품질 기준 없음이 남아 상자가 다시 뜬다 → [그래도 끝내기]
+  await expect(endBox.getByTestId('end-open')).toContainText('품질 기준 없음', { timeout: 30_000 })
   await endBox.getByRole('button', { name: '그래도 끝내기' }).click()
   await expect(head).toContainText('끝남', { timeout: 30_000 })
   await expect(evidence.getByTestId('outcome')).toHaveText('머지 없이 끝남')

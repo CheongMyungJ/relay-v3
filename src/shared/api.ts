@@ -198,7 +198,9 @@ export interface FeedbackView {
 /**
  * [끝내기](V25)가 Work에 남긴 것. armed면 걸린 끝: 이 head의 내보내기 증거(리뷰 포함)가 끝나면 열린 것을 보고 끝내거나
  * 상자로 바꾼다. 아니면 상자: open은 열린 것(core openItems, 관문이 사람 머지로 보내는 사실). head가 바뀌거나 계약이
- * 바뀌거나 Work가 끝나면 지운다
+ * 바뀌거나 Work가 끝나면 지운다. handed면 상자의 [세션에 넘기기](V35)가 다시 건 끝('고친 뒤 끝냄')이다: armed가 아니면
+ * 세션이 고치고 쉬기를 기다리고(head가 바뀌어도 지우지 않고 새 head로 옮긴다), 세션이 쉬면 그 head로 걸린 끝(armed)이 된다.
+ * 열린 것이 있으면 handed 없는 상자로 돌아간다. open은 늘 빈 것
  */
 export interface EndPending {
   head: string
@@ -206,6 +208,23 @@ export interface EndPending {
   open: string[]
   /** branch_per_unit(V22)의 단위 브랜치마다 끝(없으면 null). 이것이 바뀌어도 지운다 */
   tips?: Record<string, string | null>
+  /** 상자에서 세션에 넘겨 다시 건 끝(V35). 없으면 거짓 */
+  handed?: true
+}
+
+/** 상자의 [세션에 넘기기](V35)가 보낼 리뷰 지적: 내보내기마다(unit은 단위 브랜치의 내보내기, V22) */
+export interface HandPick {
+  unit?: string
+  ids: string[]
+}
+
+/**
+ * 상자의 [세션에 넘기기](V35)의 입력. head는 상자의 head(지금 HEAD가 다르면 넘기지 않는다). picks는 보낼 리뷰 지적이고,
+ * 세션 몫의 사실 가운데 이 head에 아직 보내지 않은 것은 메인이 함께 보낸다
+ */
+export interface HandInput {
+  head: string
+  picks: HandPick[]
 }
 
 export interface WorkList {
@@ -317,8 +336,14 @@ export interface RelayApi {
    * 것이 있으면 상자로 둔다. force([그래도 끝내기])는 head(상자의 head)가 지금 HEAD일 때만 끝낸다. 다르면 던진다
    */
   end(id: string, o: EndInput): Promise<PreparedEnd>
-  /** [취소]·[더 고치기]: 걸린 끝이나 상자를 지운다 */
+  /** [취소]·[더 고치기]: 걸린 끝이나 상자(V35: 세션에 넘겨 다시 건 끝도)를 지운다 */
   cancelEnd(id: string): Promise<void>
+  /**
+   * 상자의 [세션에 넘기기](V35): 리뷰 지적(picks)과 아직 보내지 않은 세션 몫의 사실을 되먹임 파일로 세션에 보내고(V24 꼴, 라운드로
+   * 세지 않는다) 끝을 '고친 뒤 끝냄'으로 다시 건다. 세션이 쉬면 그 head의 내보내기 증거와 리뷰를 재서 열린 것이 없으면 끝내고,
+   * 있으면 상자를 다시 띄운다. 상자가 없거나 head가 지금 HEAD가 아니면 던진다
+   */
+  handEnd(id: string, o: HandInput): Promise<void>
   abandon(id: string): Promise<void>
   /** [증거 다시 재기]. 열린 PR이 있으면 내보내기 후보로(리뷰 포함) 잰다 */
   runEvidence(id: string): Promise<void>
@@ -355,6 +380,7 @@ export const IPC = {
   merge: 'relay:merge',
   end: 'relay:end',
   cancelEnd: 'relay:cancel-end',
+  handEnd: 'relay:hand-end',
   abandon: 'relay:abandon',
   runEvidence: 'relay:run-evidence',
   sendFindings: 'relay:send-findings',

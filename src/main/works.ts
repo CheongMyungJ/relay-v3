@@ -18,6 +18,7 @@ import {
   type ChangeAnswer,
   type DraftQualityResult,
   type EndInput,
+  type HandInput,
   type MergeResult,
   type NewWorkInput,
   type PreparedEnd,
@@ -248,6 +249,10 @@ export class Works implements WorkCtx {
     await this.ending.settle(id, job).catch((e) => this.log(`끝내기 실패 (${id})`, e))
   }
 
+  async restEnd(id: string): Promise<void> {
+    await this.ending.rest(id).catch((e) => this.log(`끝내기 실패 (${id})`, e))
+  }
+
   async offerFeedback(id: string): Promise<void> {
     await this.feedback.offer(id).catch((e) => this.log(`되먹임 실패 (${id})`, e))
   }
@@ -345,6 +350,8 @@ export class Works implements WorkCtx {
         // 입력 칸의 글은 이 프롬프트로 함께 갔다(V24)
         rt.draft = false
         this.evidence.cancelDebounce(workId)
+        // 세션에 넘긴 끝(V35)을 재는 중이면 다음 쉼을 기다린다
+        await this.ending.busy(workId)
         // 재개 프롬프트로 전한 사람의 답을 세션이 받았다
         if (rt.noticeSent) {
           rt.noticeSent = false
@@ -513,6 +520,11 @@ export class Works implements WorkCtx {
   /** [취소]·[더 고치기]: 걸린 끝이나 끝내기 상자를 지운다 */
   cancelEnd(id: string): Promise<void> {
     return this.ending.cancel(id)
+  }
+
+  /** 상자의 [세션에 넘기기](V35): 지적과 사실을 세션에 보내고 끝을 '고친 뒤 끝냄'으로 다시 건다 */
+  handEnd(id: string, o: HandInput): Promise<void> {
+    return this.ending.hand(id, o.head, () => this.feedback.handOver(id, o.picks))
   }
 
   /** 지금 HEAD를 화면에 보인다(Stop을 기다리지 않고). 걸린 끝이나 상자의 head가 아니면 그것을 지운다 */

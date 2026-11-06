@@ -1,22 +1,27 @@
 // [끝내기]의 걸린 끝과 상자 (V25, docs/m2-modules.md 4절). EvidencePanel.tsx가 600줄을 넘지 않게 나눴다. 상자는 열린 것만
 // 보인다(V22: 통합 증거와 내보내기마다의 열린 것, 없는 단위 브랜치). 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다.
-// 상자의 [세션에 넘기기](V24)는 열린 것에 보이는 올림을 내보내기마다 보내고 상자를 닫는다.
+// 상자의 [세션에 넘기기](V24, V35)는 열린 것에 보이는 올림과 저절로 가지 않은 세션 몫 사실을 보내고, 끝을 '고친 뒤 끝냄'으로
+// 다시 건다: 세션이 고치고 쉬면 메인이 끝내거나 상자를 다시 띄운다. 그동안은 걸린 끝의 칸에 그 글과 [취소]가 보인다.
 import type { WorkView } from '../../shared/api.ts'
-import { passByExport } from './exports.ts'
-import { endTexts, openText } from './format.ts'
+import { handable, passByExport } from './exports.ts'
+import { endHanded, endTexts, openText } from './format.ts'
 import { ErrorLine, useAction } from './ui.tsx'
 
-/** 걸린 끝(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. [취소]로 푼다 */
+/**
+ * 걸린 끝(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. 세션에 넘겨 다시 건 끝(V35)은 세션이 고치고 쉬기를
+ * 기다린다. [취소]로 푼다
+ */
 export function EndArmed({ view }: { view: WorkView }) {
   const act = useAction()
+  const handed = endHanded(view)
   return (
     <div
       className="callout tone-info"
       role="region"
       aria-label="걸린 끝내기"
-      data-testid="end-armed"
+      data-testid={handed ? 'end-handed' : 'end-armed'}
     >
-      <p className="callout-title">{endTexts(view).armed}</p>
+      <p className="callout-title">{handed ? endTexts(view).handed : endTexts(view).armed}</p>
       <div className="row">
         <button
           type="button"
@@ -39,8 +44,9 @@ export function EndArmed({ view }: { view: WorkView }) {
 export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
   const act = useAction()
   const { view } = p
-  // 열린 것에 보이는 올림을 세션에 보내고 상자를 닫는다(V24): 상자가 떠 있는 동안은 세션 몫도 저절로 가지 않는다
-  const pass = view.state === 'working' ? passByExport(view) : []
+  // 열린 것에 보이는 올림과 세션 몫 사실을 세션에 보내고 끝을 다시 건다(V24, V35): 상자가 떠 있는 동안은 세션 몫도 저절로
+  // 가지 않는다
+  const hand = view.state === 'working' && handable(view)
   return (
     <div className="callout tone-warn" role="region" aria-label="끝내기 확인" data-testid="end-box">
       <p className="callout-title">{endTexts(view).box}</p>
@@ -68,17 +74,16 @@ export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
         >
           더 고치기
         </button>
-        {pass.length > 0 ? (
+        {hand ? (
           <button
             type="button"
             className="secondary"
             disabled={act.busy}
-            title="열린 리뷰 올림을 세션에 보내고 상자를 닫습니다"
+            title={endTexts(view).hand}
             onClick={() =>
-              void act.run(async () => {
-                for (const x of pass) await window.relay.sendFindings(view.id, x.ids, x.unit)
-                await window.relay.cancelEnd(view.id)
-              })
+              void act.run(() =>
+                window.relay.handEnd(view.id, { head: p.head, picks: passByExport(view) }),
+              )
             }
           >
             세션에 넘기기

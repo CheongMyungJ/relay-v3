@@ -14,6 +14,7 @@ import {
   draftPending,
   draftResultText,
   endArmed,
+  endHanded,
   endMovedText,
   endTexts,
   exitText,
@@ -476,6 +477,10 @@ describe('증거 패널의 글', () => {
       armed:
         '끝내기가 걸려 있습니다: 내보내기 증거를 다 재고 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 여기에 보입니다.',
       box: '열린 것이 있습니다. 보고 끝낼지 정하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.',
+      handedButton: '고치면 끝냄',
+      handed:
+        '세션에 넘겼습니다: 세션이 고치고 쉬면 그 head의 내보내기 증거를 보고, 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 상자가 다시 뜹니다.',
+      hand: '열린 것의 리뷰 올림과 세션 몫 사실을 세션에 보내고, 세션이 고치고 쉬면 다시 끝내기를 봅니다',
     })
     // 리뷰를 끈 쪽은 '리뷰를 건너뜀'이 늘 열린 것이다(특례 없음): 상자에는 그 뜻으로 보인다
     expect(openText('리뷰를 건너뜀', off)).toBe(REVIEW_DISABLED)
@@ -483,6 +488,7 @@ describe('증거 패널의 글', () => {
       button: expect.stringMatching(/^내보내기 증거\(리뷰 포함\)를 재고, 열린 것이 없으면/),
       waiting: '리뷰 끝나면 끝냄',
       armed: expect.stringMatching(/^끝내기가 걸려 있습니다: 내보내기 증거와 리뷰가 끝나고/),
+      handed: expect.stringMatching(/그 head의 내보내기 증거와 리뷰를 보고/),
     })
   })
 
@@ -492,7 +498,7 @@ describe('증거 패널의 글', () => {
     expect(openText('리뷰 실패', base)).toBe('리뷰 실패: 끝내기를 다시 누르면 리뷰를 다시 돌립니다')
   })
 
-  test('showEndBox·endArmed: 메인이 둔 상자와 걸린 끝(V25)을 구현 중 Work에만 보인다', () => {
+  test('showEndBox·endArmed·endHanded: 메인이 둔 상자와 걸린 끝(V25, V35)을 구현 중 Work에만 보인다', () => {
     const head = evidence().head
     const box = { ...base, endPending: { head, armed: false, open: ['리뷰 없음'] } }
     const armed = { ...base, endPending: { head, armed: true, open: [] } }
@@ -504,6 +510,19 @@ describe('증거 패널의 글', () => {
     expect(endArmed(armed)).toBe(true)
     expect(endArmed(box)).toBe(false)
     expect(endArmed({ ...armed, state: 'abandoned' })).toBe(false)
+    // 상자에서 세션에 넘겨 다시 건 끝(V35): 상자가 아니라 걸린 끝이다. 세션의 고침을 기다리는 동안만 endHanded
+    const handed = { ...base, endPending: { head, armed: false, open: [], handed: true as const } }
+    expect(showEndBox(handed)).toBe(false)
+    expect(endArmed(handed)).toBe(true)
+    expect(endHanded(handed)).toBe(true)
+    const measuring = {
+      ...base,
+      endPending: { head, armed: true, open: [], handed: true as const },
+    }
+    expect(endArmed(measuring)).toBe(true)
+    expect(endHanded(measuring)).toBe(false)
+    expect(endHanded(armed)).toBe(false)
+    expect(endHanded({ ...handed, state: 'done' })).toBe(false)
     // HEAD가 바뀌어 메인이 지운 상자: 까닭을 한 줄로(구현 중이고 지금 HEAD가 그 head가 아닐 때만)
     const moved = { ...base, head: 'c'.repeat(40), endPending: null, endMoved: head }
     expect(endMovedText(moved)).toBe(

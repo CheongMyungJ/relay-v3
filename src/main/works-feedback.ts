@@ -17,7 +17,7 @@ import { contractHash } from '../core/contract.ts'
 import { feedbackLine, feedbackText, FINDINGS_NOTE } from '../core/instructions.ts'
 import { evidenceFacts, feedbackFacts, findingKey, raises, routeFindings } from '../core/review.ts'
 import type { Contract, EvidenceBundle, FeedbackFact, ReviewFinding } from '../core/types.ts'
-import type { FeedbackHold, FeedbackRound, FeedbackView } from '../shared/api.ts'
+import type { FeedbackHold, FeedbackRound, FeedbackView, HandPick } from '../shared/api.ts'
 import type { ExportRecord, WorkRecord } from './store.ts'
 import {
   delivered,
@@ -332,10 +332,13 @@ export class FeedbackDesk {
   }
 
   /** Work마다 차례로: 파일 번호와 '이 head에 보낸 것'을 앞 보내기가 끝난 뒤에 정한다 */
-  private serial(id: string, run: () => Promise<void>): Promise<void> {
+  private serial<T>(id: string, run: () => Promise<T>): Promise<T> {
     const rt = this.ctx.runtime(id)
     const turn = rt.feeding.then(run)
-    rt.feeding = turn.catch(() => {})
+    rt.feeding = turn.then(
+      () => {},
+      () => {},
+    )
     return turn
   }
 
@@ -360,6 +363,46 @@ export class FeedbackDesk {
         throw new Error(`지금 HEAD의 리뷰에 없는 지적: ${unknown.join(', ') || '없음'}`)
       const chosen = all.filter((f) => ids.includes(f.id))
       await this.send(rec, [{ spot, head, e, facts: [], findings: chosen }], 'human')
+    })
+  }
+
+  /**
+   * 상자의 [세션에 넘기기](V35, works-end.ts hand가 부른다): 자리마다 고른 리뷰 지적(picks)과, 이 끝에 아직 보내지 않은 세션
+   * 몫의 사실을 한 번에 보낸다. 상자가 떠 있는 동안 저절로 가지 않은 사실도 함께 간다. 사람이 정한 것이라 [세션에 넘기기]처럼
+   * 쉼·입력·상한을 보지 않고 라운드로 세지 않는다. 보낼 것이 없으면 던진다. 보낸 사실과 지적의 수를 돌려준다
+   */
+  handOver(id: string, picks: HandPick[]): Promise<{ facts: number; findings: number }> {
+    return this.serial(id, async () => {
+      const rec = this.ctx.record(id)
+      if (rec.state !== 'working') throw new Error('구현 중인 Work만 세션에 넘길 수 있음')
+      const spots = spotsOf(rec)
+      const of = (spot: Spot, p: HandPick) => spot.x !== null && spot.x.unit === (p.unit ?? null)
+      const lost = picks.find((p) => !spots.some((spot) => of(spot, p)))
+      if (lost) throw new Error(`리뷰가 있는 내보내기가 아님: ${lost.unit ?? '단위 없음'}`)
+      const head = await workHead(rec)
+      const tips = await readTips(rec)
+      const items: Item[] = []
+      for (const spot of spots) {
+        const ids = picks.filter((p) => of(spot, p)).flatMap((p) => p.ids)
+        const at = this.tip(spot, head, tips)
+        const e = this.current(rec, spot, at)
+        if (e === null || at === null) {
+          if (ids.length > 0)
+            throw new Error('지금 HEAD를 지금 계약으로 잰 증거가 없음: 증거를 다시 재세요')
+          continue
+        }
+        const all = e.review?.findings ?? []
+        const unknown = ids.filter((i) => !all.some((f) => f.id === i))
+        if (unknown.length > 0)
+          throw new Error(`지금 HEAD의 리뷰에 없는 지적: ${unknown.join(', ')}`)
+        const { facts } = unsent(rec, e)
+        const findings = all.filter((f) => ids.includes(f.id))
+        if (facts.length + findings.length > 0) items.push({ spot, head: at, e, facts, findings })
+      }
+      if (items.length === 0) throw new Error('세션에 넘길 지적이나 사실이 없음')
+      await this.send(rec, items, 'human')
+      const count = (f: (i: Item) => number) => items.reduce((n, i) => n + f(i), 0)
+      return { facts: count((i) => i.facts.length), findings: count((i) => i.findings.length) }
     })
   }
 

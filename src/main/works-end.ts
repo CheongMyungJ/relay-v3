@@ -7,10 +7,13 @@
 // [끝 확정])나 [더 고치기]를 고른다. 걸린 끝과 상자는 WorkRecord.end_pending이라 다른 Work로 갔다 오거나 앱을 다시 켜도
 // 남는다. head가 바뀌거나 계약이 바뀌거나 Work가 끝나면 지운다. 걸린 끝과 상자가 있는 동안은 쉬는 세션에 되먹임(V24)을
 // 보내지 않고, [취소]·[더 고치기] 뒤 다시 본다.
+// 상자의 [세션에 넘기기](V35)는 지적과 사실을 세션에 보내고 끝을 '고친 뒤 끝냄'(end_pending.handed)으로 다시 건다: head가
+// 바뀌어도 지우지 않고 새 head로 옮기며, 세션이 쉬면(Stop 뒤 몰아 두기 끝, rest) 그 head로 [끝내기]처럼 정한다. 열린 것이
+// 없으면 끝내고(ended.how handed), 있으면 상자를 다시 띄운다. 그 재기 중 세션이 다시 움직이면 다음 쉼을 기다린다. [취소]로 푼다.
 
 import { integrationFacts, openItems } from '../core/gate.ts'
 import { nextState } from '../core/work.ts'
-import type { EndInput, PreparedEnd } from '../shared/api.ts'
+import type { EndInput, EndPending, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import {
@@ -31,17 +34,26 @@ import {
   workHead,
 } from './works-types.ts'
 
-/** 끝낸 방식(events.jsonl의 ended.how): 한 번에, 걸렸다가, 상자에서 [그래도 끝내기] */
-type How = 'once' | 'armed' | 'box'
+/** 끝낸 방식(events.jsonl의 ended.how): 한 번에, 걸렸다가, 상자에서 [그래도 끝내기], 상자에서 세션에 넘긴 뒤(V35) */
+type How = 'once' | 'armed' | 'box' | 'handed'
 
 const short = (sha: string) => sha.slice(0, 7)
+
+/** 세션에 넘겨 다시 건 끝(V35)이면 기록에 붙이는 칸 */
+const handedOf = (p: EndPending): { handed?: true } => (p.handed === true ? { handed: true } : {})
 
 /** 계약이 바뀌었다(계약 바꾸기 요청과 답): 걸린 끝과 상자는 앞 계약의 증거로 정한 것이라 지운다. 저장은 부른 쪽이 한다 */
 export function dropEnd(ctx: WorkCtx, rec: WorkRecord): void {
   const p = rec.end_pending
   if (p === null) return
   rec.end_pending = null
-  ctx.note(rec.id, { type: 'end_cancelled', head: p.head, armed: p.armed, reason: 'contract' })
+  ctx.note(rec.id, {
+    type: 'end_cancelled',
+    head: p.head,
+    armed: p.armed,
+    ...handedOf(p),
+    reason: 'contract',
+  })
 }
 
 export class EndDesk {
@@ -65,22 +77,107 @@ export class EndDesk {
     const head = o.head === undefined ? await workHead(rec) : await this.sameHead(id, o.head)
     const tips = await this.checkTips(id, o.tips)
     this.ctx.runtime(id).endMoved = null
-    // 미리 리뷰가 끝난 head: 결정론 증거와 리뷰를 다시 써서 바로 내보내기로 잰다(장부 한 줄). 그 사이 정책이 머지했으면
-    // 끝났다. 그 사이 HEAD가 바뀌었으면 끝내지 않는다
+    return this.start(rec, head, tips, false)
+  }
+
+  /**
+   * 이 끝들로 정하기 시작한다([끝내기], 세션에 넘긴 끝의 쉼). 미리 리뷰가 끝난 head는 결정론 증거와 리뷰를 다시 써서 바로
+   * 내보내기로 잰다(장부 한 줄). 그 사이 정책이 머지했으면 끝났다. 그 사이 HEAD가 바뀌었으면 끝내지 않는다. 내보내기 증거가
+   * 있으면 정하고, 없으면 걸어 두고 잰다. handed(V35)는 그 사이 세션이 다시 움직였으면 다음 쉼을 기다린다
+   */
+  private async start(
+    rec: WorkRecord,
+    head: string,
+    tips: Tips,
+    handed: boolean,
+  ): Promise<PreparedEnd> {
+    const id = rec.id
+    const rt = this.ctx.runtime(id)
+    const waiting = rec.end_pending
     if (this.evidence.promotable(id, head, tips)) {
       await this.evidence.run(id, { export: 'end' })
       if (!isActive(rec.state)) return { head: null, ended: true, armed: false, open: [] }
       await this.sameHead(id, head)
       await this.checkTips(id, tips)
+      if (handed && (rec.end_pending !== waiting || rt.session === 'running'))
+        return { head, ended: false, armed: false, open: [] }
     }
-    if (this.ready(rec, head, tips)) return this.decide(rec, head, tips, 'once')
-    rec.end_pending = { head, armed: true, open: [], ...this.tipsOf(rec, tips) }
+    if (this.ready(rec, head, tips)) return this.decide(rec, head, tips, handed ? 'handed' : 'once')
+    const mark = handed ? { handed: true as const } : {}
+    rec.end_pending = { head, armed: true, open: [], ...this.tipsOf(rec, tips), ...mark }
     await this.ctx.save(rec)
-    this.ctx.note(id, { type: 'end_armed', head })
+    this.ctx.note(id, { type: 'end_armed', head, ...mark })
     // 도는 재기(미리 리뷰 등)가 있으면 그것이 끝난 뒤 settle이 내보내기를 줄 세운다: 그사이 HEAD가 바뀌면 재지 않는다
-    const rt = this.ctx.runtime(id)
     if (rt.measuring === null && rt.pending === null) this.measure(id)
     return { head, ended: false, armed: true, open: [] }
+  }
+
+  /**
+   * 상자의 [세션에 넘기기](V35): 상자(head가 지금 HEAD)를 '고친 뒤 끝냄'으로 다시 걸고 send(지적과 사실을 세션에 보냄)를
+   * 부른다. 걸고 나서 보낸다: 세션이 받아 고치고 쉬는 것이 다시 건 뒤에 오게. 기다리던 몰아 두기는 지운다(넘기기 앞의 Stop이
+   * 이 head를 바로 다시 정하지 않게). 보내지 못하면 상자로 되돌리고 던진다
+   */
+  async hand(
+    id: string,
+    head: string,
+    send: () => Promise<{ facts: number; findings: number }>,
+  ): Promise<void> {
+    const rec = this.ctx.record(id)
+    const box = rec.end_pending
+    if (rec.state !== 'working') throw new Error('구현 중인 Work만 세션에 넘길 수 있음')
+    if (box === null || box.armed || box.handed === true || box.head !== head)
+      throw new Error('끝내기 상자가 없음: 끝내기를 다시 누르세요')
+    await this.sameHead(id, head)
+    await this.checkTips(id, box.tips)
+    if (rec.end_pending !== box) throw new Error('끝내기 상자가 바뀜: 다시 보세요')
+    const handed: EndPending = { ...box, open: [], handed: true }
+    rec.end_pending = handed
+    this.ctx.runtime(id).endMoved = null
+    this.evidence.cancelDebounce(id)
+    await this.ctx.save(rec)
+    try {
+      const sent = await send()
+      this.ctx.note(id, { type: 'end_handed', head, ...sent })
+    } catch (e) {
+      if (rec.end_pending === handed) {
+        rec.end_pending = box
+        await this.ctx.save(rec)
+      }
+      throw e
+    }
+  }
+
+  /**
+   * 세션이 쉰다(Stop 뒤 몰아 두기 끝): 세션에 넘겨 다시 건 끝(V35)이 기다리는 중이면 지금 head로 [끝내기]처럼 정한다. 쉬는
+   * 동안 미리 리뷰를 돌리지 않으므로 대개 걸어 두고 내보내기로 잰다(그 재기가 끝나면 settle). 이미 잰 head(세션이 커밋하지
+   * 않고 쉼)는 바로 정한다: 열린 것이 남았으면 상자가 다시 뜬다
+   */
+  async rest(id: string): Promise<void> {
+    const rec = this.ctx.find(id)
+    const p = rec?.end_pending
+    if (!rec || p?.handed !== true || p.armed || rec.state !== 'working') return
+    const head = await workHead(rec).catch(() => null)
+    const tips = await readTips(rec)
+    if (head === null || rec.end_pending !== p || this.ctx.runtime(id).session === 'running') return
+    await this.start(rec, head, tips, true)
+  }
+
+  /**
+   * 세션이 다시 움직인다(UserPromptSubmit): 세션에 넘긴 끝(V35)이 걸려 재는 중이면 다음 쉼을 기다리게 되돌린다(일하는 세션의
+   * Work를 끝내지 않게). 도는 재기는 끝까지 돌고 settle은 걸린 끝이 아니라 그대로 둔다
+   */
+  async busy(id: string): Promise<void> {
+    const rec = this.ctx.find(id)
+    if (rec && this.wait(rec)) await this.ctx.save(rec)
+  }
+
+  /** 세션에 넘긴 끝이 걸려 있으면 다음 쉼을 기다리게 되돌린다. 되돌렸으면 참: 부른 쪽이 저장한다 */
+  private wait(rec: WorkRecord): boolean {
+    const p = rec.end_pending
+    if (p?.handed !== true || !p.armed) return false
+    rec.end_pending = { ...p, armed: false }
+    this.ctx.note(rec.id, { type: 'end_waiting', head: p.head })
+    return true
   }
 
   /**
@@ -94,7 +191,13 @@ export class EndDesk {
     if (p === null) return this.ctx.publish(id)
     rec.end_pending = null
     await this.ctx.save(rec)
-    this.ctx.note(id, { type: 'end_cancelled', head: p.head, armed: p.armed, reason: 'human' })
+    this.ctx.note(id, {
+      type: 'end_cancelled',
+      head: p.head,
+      armed: p.armed,
+      ...handedOf(p),
+      reason: 'human',
+    })
     void this.ctx.offerFeedback(id)
   }
 
@@ -115,8 +218,10 @@ export class EndDesk {
     const tips = await readTips(rec)
     if (head !== null && (head !== p.head || !sameTips(tips, p.tips)))
       return this.ctx.seeHead(id, head)
+    // 세션에 넘긴 끝(V35): 그사이 세션이 다시 움직였으면 다음 쉼을 기다린다
+    if (rt.session === 'running' && this.wait(rec)) return this.ctx.save(rec)
     if (head !== null && this.evidence.exportedAll(rec, head, tips)) {
-      await this.decide(rec, head, tips, 'armed')
+      await this.decide(rec, head, tips, p.handed === true ? 'handed' : 'armed')
       return
     }
     // 모든 내보내기를 이 끝들로 재는 [끝내기]의 재기가 아니었다
@@ -125,7 +230,7 @@ export class EndDesk {
     if (head !== null && (!all || other)) return this.measure(id)
     rec.end_pending = null
     await this.ctx.save(rec)
-    this.ctx.note(id, { type: 'end_failed', head: p.head })
+    this.ctx.note(id, { type: 'end_failed', head: p.head, ...handedOf(p) })
   }
 
   /** 앱을 다시 켰을 때 걸린 끝이 남아 있으면 이어 잰다(HEAD가 바뀌었으면 init의 seeHead가 이미 지웠다) */
@@ -136,12 +241,16 @@ export class EndDesk {
   }
 
   /**
-   * 읽은 HEAD(와 단위 브랜치의 끝)가 걸린 끝이나 상자의 것이 아니면 지운다(화면은 endMoved로 까닭을 보인다). 지웠으면 참:
-   * 부른 쪽이 저장한다
+   * 읽은 HEAD(와 단위 브랜치의 끝)가 걸린 끝이나 상자의 것이 아니면 지운다(화면은 endMoved로 까닭을 보인다). 세션에 넘긴
+   * 끝(V35)은 세션의 고침을 기다리므로 지우지 않고 새 끝으로 옮겨 다음 쉼을 기다린다. 바꿨으면 참: 부른 쪽이 저장한다
    */
   follow(rec: WorkRecord, head: string, tips: Tips): boolean {
     const p = rec.end_pending
     if (p === null || (p.head === head && sameTips(p.tips, tips))) return false
+    if (p.handed === true) {
+      rec.end_pending = { head, armed: false, open: [], ...this.tipsOf(rec, tips), handed: true }
+      return true
+    }
     rec.end_pending = null
     this.ctx.runtime(rec.id).endMoved = p.head
     this.ctx.note(rec.id, { type: 'end_moved', from: p.head, to: head, armed: p.armed })

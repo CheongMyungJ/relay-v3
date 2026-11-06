@@ -31,6 +31,7 @@ const api: RelayApi = {
   merge: (id, unit) => call(IPC.merge, id, unit),
   end: (id, o) => call(IPC.end, id, o),
   cancelEnd: (id) => call(IPC.cancelEnd, id),
+  handEnd: (id, o) => call(IPC.handEnd, id, o),
   abandon: (id) => call(IPC.abandon, id),
   runEvidence: (id) => call(IPC.runEvidence, id),
   sendFindings: (id, ids, unit) => call(IPC.sendFindings, id, ids, unit),

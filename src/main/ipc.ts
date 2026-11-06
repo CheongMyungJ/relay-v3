@@ -3,7 +3,13 @@
 // 'electron'을 가져오는 곳은 이 파일과 index.ts뿐이다.
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
-import { IPC, type IpcResult, type NewWorkInput, type ProjectSettings } from '../shared/api.ts'
+import {
+  IPC,
+  type HandPick,
+  type IpcResult,
+  type NewWorkInput,
+  type ProjectSettings,
+} from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
 import { exportable } from './works-evidence.ts'
 import type { Works } from './works.ts'
@@ -30,6 +36,23 @@ const tipsArg = (v: unknown): Record<string, string | null> => {
   for (const [k, x] of Object.entries(obj(v, '단위 브랜치의 끝')))
     out[k] = x === null ? null : str(x, '끝')
   return out
+}
+
+/** 지적 id 목록 */
+const idsArg = (v: unknown): string[] => {
+  if (!Array.isArray(v) || !v.every((x) => typeof x === 'string'))
+    throw new Error('지적 id 목록이 아님')
+  return v
+}
+
+/** 상자의 [세션에 넘기기](V35)가 보낼 지적: 내보내기마다 */
+const picksArg = (v: unknown): HandPick[] => {
+  if (!Array.isArray(v)) throw new Error('넘길 지적이 목록이 아님')
+  return v.map((p) => {
+    const x = obj(p, '넘길 지적')
+    const unit = unitArg(x.unit)
+    return { ...(unit === undefined ? {} : { unit }), ids: idsArg(x.ids) }
+  })
 }
 
 export function registerIpc(o: {
@@ -88,6 +111,11 @@ export function registerIpc(o: {
       })
     },
     [IPC.cancelEnd]: (id) => works.cancelEnd(str(id, 'id')),
+    // 상자의 [세션에 넘기기](V35): 상자의 head와 내보내기마다 지적 id들
+    [IPC.handEnd]: (id, input) => {
+      const x = obj(input, '입력')
+      return works.handEnd(str(id, 'id'), { head: str(x.head, 'head'), picks: picksArg(x.picks) })
+    },
     [IPC.abandon]: (id) => works.abandon(str(id, 'id')),
     // [증거 다시 재기]: 열린 PR이 지금 끝을 가리키고 Work의 기준으로 가면 내보내기 후보로(리뷰 포함, V22: 그런 내보내기만).
     // PR이 뒤처진 끝을 내보내기로 재지 않는다(PR head가 아니면 머지할 수 없다)
@@ -99,11 +127,8 @@ export function registerIpc(o: {
       return works.runEvidence(view.id, { exportCandidate: candidate })
     },
     // [세션에 넘기기](V24): 지금 HEAD의 리뷰 지적 id들. unit은 단위 브랜치의 내보내기(V22)
-    [IPC.sendFindings]: (id, ids, unit) => {
-      if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string'))
-        throw new Error('지적 id 목록이 아님')
-      return works.sendFindings(str(id, 'id'), ids, unitArg(unit))
-    },
+    [IPC.sendFindings]: (id, ids, unit) =>
+      works.sendFindings(str(id, 'id'), idsArg(ids), unitArg(unit)),
     [IPC.terminalAttach]: (id) => {
       works.view(str(id, 'id'))
       return sessions.backlog(id as string)

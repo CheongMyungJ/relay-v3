@@ -7,7 +7,15 @@ import { DebtPanel, DiffPanel } from './ChangesPanel.tsx'
 import { ContractPanel } from './ContractPanel.tsx'
 import { EvidencePanel } from './EvidencePanel.tsx'
 import { endTips } from './exports.ts'
-import { SESSION_LABEL, STATE_LABEL, endArmed, endTexts, isActive, workTone } from './format.ts'
+import {
+  SESSION_LABEL,
+  STATE_LABEL,
+  endArmed,
+  endHanded,
+  endTexts,
+  isActive,
+  workTone,
+} from './format.ts'
 import { TerminalView } from './TerminalView.tsx'
 import { ErrorLine, Tag, useAction } from './ui.tsx'
 
@@ -33,7 +41,8 @@ export function WorkPane({ view, project }: { view: WorkView; project: ProjectVi
   const live = view.session !== 'stopped'
   // 탭이나 상태가 바뀌면 맨 위로: 결론 한 줄과 답이 필요한 상자(승인, 계약 바꾸기, 끝내기)가 먼저 보이게
   const scroll = useRef<HTMLDivElement>(null)
-  const endKey = view.endPending ? `${view.endPending.head}:${view.endPending.armed}` : null
+  const pend = view.endPending
+  const endKey = pend ? `${pend.head}:${pend.armed}:${pend.handed === true}` : null
   useEffect(() => {
     scroll.current?.scrollTo(0, 0)
   }, [tab, view.state, endKey])
@@ -138,7 +147,13 @@ function WorkHeader(p: {
               )
             }}
           >
-            {armed ? endTexts(view).waiting : ending.busy ? '끝내는 중…' : '끝내기'}
+            {endHanded(view)
+              ? endTexts(view).handedButton
+              : armed
+                ? endTexts(view).waiting
+                : ending.busy
+                  ? '끝내는 중…'
+                  : '끝내기'}
           </button>
         ) : null}
         {active ? (

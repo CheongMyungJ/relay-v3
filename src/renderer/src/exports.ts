@@ -45,6 +45,18 @@ export function passByExport(v: WorkView): { unit?: string; ids: string[] }[] {
   })
 }
 
+/**
+ * 상자의 [세션에 넘기기](V35)가 보낼 것이 있나: 넘길 올림(passByExport)이나, 상자가 떠 있어 저절로 가지 않은 세션 몫(통합
+ * 증거와 내보내기마다의 feedback.pending)
+ */
+export function handable(v: WorkView): boolean {
+  return (
+    passByExport(v).length > 0 ||
+    v.feedback.pending > 0 ||
+    v.exports.some((x) => x.feedback.pending > 0)
+  )
+}
+
 /** 통합 증거 칸의 첫 줄: 아직 재지 않음, 열린 것 없음, 열린 것 n개 */
 export function integrationText(v: Pick<WorkView, 'evidence' | 'integration'>): string {
   if (v.evidence === null || v.integration === null) return '통합 증거를 아직 재지 않았습니다'
