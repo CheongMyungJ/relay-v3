@@ -24,6 +24,7 @@ import {
   contractFile,
   delivered,
   exportContract,
+  handedWaiting,
   isActive,
   measures,
   message,
@@ -171,10 +172,9 @@ export class EvidenceRunner {
   // ── 계기 ───────────────────────────────────────────────────────────────────
 
   /**
-   * Stop: 지금 계약으로 재지 않은 끝, 또는 잰 묶음에 미리 리뷰(V23)를 돌릴 끝이 있으면 debounceMs 뒤 미리 리뷰를 허락한
-   * 재기를 줄 세운다(그사이 Stop이 또 오면 다시 기다린다). 그때 이미 쟀고 미리 리뷰할 것도 없으면 재기가 바로 그만둔다. 잴
-   * 것이 없으면 debounceMs 뒤 되먹임만 본다(V24: 세션이 그때도 쉬고 있어야 보낸다). 그때 세션에 넘겨 다시 건 끝(V35)이
-   * 기다리고 있으면 둘 대신 그 끝을 정한다(works-end.ts rest)
+   * Stop: 지금 계약으로 재지 않은 끝, 또는 잰 묶음에 미리 리뷰(V23)를 돌릴 끝이 있으면 debounceMs 뒤 미리 리뷰를 허락한 재기를
+   * 줄 세운다(그사이 Stop이 또 오면 다시 기다린다. 그때 이미 쟀고 미리 리뷰할 것도 없으면 재기가 바로 그만둔다). 잴 것이 없으면
+   * debounceMs 뒤 되먹임만 본다(V24: 세션이 그때도 쉬어야 보낸다). 그때 세션에 넘겨 다시 건 끝(V35)이 기다리면 그 끝을 정한다(rest)
    */
   async onStop(id: string): Promise<void> {
     const rec = this.ctx.record(id)
@@ -221,7 +221,7 @@ export class EvidenceRunner {
   /**
    * PostToolUse(셸)의 git push·gh pr: 내보내기마다 PR을 다시 읽고, PR이 그 내보내기의 지금 끝을 가리키고 Work의 기준 브랜치로
    * 가면 그 내보내기를 내보내기 후보로 잰다. 기준이 다른 PR은 재지 않고 알린다(증거와 서버 보호는 Work의 기준으로 읽는다).
-   * 내보내기의 PR이 모두 머지되거나 닫혔으면 Work를 끝낸다
+   * 내보내기의 PR이 모두 머지되거나 닫혔으면 Work를 끝낸다. 다른 내보내기가 남거나 넘긴 끝(V35)이 쉼을 기다리면 몰아 두기는 둔다
    */
   async onPush(id: string): Promise<void> {
     const rec = this.ctx.record(id)
@@ -242,8 +242,8 @@ export class EvidenceRunner {
         only.push(x.branch)
     }
     if (only.length === 0) return
-    // 다른 내보내기가 남으면 Stop 뒤 몰아 두기(미리 리뷰)는 그대로 둔다
-    if (rec.exports.every((x) => delivered(x) || only.includes(x.branch))) this.cancelDebounce(id)
+    const all = rec.exports.every((x) => delivered(x) || only.includes(x.branch))
+    if (all && !handedWaiting(rec)) this.cancelDebounce(id)
     await this.run(id, { export: 'pr', only })
   }
 

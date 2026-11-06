@@ -3,16 +3,18 @@
 // 내보내기로 재서 열린 것이 없으면 끝낸다(ended.how handed). 열린 것이 남으면 상자가 다시 뜬다. [증거]의 [세션에 넘기기]는
 // 끝을 걸지 않는다. 넘길 것이 없으면 상자로 되돌린다. [취소]로 푼다. 재는 동안 세션이 다시 움직이면 다음 쉼을 기다린다.
 // 바탕은 test/support/works-flow.ts.
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { calc } from '../support/calc.ts'
-import { makeTempDir } from '../support/repo.ts'
+import { makeTempDir, runGit } from '../support/repo.ts'
 import type { TestApp } from '../support/works-app.ts'
 import {
   CONTRACT,
   FIX_COMMIT,
   flowKit,
   NOTE_FINDINGS,
+  PUSH_AND_PR,
   RAISED_FINDINGS,
   REQUEST,
   settled,
@@ -194,7 +196,7 @@ test('넘긴 끝을 재는 동안 세션이 다시 움직이면 끝내지 않고
     { do: 'waitInput' },
     NOTE_COMMIT,
     { do: 'stop' },
-    // 리뷰가 도는 사이 사람이 말한다
+    // 리뷰가 도는 사이 세션이 프롬프트를 받는다(사람이 터미널에 친 것이 아님. 그것은 넘긴 끝을 푼다)
     { do: 'waitInput' },
     { do: 'sleep', ms: 2500 },
     { do: 'stop' },
@@ -226,7 +228,12 @@ test('넘긴 끝을 재는 동안 세션이 다시 움직이면 끝내지 않고
     await until(() => settled(works.view(id)), '리뷰 끝')
     expect(works.view(id).state).toBe('working')
     // 세션이 다시 쉬면 이미 잰 head라 바로 끝낸다
-    await until(() => works.view(id).state === 'done', '다시 쉰 뒤 끝남')
+    // ended 기록은 상태를 저장한 뒤에 쓴다
+    await until(
+      async () => (await ends(app, id)).some((e) => e.type === 'ended'),
+      '다시 쉰 뒤 끝남',
+    )
+    expect(works.view(id).state).toBe('done')
     expect(await reviews()).toBe(2)
     expect(await ends(app, id)).toEqual([
       { type: 'end_box', head: first, open: 1 },
@@ -238,4 +245,114 @@ test('넘긴 끝을 재는 동안 세션이 다시 움직이면 끝내지 않고
   } finally {
     vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '')
   }
+})
+
+test('넘긴 뒤 세션이 고쳐 push하고 PR을 열고 쉬어도 새 head로 정해 끝낸다: PR 확인과 [증거 다시 재기]는 넘긴 끝의 쉼을 지우지 않는다', async () => {
+  await kit.review(RAISED_FINDINGS)
+  await scenario([
+    SUBMIT,
+    FIX_COMMIT,
+    { do: 'stop' },
+    { do: 'waitInput' },
+    NOTE_COMMIT,
+    ...PUSH_AND_PR,
+    { do: 'stop' },
+    { do: 'waitInput' },
+  ])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app, true)
+  const first = works.view(id).head ?? ''
+  expect(await works.end(id, { head: first })).toMatchObject({ open: [RAISED] })
+  await kit.review(NOTE_FINDINGS)
+  await works.handEnd(id, { head: first, picks: [{ ids: ['R1'] }] })
+  // 세션의 Stop이 PR 확인보다 먼저 와도(실제 gh는 가짜보다 느리다) 몰아 두기 끝에 넘긴 끝을 정한다
+  await until(async () => (await ends(app, id)).some((e) => e.type === 'ended'), '고친 뒤 끝남')
+  expect(works.view(id).state).toBe('done')
+  const second = works.record(id).exports[0]?.exported_head ?? ''
+  expect(second).not.toBe(first)
+  expect((await ends(app, id)).at(-1)).toEqual({
+    type: 'ended',
+    how: 'handed',
+    head: second,
+    memos: 1,
+  })
+})
+
+/** 사람이 화면의 터미널에 친다: ipc terminalWrite와 같이 Works.typed를 지나 세션에 넣는다 */
+function human(app: TestApp, id: string, data: string): void {
+  app.works.typed(id, data)
+  app.sessions.write(id, data)
+}
+
+test('넘긴 뒤 사람이 터미널에 새 일을 치면 넘긴 끝을 푼다: 사람이 보지 못한 그 커밋으로 끝내지 않는다', async () => {
+  await kit.review(RAISED_FINDINGS)
+  await scenario([
+    SUBMIT,
+    FIX_COMMIT,
+    { do: 'stop' },
+    // 넘긴 것을 받고, 사람의 새 일을 받아 커밋하고 쉰다
+    { do: 'waitInput' },
+    { do: 'waitInput' },
+    NOTE_COMMIT,
+    { do: 'stop' },
+  ])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app, true)
+  const first = works.view(id).head ?? ''
+  await works.end(id, { head: first })
+  await kit.review(NOTE_FINDINGS)
+  await works.handEnd(id, { head: first, picks: [{ ids: ['R1'] }] })
+  await until(async () => (await inputs()).length === 1, '넘긴 것을 받음')
+  human(app, id, 'X 모듈도 정리해 주세요\r')
+  await until(() => works.view(id).endPending === null, '넘긴 끝이 풀림')
+  // 세션이 사람의 일을 커밋하고 쉬면 미리 리뷰(V23)만 돈다: Work는 끝나지 않는다
+  await until(() => {
+    const v = works.view(id)
+    return v.head !== first && v.evidence?.head === v.head && v.evidence.review?.status === 'done'
+  }, '새 head의 미리 리뷰')
+  await works.idle()
+  expect(works.view(id)).toMatchObject({ state: 'working', endPending: null })
+  expect((await workJson(app, id)).end_pending).toBeNull()
+  expect(await ends(app, id)).toEqual([
+    { type: 'end_box', head: first, open: 1 },
+    { type: 'end_handed', head: first, facts: 0, findings: 1 },
+    { type: 'end_cancelled', head: first, armed: false, handed: true, reason: 'human_input' },
+  ])
+})
+
+test('넘기는 사이 세션이 커밋해 보내지 못하면 넘긴 끝을 남기지 않는다', async () => {
+  await kit.review(RAISED_FINDINGS)
+  await scenario([SUBMIT, FIX_COMMIT, { do: 'stop' }, { do: 'waitInput' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app, true)
+  const first = works.view(id).head ?? ''
+  await works.end(id, { head: first })
+  // 보내기가 차례를 기다리는 사이 세션이 커밋하고, PostToolUse가 화면의 HEAD를 고친다
+  const desk = (
+    works as unknown as { feedback: { handOver: (...a: unknown[]) => Promise<unknown> } }
+  ).feedback
+  const handOver = desk.handOver.bind(desk)
+  const tree = works.record(id).worktree
+  desk.handOver = async (...a: unknown[]) => {
+    await writeFile(join(tree, 'NOTES.md'), '세션의 커밋\n')
+    await runGit(tree, ['add', '-A'])
+    await runGit(tree, ['commit', '-q', '-m', '사이 커밋'])
+    await works.seeHead(id, (await runGit(tree, ['rev-parse', 'HEAD'])).trim())
+    return handOver(...a)
+  }
+  await expect(works.handEnd(id, { head: first, picks: [{ ids: ['R1'] }] })).rejects.toThrow(
+    /증거가 없음/,
+  )
+  const second = works.view(id).head ?? ''
+  expect(second).not.toBe(first)
+  expect(works.view(id).endPending).toBeNull()
+  expect((await workJson(app, id)).end_pending).toBeNull()
+  expect(await inputs()).toEqual([])
+  expect(await ends(app, id)).toEqual([
+    { type: 'end_box', head: first, open: 1 },
+    { type: 'end_cancelled', head: second, armed: false, handed: true, reason: 'hand_failed' },
+  ])
 })

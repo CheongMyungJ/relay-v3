@@ -9,7 +9,8 @@
 // 보내지 않고, [취소]·[더 고치기] 뒤 다시 본다.
 // 상자의 [세션에 넘기기](V35)는 지적과 사실을 세션에 보내고 끝을 '고친 뒤 끝냄'(end_pending.handed)으로 다시 건다: head가
 // 바뀌어도 지우지 않고 새 head로 옮기며, 세션이 쉬면(Stop 뒤 몰아 두기 끝, rest) 그 head로 [끝내기]처럼 정한다. 열린 것이
-// 없으면 끝내고(ended.how handed), 있으면 상자를 다시 띄운다. 그 재기 중 세션이 다시 움직이면 다음 쉼을 기다린다. [취소]로 푼다.
+// 없으면 끝내고(ended.how handed), 있으면 상자를 다시 띄운다. 그 재기 중 세션이 다시 움직이면 다음 쉼을 기다린다. [취소]로,
+// 넘긴 뒤 사람이 터미널에 친 프롬프트(사람의 새 일)로, 보내지 못했는데 그사이 head가 바뀌었으면 푼다.
 // 끝낼 때 내보내기 증거의 리뷰 메모(V37: 관문 사실이 아니라 끝을 막지 않은 지적)는 WorkRecord.end_memos에 두고 ended에 수를
 // 남긴다: 끝난 Work의 [증거]가 접어 보인다.
 
@@ -135,17 +136,22 @@ export class EndDesk {
     if (rec.end_pending !== box) throw new Error('끝내기 상자가 바뀜: 다시 보세요')
     const handed: EndPending = { ...box, open: [], handed: true }
     rec.end_pending = handed
-    this.ctx.runtime(id).endMoved = null
+    const rt = this.ctx.runtime(id)
+    rt.endMoved = null
+    rt.handedAt = Date.parse(this.ctx.deps.now())
     this.evidence.cancelDebounce(id)
     await this.ctx.save(rec)
     try {
       const sent = await send()
       this.ctx.note(id, { type: 'end_handed', head, ...sent })
     } catch (e) {
-      if (rec.end_pending === handed) {
+      const now = rec.end_pending
+      if (now === handed) {
         rec.end_pending = box
         await this.ctx.save(rec)
       }
+      // 보내는 사이 세션이 커밋해 follow가 넘긴 끝을 새 head로 옮겼다: 넘긴 것이 없으니 푼다(상자는 앞 head의 것이다)
+      else if (now?.handed === true) await this.release(rec, now, 'hand_failed')
       throw e
     }
   }
@@ -167,11 +173,35 @@ export class EndDesk {
 
   /**
    * 세션이 다시 움직인다(UserPromptSubmit): 세션에 넘긴 끝(V35)이 걸려 재는 중이면 다음 쉼을 기다리게 되돌린다(일하는 세션의
-   * Work를 끝내지 않게). 도는 재기는 끝까지 돌고 settle은 걸린 끝이 아니라 그대로 둔다
+   * Work를 끝내지 않게). 도는 재기는 끝까지 돌고 settle은 걸린 끝이 아니라 그대로 둔다. 넘긴 뒤 사람이 터미널에 친
+   * 프롬프트(rt.lastHumanInputAt이 rt.handedAt 뒤)면 넘긴 끝을 푼다: 사람의 새 일은 넘긴 고침이 아니고, 사람이 보지 못한 그
+   * 커밋으로 끝내지 않는다(V25의 [끝내기]처럼)
    */
   async busy(id: string): Promise<void> {
     const rec = this.ctx.find(id)
-    if (rec && this.wait(rec)) await this.ctx.save(rec)
+    if (!rec) return
+    const rt = this.ctx.runtime(id)
+    const p = rec.end_pending
+    const human = rt.lastHumanInputAt !== null && rt.lastHumanInputAt > (rt.handedAt ?? -Infinity)
+    if (p?.handed === true && human) return this.release(rec, p, 'human_input')
+    if (this.wait(rec)) await this.ctx.save(rec)
+  }
+
+  /** 세션에 넘긴 끝(V35)을 푼다: 사람이 새 일을 쳤거나(human_input), 넘기지 못했다(hand_failed) */
+  private async release(
+    rec: WorkRecord,
+    p: EndPending,
+    reason: 'human_input' | 'hand_failed',
+  ): Promise<void> {
+    rec.end_pending = null
+    await this.ctx.save(rec)
+    this.ctx.note(rec.id, {
+      type: 'end_cancelled',
+      head: p.head,
+      armed: p.armed,
+      handed: true,
+      reason,
+    })
   }
 
   /** 세션에 넘긴 끝이 걸려 있으면 다음 쉼을 기다리게 되돌린다. 되돌렸으면 참: 부른 쪽이 저장한다 */

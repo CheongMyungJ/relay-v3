@@ -37,6 +37,7 @@ import { ProjectDesk } from './works-projects.ts'
 import { followReview } from './works-review.ts'
 import {
   delivered,
+  handedWaiting,
   isActive,
   measures,
   outsideBranches,
@@ -152,6 +153,7 @@ export class Works implements WorkCtx {
         autoMergeNote: null,
         endMoved: null,
         lastHumanInputAt: null,
+        handedAt: null,
         draft: false,
         feedbackHeld: null,
         feeding: Promise.resolve(),
@@ -350,7 +352,7 @@ export class Works implements WorkCtx {
         // 입력 칸의 글은 이 프롬프트로 함께 갔다(V24)
         rt.draft = false
         this.evidence.cancelDebounce(workId)
-        // 세션에 넘긴 끝(V35)을 재는 중이면 다음 쉼을 기다린다
+        // 세션에 넘긴 끝(V35)을 재는 중이면 다음 쉼을 기다린다. 사람이 친 프롬프트면 넘긴 끝을 푼다
         await this.ending.busy(workId)
         // 재개 프롬프트로 전한 사람의 답을 세션이 받았다
         if (rt.noticeSent) {
@@ -480,7 +482,8 @@ export class Works implements WorkCtx {
   runEvidence(id: string, o: { exportCandidate: boolean }): Promise<void> {
     const rec = this.record(id)
     if (!isActive(rec.state)) throw new Error('끝난 Work는 증거를 재지 않음')
-    this.evidence.cancelDebounce(id)
+    // 넘긴 끝(V35)이 쉼을 기다리면 몰아 두기(rest)는 그대로 둔다
+    if (!handedWaiting(rec)) this.evidence.cancelDebounce(id)
     if (!o.exportCandidate) return this.evidence.run(id, { prepare: true, again: true })
     const rt = this.runtime(id)
     const only = rec.exports

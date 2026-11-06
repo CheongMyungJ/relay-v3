@@ -146,6 +146,11 @@ export interface Runtime {
   /** 사람이 화면에서 터미널에 마지막으로 입력한 때(ms, ipc terminalWrite. 앱의 tell은 세지 않는다, V24) */
   lastHumanInputAt: number | null
   /**
+   * 상자의 [세션에 넘기기](V35)를 누른 때(ms). 그 뒤 사람이 터미널에 친 프롬프트는 넘긴 고침이 아니라 사람의 새 일이라 넘긴
+   * 끝을 푼다(EndDesk.busy). 앱을 다시 켜면 null(그 뒤의 입력은 모두 그 뒤다)
+   */
+  handedAt: number | null
+  /**
    * 사람이 화면에서 터미널에 마지막으로 친 글이 Enter(나 입력 칸을 비우는 Ctrl+C)로 끝나지 않았다: 입력 칸에 보내지 않은 글이
    * 있을 수 있다(V24). UserPromptSubmit, 질문 메뉴(AskUserQuestion)의 PostToolUse·PostToolUseFailure, 세션을 띄울 때 거짓
    */
@@ -329,5 +334,14 @@ export function tipOf(x: ExportRecord, head: string | null, tips: Tips): string 
 }
 
 export type { HookEvent }
+
+/**
+ * 세션에 넘긴 끝(V35)이 세션의 쉼을 기다린다. 그동안 Stop 뒤 몰아 두기의 타이머가 그 끝을 정하는(rest) 길이므로, 내보내기
+ * 재기가 미리 리뷰를 대신하는 계기(PR 확인, [증거 다시 재기])도 그 타이머를 지우지 않는다(rest는 도는 재기에 합친다)
+ */
+export function handedWaiting(rec: Pick<WorkRecord, 'end_pending'>): boolean {
+  const p = rec.end_pending
+  return p?.handed === true && !p.armed
+}
 
 export const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
