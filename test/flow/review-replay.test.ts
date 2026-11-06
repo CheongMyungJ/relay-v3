@@ -10,6 +10,7 @@ import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { git } from '../../src/adapters/exec.ts'
 import { contractHash } from '../../src/core/contract.ts'
+import { REVIEW_PROMPT_VERSION } from '../../src/core/review.ts'
 import type { Contract } from '../../src/core/types.ts'
 import { draftFor, draftText } from '../../src/engine/init.ts'
 import { calc, TESTS_BASE } from '../support/calc.ts'
@@ -255,7 +256,7 @@ describe('리뷰 재생', () => {
       expect(l).toMatchObject({
         status: 'done',
         dry: true,
-        prompt_version: 3,
+        prompt_version: REVIEW_PROMPT_VERSION,
         request: true,
         request_gap: true,
         raises: { 'structure/medium': 1 },

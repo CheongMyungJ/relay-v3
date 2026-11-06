@@ -183,6 +183,25 @@ describe('instructionsText', () => {
     expect(t).toContain('JSON has no NaN, Infinity or undefined: write such a value as a string')
   })
 
+  test('예시의 입력과 출력은 시험이 그대로 쓸 수 있는 JSON 값으로, 글로만 쓸 수 있는 것은 note에(V34)', () => {
+    for (const questionMode of ['confirm_each', 'draft_first'] as const) {
+      const t = instructionsText({ ...base, questionMode })
+      expect(t).toContain(
+        'Write `input` and `output` as JSON values that a test can use as they are',
+      )
+      expect(t).toContain(
+        'not as words that describe a value; what can only be said in words goes in `note`.',
+      )
+      // 예시 칸 설명 안에, JSON에 없는 값의 규칙 앞에 둔다
+      const at = t.indexOf('- `examples`: each')
+      const json = t.indexOf('Write `input` and `output` as JSON values')
+      expect(at).toBeGreaterThan(-1)
+      expect(json).toBeGreaterThan(at)
+      expect(json).toBeLessThan(t.indexOf('JSON has no NaN'))
+      expect(json).toBeLessThan(t.indexOf('- `non_goals`'))
+    }
+  })
+
   test('단위(V21, V22): 한 요청은 한 Work, 줄의 unit, 범위와 함께 정함, 전달 방식(한 브랜치, 단위마다 브랜치), 증거는 그 브랜치의 끝', () => {
     const t = instructionsText({ ...base, questionMode: 'confirm_each' })
     expect(t).toContain('`unit` (optional): the part of the request the line belongs to')

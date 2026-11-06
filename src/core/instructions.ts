@@ -102,7 +102,7 @@ The contract is JSON:
   - \`examples\`: example ids (\`C1.1\`, \`C1.2\`, …).
   - \`check\`: \`test\`, \`observe\` or \`human\`. A \`human\` line has \`check: "human"\`. A \`test\` line of kind change, new or keep needs at least one example. relay also runs the tests of change and keep lines on the base, so a keep test can use only what the base already has.
   - \`unit\` (optional): the part of the request the line belongs to; see Units below.
-- \`examples\`: each \`{id, input, output?, error?, note?}\`, id \`C1.1\` for the first example of line C1: a concrete input and the output or the error it gives. JSON has no NaN, Infinity or undefined: write such a value as a string and say in \`note\` how the test turns it back.
+- \`examples\`: each \`{id, input, output?, error?, note?}\`, id \`C1.1\` for the first example of line C1: a concrete input and the output or the error it gives. Write \`input\` and \`output\` as JSON values that a test can use as they are (\`[3, 1, 2]\`, \`{"name": "a", "count": 2}\`, \`0.5\`), not as words that describe a value; what can only be said in words goes in \`note\`. JSON has no NaN, Infinity or undefined: write such a value as a string and say in \`note\` how the test turns it back.
 - \`non_goals\`: what this Work does not do.
 - \`human_rules\`: rules only the human knows (business rules, time zones, compatibility promises, who uses the behavior).
 - \`hint\`: the human's suggestion about the kind of work, if the request has one.

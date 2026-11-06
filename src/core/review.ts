@@ -69,9 +69,10 @@ export const REVIEW_DIFF_MAX = 60_000
 
 /**
  * 리뷰 프롬프트·스키마의 판. 바꾸면 올린다. 리뷰는 (head, 계약 hash, 이 판)에 붙는다: 앞 판의 리뷰는 내보내기에 다시 쓰지
- * 않는다(V23). 1: V23의 첫 판. 2: 심각도 기준표(V26). 3: 요청 대조(V30)
+ * 않는다(V23). 1: V23의 첫 판. 2: 심각도 기준표(V26). 3: 요청 대조(V30). 4: 예시와 시험 불일치의 뜻(V34: 값을 박아 쓴
+ * 시험이라도 승인된 예시를 그대로 확인하면 불일치가 아니다)
  */
-export const REVIEW_PROMPT_VERSION = 3
+export const REVIEW_PROMPT_VERSION = 4
 
 /**
  * 리뷰 준비(V23): 이 head의 결정론 증거가 통과해 리뷰만 남았다. 계약이 있고, 묶음이 이 계약과 이 head로 만든 것이고(낡지
@@ -153,7 +154,7 @@ export function reviewPrompt(o: {
 
 The change was made for the human's request and under the approved contract below. relay has already run the repository's commands and judged the contract lines from acceptance tests tagged like \`${tag}\` (contract id and example id). Look for what those checks cannot see:
 
-1. \`example_test_mismatch\`: a tagged test does not check its approved example (other input, a weaker assertion, other output or error), or an example has no test that really checks it. relay writes the approved examples to the examples file (see "examples file" in the evidence summary) from the approved contract, and the tests are meant to read the examples from that file. A tagged test that hard-codes example values instead of reading them from the file is also a mismatch.
+1. \`example_test_mismatch\`: a tagged test checks another input, another output or error, or a weaker assertion than its approved example, or an approved example has no test that really checks it. The approved examples are in the contract below, and relay writes them to the examples file (see "examples file" in the evidence summary). A tagged test that checks exactly the approved input and output (or error) is not a mismatch, even if it writes these values in the test instead of reading them from the file.
 2. \`structure\`: structure and boundary values the tests do not cover (edge values, empty input, errors, cleanup), or a structural change that the contract does not call for.
 3. \`out_of_contract\`: behavior changed outside the contract's lines, or work listed in its non-goals.
 4. \`security\`: injection, path traversal, leaked secrets, unsafe shell or eval, weakened checks.
