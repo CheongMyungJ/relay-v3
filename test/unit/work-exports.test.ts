@@ -81,8 +81,12 @@ describe('upgradeWork', () => {
       session_started: true,
       end_pending: null,
       feedback: { rounds: 0, sent: [] },
-      probe: null,
     })
+  })
+
+  test('뺀 장치의 칸은 버린다: V28(제출 때 기준 확인, V32에서 뺌)의 probe', () => {
+    const old = { id: 'w', branch: 'b', probe: { ran: true, lines: [] } } as unknown as WorkRecord
+    expect('probe' in upgradeWork(old)).toBe(false)
   })
 
   test('더 옛 기록(칸이 없음)도 빈 내보내기 하나, 내보내기가 있는 기록은 그대로', () => {

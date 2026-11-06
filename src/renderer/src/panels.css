@@ -332,21 +332,6 @@
   color: var(--muted);
 }
 
-/* 제출 때 기준 확인(V28): 꼬리표와 지금 출력. 출력은 줄을 바꿔 패널 폭 안에 둔다 */
-.probe {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.probe-now {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 /* ── 증거 ─────────────────────────────────────────────────────────────────── */
 
 .verdict {

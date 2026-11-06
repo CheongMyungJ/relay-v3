@@ -109,8 +109,8 @@ export async function committedExamples(
   }
 }
 
-/** base에 얹을 head의 경로: 바뀐 시험 파일(옛 자리 포함)과 예시 자료 폴더(그 위에 정규 파일을 쓴다). probe.ts도 쓴다 */
-export function overlayPaths(diff: DiffFacts, q: QualityConfig): string[] {
+/** base에 얹을 head의 경로: 바뀐 시험 파일(옛 자리 포함)과 예시 자료 폴더(그 위에 정규 파일을 쓴다) */
+function overlayPaths(diff: DiffFacts, q: QualityConfig): string[] {
   const globs = q.test_globs.length > 0 ? q.test_globs : DEFAULT_TEST_GLOBS
   const paths = new Set<string>()
   for (const f of diff.files) {

@@ -19,7 +19,7 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'nod
 import { dirname, join } from 'node:path'
 import { readJson, relayHome } from '../adapters/store.ts'
 import { parseLedger, type LedgerEntry } from '../core/ledger.ts'
-import type { Contract, ContractProbe, GateResult, GroundingCheck } from '../core/types.ts'
+import type { Contract, GateResult, GroundingCheck } from '../core/types.ts'
 import type { WorkState } from '../core/work.ts'
 import type { EndPending, FeedbackRound, PrInfo, ProjectSettings } from '../shared/api.ts'
 
@@ -97,11 +97,6 @@ export interface WorkRecord {
    * 보낸 파일마다 한 줄(사람의 [세션에 넘기기]도). 옛 기록에는 없다(읽을 때 빈 것)
    */
   feedback: { rounds: number; sent: FeedbackRound[] }
-  /**
-   * 마지막 제출 때 기준 확인(V28, works-probe.ts): 받아들인 제출(submit_contract, request_contract_change)의 것. 돌려보낸 제출은
-   * events.jsonl에만 남는다. 옛 기록에는 없다(읽을 때 null)
-   */
-  probe: ContractProbe | null
 }
 
 export type WorkFile =
@@ -156,15 +151,18 @@ export function branchExport(branch: string): ExportRecord {
 /** 옛 기록(V22 앞)의 내보내기 칸 */
 type OldRecord = Partial<Pick<ExportRecord, 'pr' | 'evidence_path' | 'gate' | 'exported_head'>> & {
   prepared_reviews?: number
+  /** V28(제출 때 기준 확인)의 칸. V32에서 뺐다: 읽을 때 버린다 */
+  probe?: unknown
 }
 
 /**
  * 읽은 기록에 뒤에 더한 칸을 채운다: 옛 기록에는 없는 칸(세션이 떴던 것으로 보고 --resume, 빈 되먹임 등)과, V22 앞의 기록이
- * Work에 둔 PR·증거·관문·내보낸 head·미리 리뷰 수를 Work 브랜치의 내보내기 하나로 옮긴다
+ * Work에 둔 PR·증거·관문·내보낸 head·미리 리뷰 수를 Work 브랜치의 내보내기 하나로 옮긴다. 뺀 장치의 칸(V28 probe)은 버린다
  */
 export function upgradeWork(raw: WorkRecord): WorkRecord {
   const old = raw as WorkRecord & OldRecord
   const { pr, evidence_path, gate, exported_head, prepared_reviews, ...rec } = old
+  delete rec.probe
   const exports = rec.exports ?? [
     {
       ...branchExport(rec.branch),
@@ -181,7 +179,6 @@ export function upgradeWork(raw: WorkRecord): WorkRecord {
     session_started: rec.session_started ?? true,
     end_pending: rec.end_pending ?? null,
     feedback: rec.feedback ?? { rounds: 0, sent: [] },
-    probe: rec.probe ?? null,
     exports,
     integration_path: rec.integration_path ?? null,
   }

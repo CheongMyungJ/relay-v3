@@ -204,7 +204,6 @@ export async function newWork(
     notice: null,
     end_pending: null,
     feedback: { rounds: 0, sent: [] },
-    probe: null,
   }
   const text = hint ? `${request}\n\n## 일의 성격 제안\n\n${hint}\n` : `${request}\n`
   await store.writeText(id, 'request.md', text)

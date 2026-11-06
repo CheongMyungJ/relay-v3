@@ -57,7 +57,6 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
   - 태그를 단 testcase가 없으면 missing_evidence.
 - `allLinesTestedAndMet(verdicts: LineVerdict[]): boolean` — observe·human 줄이 없고 모두 met.
 - `confirmFailures(first: TestCase[], second: TestCase[]): TestCase[]` — 바뀜 줄의 base 실행을 두 번 돌렸을 때 합친다. failed는 두 번 모두 failed여야 남고, 한 번이라도 passed면 passed(V7을 base 실패에도).
-- `probeVerdicts(contract: Contract, base: TestCase[], tagged: TestCase[]): LineVerdict[]` — 제출 때 기준 확인(V28). 시험으로 확인하는 바뀜·지킴 줄만 돌려준다. head는 돌리지 않는다: tagged는 head의 시험 파일에서 찾은 태그(TestCase 하나에 태그 하나, file만 본다)이고, 예시의 head는 태그가 있으면 passed, 없으면 missing이다. 태그가 없는 예시는 base not_run으로 두고 judgeChange·judgeKeep(증거의 기준 쪽)을 그대로 부른다. 줄에 태그 시험이 하나도 없으면 missing_evidence('태그를 단 시험이 없어 확인 안 함'). 지킴 줄은 태그 시험이 있는 예시가 기준 결과에 없고 같은 파일의 파일 단위 실패가 있으면 not_met('기준에서 시험 파일을 불러오지 못함 (C2.1)'). 예시의 `message`는 기준의 JUnit 메시지(failed·error의 것, 불러오지 못했으면 `<파일>: <메시지>`). not_met 줄이 있으면 제출을 돌려보낸다.
 
 ### `src/core/flaky.ts`
 - `classify(head: CommandRun[], base: CommandRun | undefined): CommandOutcome` — V7. head가 비면 not_run. head[0] 통과(exit 0, 시간 초과 아님) → pass. head[0] 실패이고 head[1] 통과 → unstable. head 두 번 실패: base 없음 → fail, base 실패 → pre_existing, base 통과 → fail. head 하나뿐이고 실패 → base로 같은 규칙.
@@ -144,15 +143,6 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
   6. 래칫: file_lines(바뀐 파일의 base·head 줄 수. 남은 파일의 줄 수를 못 읽으면 NaN), test_count(acceptance JUnit base·head. base는 얹지 않은 base에서 돌린 것), command(base·head).
   7. 잠금을 풀고 묶음을 만들어 `evidencePath`에 쓴다. `contract`는 `{ id, hash: contractHash }`(계약이 없으면 null), `diff.binary`는 바이너리 파일 경로, `examples_file`은 5의 견줌(견주지 않았으면 null). review는 null(M2), claims null.
 - 어떤 단계든 실패하면 묶음에 `missing`으로 적고 다음으로 간다(명령·래칫·줄 판정이 던져도). 묶음은 늘 나온다.
-
-- check.ts는 `resolveRefs({ repo, base?, head? })`, `loadQuality(root, base, head, missing)`, `readDiff(root, base, head, missing)`를, judge.ts는 `overlayPaths(diff, q)`(바뀐 시험 파일과 옛 자리, 예시 자료 폴더)를 내놓는다. probe.ts가 같은 길을 쓴다.
-
-### `src/engine/probe.ts` — 제출 때 기준 확인 (V28)
-- `probeContract(o: { repo: string; head: string; base: string; contract: Contract; home: string; lockWaitMs?: number }): Promise<ContractProbe>` — `ContractProbe { head; base; contract: contractHash(o.contract); ran: boolean; note: string | null; lines: LineVerdict[]; ms: number }`(core/types.ts).
-  1. `resolveRefs`(레포나 ref를 찾지 못하면 CheckInputError를 던진다), `loadQuality`(V9). 수용 명령이 없으면 ran false('품질 기준에 수용 시험 명령이 없음').
-  2. `overlayPaths(readDiff(..), q)` 가운데 head에서 읽히고 계약 id가 든 파일에서 `:C<n>.<m>]`로 끝나는 태그를 찾는다(`fileTags(text, path, contractId): TestCase[]`, 순수: `[<id>:C1.1]`과 id를 상수로 쓴 `[${T}:C1.1]`. 다른 계약 id를 글자 그대로 쓴 태그는 같은 파일에 남은 앞 Work의 시험이라 세지 않는다). 시험으로 확인하는 바뀜·지킴 줄의 예시 태그가 없으면 ran false('바뀜·지킴 줄의 예시 태그를 단 시험 파일이 head에 없음').
-  3. worktree 잠금(check와 같다, 못 잡으면 ran false), `workspace(..).overlaidBaseRun(acceptance, overlayPaths, [canonicalExamples(q, contract)])`를 한 번. 돌리지 못함, 시간 초과('시간 제한 N초를 넘음'), JUnit 없음은 ran false와 note.
-  4. `probeVerdicts(contract, run.tests, tagged)`. ms는 부른 때부터.
 
 ### `src/engine/init.ts` — 품질 기준 초안 (V19, V20)
 - `draftFor(root): Promise<QualityConfig>` — `git ls-files -z --cached --others --exclude-standard`의 파일 목록과 작업 트리의 `package.json`으로 `draftQuality`.

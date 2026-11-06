@@ -538,7 +538,7 @@ export class Works implements WorkCtx {
 
   view(id: string): WorkView {
     const rec = this.record(id)
-    return workView(this, rec, this.feedback, this.desk.shownProbe(rec))
+    return workView(this, rec, this.feedback)
   }
 
   list(): WorkList {

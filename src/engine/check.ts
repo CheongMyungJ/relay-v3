@@ -213,8 +213,8 @@ async function guarded(
 
 // ── 1. 레포와 ref ───────────────────────────────────────────────────────────
 
-/** 레포 루트, head SHA, base(기준 ref와 head의 공통 조상). 찾지 못하면 CheckInputError. 제출 때 기준 확인(probe.ts)도 쓴다 */
-export async function resolveRefs(
+/** 레포 루트, head SHA, base(기준 ref와 head의 공통 조상). 찾지 못하면 CheckInputError */
+async function resolveRefs(
   opts: Pick<CheckOptions, 'repo' | 'base' | 'head'>,
 ): Promise<{ root: string; base: string; head: string }> {
   let root: string
@@ -256,7 +256,7 @@ interface LoadedQuality {
   from: 'base' | 'head' | 'none'
 }
 
-export async function loadQuality(
+async function loadQuality(
   root: string,
   base: string,
   head: string,
@@ -299,7 +299,7 @@ function fullMissing(q: QualityConfig): string[] {
 
 // ── 3. diff와 신호 ──────────────────────────────────────────────────────────
 
-export async function readDiff(
+async function readDiff(
   root: string,
   base: string,
   head: string,

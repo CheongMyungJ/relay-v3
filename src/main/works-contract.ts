@@ -7,19 +7,16 @@
 // 커밋은 세션이 한다: 앱은 사용자 레포에 커밋하지 않는다(V20).
 // 단위(V21): 한 요청은 한 Work와 한 계약이다. 승인된 계약의 전달 방식이 내보내기를 정한다(V22: one_branch는 Work 브랜치
 // 하나, branch_per_unit은 단위 브랜치마다. works-types.ts planExports).
-// 제출 때 기준 확인(V28, works-probe.ts): 형식과 근거 검사를 지난 계약은 태그 시험이 커밋돼 있으면 기준에서 예시를 확인하고,
-// 어긋난 줄이 있으면 invalid로 돌려보낸다. 받아들인 제출의 확인은 WorkRecord.probe에 두어 계약 판이 예시마다 보인다.
-// 확인을 기다리는 사이 그 호출이 끊겼거나 뒤 계약 호출이 왔으면, 늦게 끝난 앞 호출은 상태를 바꾸지 않는다.
+// 근거 확인을 기다리는 사이 그 호출이 끊겼거나 뒤 계약 호출이 왔으면, 늦게 끝난 앞 호출은 상태를 바꾸지 않는다.
 
 import { contractHash, examplesFile, examplesFileText, parseContract } from '../core/contract.ts'
 import { TOOL_CHANGE, TOOL_SUBMIT } from '../core/instructions.ts'
-import type { Contract, ContractProbe } from '../core/types.ts'
+import type { Contract } from '../core/types.ts'
 import { nextState } from '../core/work.ts'
 import { writeInside } from '../adapters/worktrees.ts'
 import { checkGroundings } from '../engine/judge.ts'
 import type { WorkRecord } from './store.ts'
 import { dropEnd } from './works-end.ts'
-import { probeErrors, probeProblems, runProbe } from './works-probe.ts'
 import { followReview } from './works-review.ts'
 import { examplesDir } from './works-worktree.ts'
 import { message, planExports, type WorkCtx, workHead } from './works-types.ts'
@@ -58,20 +55,13 @@ export class ContractDesk {
   private readonly ctx: WorkCtx
   private readonly waiters = new Map<string, Waiter>()
   /**
-   * Work마다 마지막 계약 호출(submit, change)의 번호. 근거·기준 확인을 기다리는 사이(잠금, 수용 명령) 호출이 끊겼거나 뒤
-   * 호출이 왔으면, 늦게 끝난 앞 호출은 상태를 바꾸지 않는다(뒤 계약을 덮거나 그 기다림을 끝내지 않게)
+   * Work마다 마지막 계약 호출(submit, change)의 번호. 근거 확인과 예시 자료 쓰기를 기다리는 사이 호출이 끊겼거나 뒤 호출이
+   * 왔으면, 늦게 끝난 앞 호출은 상태를 바꾸지 않는다(뒤 계약을 덮거나 그 기다림을 끝내지 않게)
    */
   private readonly turns = new Map<string, number>()
 
   constructor(ctx: WorkCtx) {
     this.ctx = ctx
-  }
-
-  /** 보이는 계약(승인을 기다리는 것, 없으면 승인된 것)의 기준 확인(V28). 다른 계약의 것이면 null */
-  shownProbe(rec: WorkRecord): ContractProbe | null {
-    const shown = rec.pending_contract ?? this.ctx.runtime(rec.id).contract
-    const p = rec.probe
-    return p && shown && p.contract === contractHash(bare(shown)) ? p : null
   }
 
   /** 사람의 답을 기다리는 도구 호출이 있나 */
@@ -106,20 +96,16 @@ export class ContractDesk {
     const groundings = await this.groundings(rec, contract)
     const gone = this.late(rec.id, turn, signal)
     if (gone) return gone
-    // 초안: 세션이 승인 전에 그 파일을 읽는 시험을 쓸 수 있게(기준 확인이 돌려보내도 쓴다: 그 파일로 시험을 고친다)
+    // 초안: 세션이 승인 전에 그 파일을 읽는 시험을 쓸 수 있게
     await this.writeExamples(rec, contract, 'draft')
-    const probe = await runProbe(this.ctx, rec, contract, TOOL_SUBMIT)
     const late = this.late(rec.id, turn, signal)
     if (late) return late
-    if (probe !== null && probeProblems(probe).length > 0)
-      return this.invalid(rec, probeErrors(probe))
-    // 상태는 확인 뒤에 본다: 확인하는 사이 사람이 앞 계약에 답했을 수 있다
+    // 상태는 기다린 뒤에 본다: 그사이 사람이 앞 계약에 답했을 수 있다
     const next = nextState(rec.state, { type: 'contract_submitted', contract })
     if (!next.ok) return { status: 'error', error: next.errors.join('; ') }
     rec.state = next.value
     rec.pending_contract = contract
     rec.groundings = groundings
-    rec.probe = probe
     // 화면이 승인을 보이기 전에 기다림을 건다: 저장하는 사이에 온 사람의 답도 이 호출이 받는다
     const answer = this.wait(rec.id, 'submit', signal)
     await this.ctx.save(rec)
@@ -153,11 +139,8 @@ export class ContractDesk {
     if (contractHash(bare(rt.contract)) === contractHash(proposed))
       return this.invalid(rec, ['contract: 승인된 계약과 같음(바꿀 곳을 고친 계약 전체를 낸다)'])
     const groundings = await this.groundings(rec, proposed)
-    const probe = await runProbe(this.ctx, rec, proposed, TOOL_CHANGE)
     const late = this.late(rec.id, turn, signal)
     if (late) return late
-    if (probe !== null && probeProblems(probe).length > 0)
-      return this.invalid(rec, probeErrors(probe))
     const next = nextState(rec.state, { type: 'change_requested', reason })
     if (!next.ok || !rt.contract)
       return { status: 'error', error: next.ok ? '' : next.errors.join('; ') }
@@ -167,7 +150,6 @@ export class ContractDesk {
     rec.pending_change = reason
     rec.pending_contract = proposed
     rec.groundings = groundings
-    rec.probe = probe
     // [끝내기]의 걸린 끝과 상자는 앞 계약의 증거로 정한 것이다(V25). 도는 리뷰도 앞 계약의 것이라 멈춘다(V23)
     dropEnd(this.ctx, rec)
     followReview(rt)

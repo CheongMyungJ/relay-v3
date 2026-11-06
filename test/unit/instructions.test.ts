@@ -228,24 +228,21 @@ describe('instructionsText', () => {
     )
   })
 
-  test('제출 때 기준 확인(V28): 바뀜·지킴 시험은 기준에서도 돌고, 커밋된 태그 시험이 있으면 제출 때 기준에서 확인한다', () => {
+  test('제출 때 기준 확인을 뺐다(V32): 바뀜·지킴 시험이 기준에서도 돈다는 사실은 남고, 제출이 기준에서 돈다는 말은 없다', () => {
     const t = instructionsText({ ...base, questionMode: 'confirm_each' })
     const contract = t.slice(t.indexOf('## 1.'), t.indexOf('## 2.'))
     expect(contract).toContain(
       'relay also runs the tests of change and keep lines on the base, so a keep test can use only what the base already has.',
     )
+    expect(contract).toContain(
+      'The evidence runs its tagged tests on the base too; an example that fails there shows that the behavior is part of what the request reports.',
+    )
     const submit = t.slice(t.indexOf('## 3. Submit'), t.indexOf('## 4.'))
     expect(submit).toContain(
-      "If tests tagged with this contract's examples are committed on `relay/median-a1b2`, it also runs the acceptance command once on the base",
+      `\`${TOOL_SUBMIT}\` checks the contract. If it returns errors, fix the contract and call it again.`,
     )
-    expect(submit).toContain(
-      'no example of a change line fails on the base, an example of a keep line fails on the base, or a keep test does not load on the base',
-    )
-    expect(submit).toContain(
-      'Lines without tagged tests are not checked, and the check does not make a line met.',
-    )
-    // 시험을 먼저 쓰라고 하지 않는다(시험은 필수 산출물이 아니다)
-    expect(submit).not.toMatch(/\b(commit|write) (the |your )?tests (first|before)/i)
+    expect(t).not.toMatch(/when you submit|committed on `relay\/median-a1b2`|the check in §3/)
+    expect(submit).not.toContain('on the base')
   })
 
   test('계약이 요청을 설명한다(V29): 계약 전 조사와 시험, 증상마다 원인, 대상마다 줄, 증상 곁의 지킴 줄, 비목표 전에 묻기, 승인 뒤에도 찾기', () => {

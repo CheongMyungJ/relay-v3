@@ -4,7 +4,6 @@
 import type { SessionState, WorkState } from '../core/work.ts'
 import type {
   Contract,
-  ContractProbe,
   DebtItem,
   EvidenceBundle,
   GateResult,
@@ -134,8 +133,6 @@ export interface WorkView {
   endMoved: string | null
   /** 쉬는 세션에 준 되먹임(V24) */
   feedback: FeedbackView
-  /** 보이는 계약(pendingContract, 없으면 contract)의 제출 때 기준 확인(V28). 다른 계약의 것이거나 없으면 null */
-  probe: ContractProbe | null
   /** 단위 브랜치의 내보내기(V22, branch_per_unit). one_branch는 빈 목록이다(위 칸들이 Work 브랜치의 내보내기다) */
   exports: ExportView[]
   /**

@@ -4,7 +4,7 @@
 // 둘째 프로젝트는 품질 기준이 없는 레포다: 알림과 [초안 만들기](V20), PR 없이 [끝내기] → 걸린 끝 → 열린 것의 상자(다른
 // Work로 갔다 와도 남음) → [그래도 끝내기](V25).
 // 첫 계약에는 승인 상자의 글 칸에 바로 써서 [보내기]로 고쳐 달라고 하고(M2.1 13절), [변경]은 작은 diff라 펼친 채로 열린다.
-// 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내므로 계약 판이 예시마다 기준 결과를 보인다(V28). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
+// 계약의 비목표는 목표 바로 밑에(V29), 줄은 단위마다 묶여 보인다(V21). 세션이 시험을 먼저 커밋하고 내도 제출 때 기준에서 돌리지 않는다(V32: V28을 뺌). 리뷰의 구조/low 지적은 메모라 그림자와 [끝내기]를 막지 않는다(V26).
 // 메모는 쉬는 세션에 저절로 가지 않고, 사람이 [세션에 넘기기]로 보낸다(V24). 상자에도 올림을 넘기는 단추가 있고, 사람 몫의
 // 올림(계약 밖 변경)이 남아 있으면 세션 몫(구조/중간)도 저절로 가지 않고 넘길 수 있다.
 // 끝으로 첫 프로젝트에 단위 브랜치로 내보내는 Work(V22): 통합 증거 칸과 내보내기마다 칸, 없는 단위 브랜치는 상자의 열린 것.
@@ -84,7 +84,7 @@ test('위로 넘는 값은 hi로 [{contractId}:C1.1]', () => {
 const SCENARIO = {
   start: [
     { do: 'print', text: '요청과 코드를 읽었습니다. 계약을 냅니다.' },
-    // 시험을 먼저 커밋하면 제출 때 기준에서 예시를 확인한다(V28). 예시 자료는 아직 없다: 확인이 제출된 계약의 자료를 얹는다
+    // 시험을 먼저 커밋해도 된다(지침 §1). 제출 때 기준에서 돌리지 않는다(V32)
     { do: 'commit', message: '시험 먼저', files: { 'test/calc.test.js': TESTS_FIXED } },
     { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
     // 첫 프로젝트는 고쳐 달라고 하므로(답 changes) 다시 낸다. 둘째 프로젝트는 승인했으므로 같은 계약의 승인을 돌려받는다
@@ -299,12 +299,9 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(groups.first().getByRole('heading')).toHaveText('단위 clamp · 줄 1개')
   await expect(groups.nth(1).getByRole('heading')).toHaveText('모든 단위에 걸친 줄 · 줄 1개')
   await expect(panel.getByTestId('delivery')).toContainText('한 브랜치: 모든 단위를 relay/')
-  // 제출 때 기준 확인(V28): 바뀜 예시는 기준에서 실패(버그의 재현과 지금 출력), 지킴 예시는 기준에서 통과
-  await expect(panel.getByTestId('probe-summary')).toContainText('제출 때 기준에서 확인함: head ')
-  const badges = panel.getByTestId('probe-badge')
-  await expect(badges).toHaveCount(2)
-  await expect(badges.first()).toContainText('기준에서 실패지금: Expected values')
-  await expect(badges.nth(1)).toHaveText('기준에서 통과')
+  // 제출 때 기준 확인은 뺐다(V32): 계약 판에 기준 결과의 한 줄과 꼬리표가 없다
+  await expect(panel).not.toContainText('제출 때 기준')
+  await expect(panel).not.toContainText('기준에서 실패')
   await groups.nth(1).scrollIntoViewIfNeeded()
   await shot('contract-units')
   await panel.evaluate((el) => el.scrollTo(0, 0))

@@ -3,18 +3,12 @@
 // 브랜치의 통합 증거(관문·PR 없음)이고, 단위 브랜치의 내보내기는 exports에 하나씩, 통합 증거의 열린 것은 integration에 둔다.
 
 import { openItems } from '../core/gate.ts'
-import type { ContractProbe } from '../core/types.ts'
 import type { ExportView, WorkView } from '../shared/api.ts'
 import type { ExportRecord, WorkRecord } from './store.ts'
 import type { FeedbackDesk } from './works-feedback.ts'
 import { isActive, perUnit, type WorkCtx } from './works-types.ts'
 
-export function workView(
-  ctx: WorkCtx,
-  rec: WorkRecord,
-  feedback: FeedbackDesk,
-  probe: ContractProbe | null,
-): WorkView {
+export function workView(ctx: WorkCtx, rec: WorkRecord, feedback: FeedbackDesk): WorkView {
   const rt = ctx.runtime(rec.id)
   const units = perUnit(rec)
   const main = units ? null : (rec.exports[0] ?? null)
@@ -44,7 +38,6 @@ export function workView(
     error: rec.error,
     ...endView(ctx, rec),
     feedback: feedback.view(rec),
-    probe,
     exports: units ? rec.exports.flatMap((x) => exportView(ctx, rec, x, feedback)) : [],
     // 통합 칸의 열린 것: 마지막 재기의 커밋이 Work 브랜치에 다 있지 않은 단위 브랜치와 묶음의 열린 것(리뷰 빼고)
     integration:
