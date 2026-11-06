@@ -19,7 +19,7 @@ import { raises } from '../core/review.ts'
 import { nextState } from '../core/work.ts'
 import type { EndInput, EndMemo, EndPending, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
-import { debtable, recordDebt } from './works-debt.ts'
+import { debtable, pushRecorded, recordDebt } from './works-debt.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import {
   delivered,
@@ -385,6 +385,8 @@ export class EndDesk {
       rec.end_pending = null
       at = (await recordDebt(this.ctx, rec, x)) ?? head
     }
+    // 앞 [빚으로 남기고 끝내기]가 push하지 못했으면 지금 push한다(실패하면 끝내지 않는다)
+    if (x && at === head) await pushRecorded(rec, x, this.ctx.runtime(id).bundles.get(x.branch), at)
     await this.evidence.exports.ledgerAccepted(rec)
     await this.finish(rec, at, tips, { how: 'box', head: at, open: open.length })
     return { head: at, ended: true, armed: false, open }

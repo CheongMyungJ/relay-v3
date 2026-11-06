@@ -226,6 +226,11 @@ export async function newWork(
       base: ref,
       ledger: await store.readLedger(),
       project: project.id,
+      // 기준을 모르는 줄(work.json이 없음)은 앞 기록이 될 수 있다
+      sameBase: async (work) => {
+        const w = await store.readWork(work).catch(() => null)
+        return w === null || w.base === base
+      },
     }).catch((e: unknown) => {
       deps.log?.('기록 안 된 나빠짐을 찾지 못함', e)
       return []

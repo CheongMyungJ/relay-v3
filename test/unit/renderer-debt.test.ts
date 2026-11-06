@@ -39,6 +39,13 @@ describe('debtAsk', () => {
     expect(debtAsk({ ...view([WORSE]), exports: units })).toBeNull()
     expect(debtAsk({ ...view([WORSE]), evidence: null })).toBeNull()
   })
+
+  test('빚을 기록한 뒤 다시 잰 증거: 이 diff의 빚이 모두 덮은 래칫은 묻지 않고, 덮지 않은 래칫만 묻는다', () => {
+    const tests: RatchetResult = { id: 'tests', status: 'worse', detail: '시험 수 3 → 2' }
+    const covered = { debt_covered: { ratchets: ['file-size'], items: ['r-file-size-src-big-js'] } }
+    expect(debtAsk(view([WORSE], covered))).toBeNull()
+    expect(debtAsk(view([WORSE, tests], covered))).toEqual(['tests (시험 수 3 → 2)'])
+  })
 })
 
 describe('debtTexts', () => {

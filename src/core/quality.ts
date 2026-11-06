@@ -3,6 +3,9 @@ import { globProblem } from './glob.ts'
 import { err, ok, type Result } from './result.ts'
 import type { AutoCondition, CommandSpec, QualityConfig, RatchetSpec, SetupSpec } from './types.ts'
 
+/** 품질 기준 파일의 자리(레포 루트 기준) */
+export const QUALITY_PATH = '.relay/quality.json'
+
 export const DEFAULT_GUARD_PATHS: string[] = [
   '.relay/quality.json',
   '.github/workflows/**',

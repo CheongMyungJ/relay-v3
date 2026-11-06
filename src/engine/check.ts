@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { contractHash, parseContract } from '../core/contract.ts'
 import { buildDiffFacts } from '../core/diff.ts'
 import { judgeLines } from '../core/lines.ts'
-import { parseQuality, qualityHash } from '../core/quality.ts'
+import { parseQuality, QUALITY_PATH, qualityHash } from '../core/quality.ts'
 import {
   commandRatchet,
   fileLinesRatchet,
@@ -23,6 +23,7 @@ import type {
   ExamplesFileCheck,
   GroundingCheck,
   LineVerdict,
+  M3Switches,
   QualityConfig,
   RatchetResult,
 } from '../core/types.ts'
@@ -46,13 +47,14 @@ import {
   judgeContract,
   testsOf,
 } from './judge.ts'
+import { coveredDebt } from './debt-record.ts'
 import { checkKnowledge } from './knowledge.ts'
 import { message, workspace, type Workspace } from './workspace.ts'
 
-/** 품질 기준 파일의 자리(레포 루트 기준) */
-export const QUALITY_PATH = '.relay/quality.json'
+export { QUALITY_PATH }
 
-export interface CheckOptions {
+/** M3 장치(V39)는 장치 이름 그대로 받는다(앱은 WorkRecord.m3를 펼쳐 준다) */
+export interface CheckOptions extends Partial<M3Switches> {
   /** 레포 안의 아무 폴더 */
   repo: string
   /** 기준 ref. 기본은 기본 브랜치. head와의 공통 조상을 기준으로 쓴다 */
@@ -76,6 +78,8 @@ export interface CheckOptions {
   lockWaitMs?: number
   /** 지식 잇기(M3a, V38): 지식 확인(묶음의 knowledge)과 근거 knowledge 확인. 기본 꺼짐(knowledge null) */
   knowledge?: boolean
+  /** 빚 기록(M3b, V40): 이 diff가 이미 둔 빚이 나빠진 래칫을 덮나(묶음의 debt_covered). 기본 꺼짐(null) */
+  debt?: boolean
 }
 
 /** worktree 잠금을 기다리는 기본 시간 */
@@ -178,6 +182,14 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
           return null
         })
       : null
+  const paths = diff.files.map((f) => f.path)
+  const debt =
+    opts.debt === true
+      ? await coveredDebt(root, head, paths, ratchets).catch((e) => {
+          missing.push(`빚 확인: ${message(e)}`)
+          return null
+        })
+      : null
 
   const bundle: EvidenceBundle = {
     version: 1,
@@ -192,6 +204,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
     examples_file: examplesFile,
     groundings,
     knowledge,
+    debt_covered: debt,
     ratchets,
     signals: report.signals,
     diff: diffSummary(diff, report),

@@ -2,10 +2,11 @@
 // 트레일러, request.md의 기록 안 된 나빠짐 절
 import { describe, expect, test } from 'vitest'
 import { parseDebt } from '../../src/core/debt.ts'
-import type { RatchetResult } from '../../src/core/types.ts'
+import type { DebtItem, RatchetResult } from '../../src/core/types.ts'
 import {
   debtFiles,
   debtMessage,
+  uncoveredWorse,
   UNRECORDED_TITLE,
   unrecordedSection,
   worseOf,
@@ -73,4 +74,45 @@ test('worseOf와 unrecordedSection', () => {
   const text = unrecordedSection(['file-size: src/a.js 500 → 640 (앱 밖에서 머지됨)'])
   expect(text.startsWith(`\n${UNRECORDED_TITLE}\n\n`)).toBe(true)
   expect(text.endsWith('\n- file-size: src/a.js 500 → 640 (앱 밖에서 머지됨)\n')).toBe(true)
+})
+
+describe('uncoveredWorse', () => {
+  const item = (
+    id: string,
+    path: string,
+    metric: string,
+    kind: DebtItem['kind'] = 'accepted_regression',
+  ): DebtItem => ({
+    id,
+    anchor: { path, metric },
+    kind,
+    source: 'w1',
+    reason: '나빠진 채 머지됨',
+    created: '2026-11-06',
+  })
+  const TWO: RatchetResult = {
+    ...SIZE,
+    offenders: [
+      { path: 'src/a.js', base: 500, head: 640 },
+      { path: 'src/b.js', head: 700 },
+    ],
+  }
+
+  test('같은 경로·래칫의 accepted_regression이 덮은 offender는 빼고, 모두 덮인 래칫은 뺀다', () => {
+    const a = item('r-file-size-src-a-js', 'src/a.js', 'file-size')
+    expect(uncoveredWorse([TWO, TESTS], [a])).toEqual([
+      { ...TWO, offenders: [{ path: 'src/b.js', head: 700 }] },
+      TESTS,
+    ])
+    const b = item('r-file-size-src-b-js', 'src/b.js', 'file-size')
+    const t = item('r-tests', '.relay/quality.json', 'tests')
+    expect(uncoveredWorse([TWO, TESTS], [a, b, t])).toEqual([])
+  })
+
+  test('다른 래칫, 다른 종류, 나빠지지 않은 래칫', () => {
+    const other = item('x', 'src/a.js', 'dup')
+    const tidy = item('y', 'src/a.js', 'file-size', 'tidy')
+    expect(uncoveredWorse([SIZE], [other, tidy])).toEqual([SIZE])
+    expect(uncoveredWorse([{ ...SIZE, status: 'same' }], [])).toEqual([])
+  })
 })

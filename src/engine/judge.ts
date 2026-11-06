@@ -25,7 +25,9 @@ import type {
   TestCase,
 } from '../core/types.ts'
 import { showFile } from '../adapters/git.ts'
+import { UNRECORDED_TITLE } from './debt-record.ts'
 import { checkKnowledgeGround } from './knowledge.ts'
+import { LIST_HEADING } from './knowledge-format.ts'
 import { message, type OverlayFile, type Workspace } from './workspace.ts'
 
 /** JUnit을 읽은 실행들의 testcase를 모은다. 하나도 없으면 null */
@@ -121,7 +123,19 @@ function overlayPaths(diff: DiffFacts, q: QualityConfig): string[] {
   return [...paths]
 }
 
-/** 계약 줄의 근거 확인. knowledge가 참이면(지식 잇기, V38) 근거 knowledge의 항목이 head에 있는지 본다 */
+/** relay가 request.md 끝에 붙이는 절(M3: 관련 지식, 기록 안 된 나빠짐)의 제목 */
+const RELAY_SECTIONS = [LIST_HEADING, UNRECORDED_TITLE]
+
+/** 요청 글에서 사람이 쓴 것: relay가 붙인 첫 절 앞까지. 근거 request의 인용은 이것으로 확인한다 */
+export function humanRequest(text: string): string {
+  const at = RELAY_SECTIONS.map((h) => text.indexOf(`\n${h}\n`)).filter((i) => i >= 0)
+  return at.length === 0 ? text : text.slice(0, Math.min(...at) + 1)
+}
+
+/**
+ * 계약 줄의 근거 확인. knowledge가 참이면(지식 잇기, V38) 근거 knowledge의 항목이 head에 있는지 본다. 근거 request는 사람이 쓴
+ * 요청(humanRequest)에서 찾는다: relay가 고른 지식 목록이나 알림을 인용하면 사람이 말한 것이 아니다
+ */
 export async function checkGroundings(
   root: string,
   head: string,
@@ -138,13 +152,14 @@ export async function checkGroundings(
     }
     return p
   }
+  const asked = request === null ? null : humanRequest(request)
   const out: GroundingCheck[] = []
   for (const line of contract.lines) {
     for (const ground of line.grounds) {
       out.push({
         line: line.id,
         ground,
-        ...(await checkGround(ground, fileAt, request, knowledge)),
+        ...(await checkGround(ground, fileAt, asked, knowledge)),
       })
     }
   }

@@ -230,7 +230,8 @@ export class ExportDesk {
 
   /**
    * [빚으로 남기고 머지](M3b): 구현 중이고, 지금 계약의 묶음이 기록할 빚을 지녔고, 열린 PR이 Work의 기준으로 가며 묶음의
-   * head를 가리킬 때만 빚을 커밋하고 push한다(아니면 그대로 두고 머지가 까닭을 말한다). push 뒤 PR이 새 head를 가리킬 때까지
+   * head를 가리키고, CI가 실패하지 않았고 GitHub가 머지할 수 없다고 하지 않을 때만 빚을 커밋하고 push한다(아니면 그대로 두고
+   * 머지가 까닭을 말한다). push 뒤 PR이 새 head를 가리킬 때까지
    * 잠깐 다시 읽는다(GitHub가 늦게 갱신한다)
    */
   private async recordFirst(rec: WorkRecord, x: ExportRecord): Promise<void> {
@@ -240,6 +241,10 @@ export class ExportDesk {
     if (!this.runner.sameContract(bundle, exportContract(rt, x))) return
     const pr = await this.refreshPr(rec, x, true)
     if (pr?.state !== 'OPEN' || pr.baseRefName !== rec.base || pr.headRefOid !== bundle.head) return
+    // 머지가 실패할 것이 이미 보이면(CI 실패, 충돌 등) 사람의 브랜치에 커밋하지 않는다. 도는 CI는 push가 어차피 다시 돌린다
+    const status = await this.ctx.deps.gh.prStatus(this.ctx.projectOf(rec).path, pr.number)
+    if (!status.ok || blockingChecks(status.checks).failed.length > 0) return
+    if (status.mergeable !== 'MERGEABLE' && status.mergeable !== 'UNKNOWN') return
     const head = await recordDebt(this.ctx, rec, x)
     for (let i = 0; head !== null && i < PR_WAIT_TRIES; i++) {
       if ((await this.refreshPr(rec, x, true))?.headRefOid === head) return

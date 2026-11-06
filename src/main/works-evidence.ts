@@ -354,7 +354,7 @@ export class EvidenceRunner {
         requestPath: deps.store.workPath(rec.id, 'request.md'),
         home: deps.store.home,
         now: deps.now(),
-        knowledge: rec.m3.knowledge,
+        ...rec.m3,
       })
       if (!isActive(rec.state) || rt.abort.signal.aborted) return null
       rt.bundles.set(rec.branch, bundle)
@@ -556,7 +556,7 @@ export class EvidenceRunner {
       requestPath: deps.store.workPath(rec.id, 'request.md'),
       home: deps.store.home,
       now: deps.now(),
-      knowledge: rec.m3.knowledge,
+      ...rec.m3,
     })
     if (carry && before?.review && before.head === bundle.head && sameContract(before, contract))
       return { ...bundle, review: before.review }

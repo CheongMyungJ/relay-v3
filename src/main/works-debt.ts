@@ -9,11 +9,26 @@ import { commitFiles, pushBranch } from '../adapters/git-write.ts'
 import { evidencePath, repoKey, writeJson } from '../adapters/store.ts'
 import type { LedgerEntry } from '../core/ledger.ts'
 import type { EvidenceBundle } from '../core/types.ts'
-import { debtAt, debtFiles, debtMessage, RELAY_AUTHOR, worseOf } from '../engine/debt-record.ts'
+import {
+  debtAt,
+  debtFiles,
+  debtMessage,
+  RELAY_AUTHOR,
+  uncoveredWorse,
+  workDebt,
+  worseOf,
+} from '../engine/debt-record.ts'
 import type { ExportRecord, WorkRecord } from './store.ts'
-import { perUnit, type WorkCtx, workHead } from './works-types.ts'
+import { message, perUnit, type WorkCtx, workHead } from './works-types.ts'
 
-/** 이 내보내기의 묶음이 기록할 빚을 지녔나: 장치가 켜졌고, one_branch이고, 나빠진 래칫이 있고, 아직 기록하지 않았다 */
+/** 묶음의 나빠진 래칫 가운데 이 diff가 둔 빚(debt_covered)이 모두 덮지 않은 것 */
+const openWorse = (b: EvidenceBundle) =>
+  worseOf(b.ratchets).filter((r) => !b.debt_covered?.ratchets.includes(r.id))
+
+/**
+ * 이 내보내기의 묶음이 기록할 빚을 지녔나: 장치가 켜졌고, one_branch이고, 이 diff의 빚이 덮지 않은 나빠진 래칫이 있고, 아직
+ * 기록하지 않았다(빚 커밋으로 옮긴 묶음이 아니다)
+ */
 export function debtable(rec: WorkRecord, x: ExportRecord, b: EvidenceBundle | undefined): boolean {
   return (
     rec.m3.debt &&
@@ -21,15 +36,20 @@ export function debtable(rec: WorkRecord, x: ExportRecord, b: EvidenceBundle | u
     x.unit === null &&
     b !== undefined &&
     !b.debt_commit &&
-    worseOf(b.ratchets).length > 0
+    openWorse(b).length > 0
   )
 }
 
-/** 장부 줄의 accepted 칸: 묶음의 나빠진 래칫과 기록한 빚(없으면 빈 것). 나빠진 래칫이 없으면 칸이 없다 */
+/**
+ * 장부 줄의 accepted 칸: 묶음의 나빠진 래칫과 기록한 빚(이 diff가 둔 빚이 나빠짐을 모두 덮을 때 그 id, 아니면 빈 것). 나빠진
+ * 래칫이 없으면 칸이 없다
+ */
 export function acceptedOf(b: EvidenceBundle | undefined): Pick<LedgerEntry, 'accepted'> {
   const worse = b ? worseOf(b.ratchets) : []
-  if (worse.length === 0) return {}
-  return { accepted: { ratchets: worse.map((r) => r.id), debt: b?.debt_commit?.items ?? [] } }
+  if (!b || worse.length === 0) return {}
+  const covered = b.debt_covered
+  const debt = covered && openWorse(b).length === 0 ? covered.items : (b.debt_commit?.items ?? [])
+  return { accepted: { ratchets: worse.map((r) => r.id), debt } }
 }
 
 /**
@@ -48,7 +68,10 @@ export async function recordDebt(
     throw new Error('증거를 재는 중: 끝난 뒤 다시 하세요')
   const head = await workHead(rec)
   if (head !== b.head) throw new Error('증거를 잰 뒤 HEAD가 바뀜: 증거를 다시 재세요')
-  const worse = worseOf(b.ratchets)
+  // 이 diff가 이미 둔 빚이 덮는 나빠짐은 다시 적지 않는다(앞 기록 뒤 다시 잰 묶음)
+  const mine = await workDebt(rec.worktree, head, b.diff.paths)
+  const worse = uncoveredWorse(b.ratchets, mine)
+  if (worse.length === 0) return null
   const { ids } = await debtAt(rec.worktree, head)
   const { items, files } = debtFiles(worse, x.pr?.url ?? rec.id, ctx.deps.now(), ids)
   const sha = await commitFiles(rec.worktree, {
@@ -63,6 +86,10 @@ export async function recordDebt(
     ...b,
     head: sha,
     debt_commit: { from: head, items: items.map((i) => i.id) },
+    debt_covered: {
+      ratchets: worseOf(b.ratchets).map((r) => r.id),
+      items: [...(b.debt_covered?.items ?? []), ...items.map((i) => i.id)],
+    },
   }
   rt.bundles.set(x.branch, moved)
   if (x.exported_head === head) x.exported_head = sha
@@ -78,6 +105,26 @@ export async function recordDebt(
     push,
   })
   await ctx.seeHead(rec.id, sha)
-  if (push) await pushBranch(rec.worktree, rec.branch)
+  if (push) await pushDebt(rec)
   return sha
+}
+
+const pushDebt = (rec: WorkRecord) =>
+  pushBranch(rec.worktree, rec.branch).catch((e: unknown) => {
+    throw new Error(`빚 커밋을 push하지 못함: ${message(e)}`, { cause: e })
+  })
+
+/**
+ * 빚을 기록한 묶음(b, head가 at)인데 열린 PR이 아직 기록 앞의 head를 가리키면(앞 push가 실패함) 다시 push한다. [그래도
+ * 끝내기]가 끝내기 전에 부른다: 열린 PR이 빚 없이 남은 채 Work가 끝나지 않게. 실패하면 던진다
+ */
+export async function pushRecorded(
+  rec: WorkRecord,
+  x: ExportRecord,
+  b: EvidenceBundle | undefined,
+  at: string,
+): Promise<void> {
+  const d = b?.debt_commit
+  if (!d || b?.head !== at || x.pr?.state !== 'OPEN' || x.pr.headRefOid !== d.from) return
+  await pushDebt(rec)
 }

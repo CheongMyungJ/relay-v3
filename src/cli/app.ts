@@ -139,7 +139,7 @@ async function checkCommand(io: Io, args: string[]): Promise<number> {
     strict: true,
   })
   const home = relayHome(io.env)
-  // M3 장치(V38): CLI에는 프로젝트 설정이 없어 RELAY_M3만 본다(없으면 모두 켬)
+  // M3 장치(V38·V40): CLI에는 프로젝트 설정이 없어 RELAY_M3만 본다(없으면 모두 켬)
   const m3 = m3Switches(undefined, io.env['RELAY_M3'])
   for (const e of m3.errors) io.err(e)
   const bundle = await check({
@@ -151,7 +151,7 @@ async function checkCommand(io: Io, args: string[]): Promise<number> {
     home,
     now: io.now().toISOString(),
     rerun: values.rerun === true,
-    knowledge: m3.switches.knowledge,
+    ...m3.switches,
   })
   if (values.json === true) {
     io.out(JSON.stringify(bundle, null, 2))

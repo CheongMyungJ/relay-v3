@@ -1,6 +1,6 @@
 // 받아들인 나빠짐의 빚 확인(M3b, docs/m3-design.md 3절, V40)의 글. format.ts가 600줄을 넘지 않게 나눴다.
 // [머지]와 [그래도 끝내기]는 Work 브랜치의 내보내기 증거(지금 HEAD의 것)에 나빠진 래칫이 있고 아직 빚으로 기록하지 않았으면
-// 한 번 묻는다: [빚으로 남기고 …] / [그냥 …]. 장치(view.m3.debt)가 꺼졌거나 branch_per_unit(V22)이면 묻지 않는다.
+// 한 번 묻는다: [빚으로 남기고 …] / [그냥 …]. 이 diff가 이미 둔 빚이 모두 덮은 래칫은 묻지 않는다. 장치(view.m3.debt)가 꺼졌거나 branch_per_unit(V22)이면 묻지 않는다.
 
 import type { EvidenceBundle } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
@@ -12,7 +12,9 @@ export function debtAsk(
   const e = v.evidence
   if (!v.m3.debt || v.exports.length > 0 || e === null || e.debt_commit) return null
   if (v.head !== null && e.head !== v.head) return null
-  const worse = e.ratchets.filter((r) => r.status === 'worse')
+  // 이 diff가 이미 둔 빚이 모두 덮은 래칫(debt_covered)은 다시 묻지 않는다
+  const covered = e.debt_covered?.ratchets ?? []
+  const worse = e.ratchets.filter((r) => r.status === 'worse' && !covered.includes(r.id))
   return worse.length === 0 ? null : worse.map((r) => `${r.id} (${r.detail})`)
 }
 

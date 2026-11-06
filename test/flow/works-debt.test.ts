@@ -6,10 +6,12 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { UNRECORDED_TITLE } from '../../src/engine/debt-record.ts'
+import { debtAsk } from '../../src/renderer/src/debt.ts'
 import { makeTempDir, runGit } from '../support/repo.ts'
 import type { TestApp } from '../support/works-app.ts'
 import {
   CONTRACT,
+  type Entry,
   FIX_COMMIT,
   flowKit,
   PUSH_AND_PR,
@@ -121,6 +123,84 @@ test('[빚으로 남기고 머지]: relay가 Work 브랜치에 빚을 커밋하�
   const merge = gh.findLast((c: { args: string[] }) => c.args[1] === 'merge') as { args: string[] }
   expect(merge.args).toContain(sha)
   expect(works.list().projects[0]?.unrecordedDebt).toBe(0)
+})
+
+test('CI가 실패한 PR에는 빚을 커밋하지 않는다. 기록한 뒤 다시 재도 다시 묻거나 또 적지 않는다', async () => {
+  await scenario([SUBMIT, BIG_COMMIT, ...PUSH_AND_PR, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app)
+  const head = await exported(app, id)
+  const pr = works.view(id).pr?.number
+  const ci = (state: string) => [{ __typename: 'StatusContext', context: 'ci', state }]
+  const setPr = (fields: Entry) =>
+    kit.gh((state) => {
+      Object.assign(state.prs?.find((p) => p.number === pr) ?? {}, fields)
+    })
+  const recorded = async () =>
+    (await app.store.readEvents(id)).filter((e) => e.type === 'debt_recorded')
+
+  // 머지가 실패할 것이 보이면 사람의 브랜치에 relay가 커밋하지 않는다
+  await setPr({ statusCheckRollup: ci('FAILURE') })
+  expect(await works.merge(id, undefined, { debt: true })).toEqual({
+    ok: false,
+    error: 'CI 실패 (ci)',
+  })
+  expect(works.view(id).head).toBe(head)
+  expect(await recorded()).toEqual([])
+
+  // 기록하고 push하면 CI가 다시 돈다: 머지는 기다린다
+  await setPr({ statusCheckRollup: ci('PENDING') })
+  const wait = await works.merge(id, undefined, { debt: true })
+  expect(wait).toMatchObject({ ok: false, error: expect.stringMatching(/^CI가 아직 돎/) })
+  const sha = works.view(id).head ?? ''
+  expect(sha).not.toBe(head)
+  expect(await recorded()).toHaveLength(1)
+
+  // [증거 다시 재기]: 새 묶음은 빚 커밋으로 옮긴 것이 아니지만 이 diff의 빚이 나빠짐을 덮는다
+  await works.runEvidence(id, { exportCandidate: true })
+  await until(() => {
+    const e = works.view(id).evidence
+    return e?.head === sha && !e.debt_commit && settled(works.view(id))
+  }, '다시 잰 증거')
+  const again = works.view(id)
+  expect(again.evidence?.debt_covered).toEqual({ ratchets: ['file-size'], items: [DEBT_ID] })
+  expect(debtAsk(again)).toBeNull()
+  await setPr({ statusCheckRollup: ci('SUCCESS') })
+  expect(await works.merge(id, undefined, { debt: true })).toEqual({ ok: true })
+  expect(await recorded()).toHaveLength(1)
+  const tree = await git(works.record(id).worktree, 'ls-tree', '-r', '--name-only', sha)
+  expect(tree.split('\n').filter((p) => p.startsWith('.relay/debt/'))).toEqual([DEBT_FILE])
+  expect((await app.store.readLedger()).at(-1)).toMatchObject({
+    by: 'human',
+    merged_head: sha,
+    accepted: { ratchets: ['file-size'], debt: [DEBT_ID] },
+  })
+  expect(works.list().projects[0]?.unrecordedDebt).toBe(0)
+})
+
+test('[빚으로 남기고 끝내기]의 push가 실패하면 끝나지 않고, 다시 끝낼 때 push한 뒤 끝낸다', async () => {
+  await scenario([SUBMIT, BIG_COMMIT, ...PUSH_AND_PR, { do: 'stop' }])
+  const app = await kit.openApp(await makeTempDir('relay-home-'))
+  const { works } = app
+  const id = await startWork(app)
+  const head = await exported(app, id)
+  const rec = works.record(id)
+  const origin = await git(rec.worktree, 'remote', 'get-url', 'origin')
+  await git(rec.worktree, 'remote', 'set-url', 'origin', join(origin, 'gone'))
+  await works.end(id, { head })
+  await until(() => works.view(id).endPending?.armed === false, '상자')
+  await expect(works.end(id, { head, force: true, debt: true })).rejects.toThrow(
+    /빚 커밋을 push하지 못함/,
+  )
+  expect(works.view(id).state).toBe('working')
+  const sha = works.view(id).head ?? ''
+  expect(sha).not.toBe(head)
+  expect(await git(rec.worktree, 'ls-remote', origin, `refs/heads/${rec.branch}`)).toContain(head)
+
+  await git(rec.worktree, 'remote', 'set-url', 'origin', origin)
+  expect(await works.end(id, { head: sha, force: true })).toMatchObject({ head: sha, ended: true })
+  expect(await git(rec.worktree, 'ls-remote', 'origin', `refs/heads/${rec.branch}`)).toContain(sha)
 })
 
 test('[그래도 끝내기]의 빚과 [그냥 끝내기]: 빚은 Work 브랜치에, 그냥은 장부의 받아들였지만 기록하지 않음', async () => {

@@ -17,6 +17,9 @@ import {
   termsOf,
   type KnowledgeEntry,
 } from '../../src/engine/knowledge-format.ts'
+import type { Contract } from '../../src/core/types.ts'
+import { UNRECORDED_TITLE } from '../../src/engine/debt-record.ts'
+import { checkGroundings, humanRequest } from '../../src/engine/judge.ts'
 
 const rule = (title: string, body: string, anchor?: string, more = '') =>
   [
@@ -172,5 +175,27 @@ describe('request.md 끝의 목록', () => {
     expect(t).toContain('항목 22개 가운데 이 요청과 겹치는 15개')
     expect(t).not.toContain('zz.md')
     expect(t).not.toContain('비밀 본문')
+  })
+})
+
+describe('근거 request는 사람의 요청만 본다(relay가 붙인 절은 아님)', () => {
+  const request = `덧셈을 고쳐 줘\n\n${LIST_HEADING}\n\n- 계산 규칙 (docs/knowledge/calc.md)\n\n${UNRECORDED_TITLE}\n\n계약을 쓸 때 사람에게 알리세요\n`
+  const contract = (quote: string): Contract =>
+    ({
+      id: 'c1',
+      lines: [{ id: 'L1', text: '고침', grounds: [{ type: 'request', quote }] }],
+    }) as unknown as Contract
+
+  test('humanRequest는 relay가 붙인 첫 절 앞까지', () => {
+    expect(humanRequest(request)).toBe('덧셈을 고쳐 줘\n\n')
+    expect(humanRequest('그냥 요청\n')).toBe('그냥 요청\n')
+  })
+
+  test('지식 목록의 제목이나 알림 글을 인용하면 확인되지 않는다', async () => {
+    const check = async (quote: string) =>
+      (await checkGroundings('/nonexistent', 'HEAD', contract(quote), request))[0]
+    expect(await check('덧셈을 고쳐')).toMatchObject({ ok: true })
+    expect(await check('계산 규칙')).toMatchObject({ ok: false, detail: '요청에 그 구절이 없음' })
+    expect(await check('사람에게 알리세요')).toMatchObject({ ok: false })
   })
 })

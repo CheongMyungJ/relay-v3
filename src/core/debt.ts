@@ -2,6 +2,7 @@
 // 한 항목 = anchor · 종류 · 출처 · 까닭 · 날짜. 머리글은 `---` 사이의 `key: value` 줄, 본문은 까닭.
 // 한 줄에 그대로 못 쓰는 값(앞뒤·연속 공백, 제어 글자, 역슬래시, '"'로 시작)은 JSON 문자열로 감싼다.
 
+import { QUALITY_PATH } from './quality.ts'
 import { err, ok, type Result } from './result.ts'
 import type { DebtItem, DebtKind, RatchetResult } from './types.ts'
 
@@ -12,9 +13,6 @@ type Key = (typeof KEYS)[number]
 const REQUIRED: Key[] = ['anchor.path', 'kind', 'source', 'created']
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
-
-/** 파일이 없는 래칫의 빚을 다는 곳 */
-const QUALITY_FILE = '.relay/quality.json'
 
 // ── 읽기 ────────────────────────────────────────────────────────────────────
 
@@ -152,7 +150,7 @@ export function debtFromRatchet(r: RatchetResult, source: string, date: string):
     return [
       {
         id: `r-${slug(r.id)}`,
-        anchor: { path: QUALITY_FILE, metric: r.id },
+        anchor: { path: QUALITY_PATH, metric: r.id },
         kind: 'accepted_regression',
         source,
         reason: `래칫 ${r.id}: 나빠진 채로 머지됨 (${change})`,

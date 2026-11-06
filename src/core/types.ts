@@ -353,6 +353,11 @@ export interface EvidenceBundle {
   knowledge?: { changed: string[]; issues: KnowledgeIssue[] } | null
   /** 빚 기록 커밋(M3b): 앱이 from(잰 head) 위에 .relay/debt/의 items만 더해 head로 옮겼다. 다시 재지 않은 묶음이다 */
   debt_commit?: { from: string; items: string[] } | null
+  /**
+   * 이 diff가 이미 둔 빚(M3b): .relay/debt/의 accepted_regression 가운데 나빠진 래칫을 덮는 항목(items)과 모두 덮인
+   * 래칫(ratchets). 덮인 래칫은 다시 묻지 않는다. 장치를 껐거나 M3b 앞의 묶음은 null이거나 칸이 없다
+   */
+  debt_covered?: { ratchets: string[]; items: string[] } | null
   /** 세션이 PR 본문 등에 쓴 주장. 관문에 들어가지 않는다 */
   claims: string | null
   contract_change_requested: boolean
