@@ -7,7 +7,8 @@
 //   node scripts/gate-repeat.ts review --from <리뷰 jsonl>       이미 있는 반복 자료를 세기만(예: docs/experiments/m2.1/review-replay.jsonl)
 //   node scripts/gate-repeat.ts generation [<재생 자료 폴더나 .jsonl>...]   기본은 test/fixtures/gate-replay/
 // - 대상(targets.json): [{ name, repo, base, head, contract?, request?, options?: { effort?, agentModel? } }]. 경로는 그 파일 기준.
-//   targets는 relay-v2 평가 결과(results/m2-main-<시나리오>)의 묶음에서 대상을 만든다(scripts/review-replay.ts makeCheckout과 같은
+//   targets는 relay-v2 평가 결과(results/m2-main-<시나리오>의 relay3·relay3-noreview, m21-design·m21-sealed-<시나리오>의
+//   relay3-m21)의 묶음에서 대상을 만든다(scripts/review-replay.ts makeCheckout과 같은
 //   checkout: 시나리오 레포 + 품질 기준 덧씌우기가 base, final diff가 head). relay-v3 Work의 head는 손으로 적는다.
 // - 레포를 바꾸지 않는다: 대상마다 `git clone --shared --no-checkout`한 임시 레포에서 돈다(check worktree의 등록도 거기에 남는다).
 // - (A) check: 반복마다 새 임시 RELAY_HOME(SHA 캐시가 없게)으로 engine check를 돌린다. 리뷰는 부르지 않고 고정한 리뷰(지적 없음,
@@ -47,7 +48,7 @@ import {
   readReplay,
   type ReplayBundle,
 } from '../test/support/gate-replay.ts'
-import { keyOf, readBundles, type RunOptions } from './review-replay-plan.ts'
+import { keyOf, M2_MAIN, M21_BATCHES, readBundles, type RunOptions } from './review-replay-plan.ts'
 import {
   claudeReviewer,
   dryReviewer,
@@ -95,6 +96,8 @@ export interface ReviewLine extends ReviewRun {
   prompt_version: number
   error?: string
   findings: unknown[]
+  /** 리뷰어 결과의 usage에서 수인 칸(토큰). 비용 어림에 쓴다. 준비 실패나 결과가 없으면 null */
+  usage: Record<string, number> | null
   ms: number
 }
 
@@ -344,6 +347,7 @@ async function runReview(
           ...(f.error === undefined || f.error === '' ? {} : { error: f.error }),
           raises: f.raises,
           findings: f.findings,
+          usage: f.usage,
           ms: Date.now() - t0,
         })
       }
@@ -356,6 +360,7 @@ async function runReview(
           error: `준비 실패: ${message(e)}`,
           raises: {},
           findings: [],
+          usage: null,
           ms: 0,
         })
     } finally {
@@ -395,7 +400,28 @@ export function reviewSummary(
     `반복이 둘 이상인 head ${repeated}개 가운데 올림 유무가 갈림 ${presence}, 올림 갈래(심각도는 보지 않음)가 갈림 ${kind}`,
     '이 숫자는 8.4 일곱째 조건(결정론 입력)이 아니라 devices.md 독립 리뷰 줄의 지표다(8절)',
   )
+  const cost = reviewCost(raw)
+  if (cost !== null) out.push(cost)
   return out.join('\n')
+}
+
+/** 끝난 리뷰 한 번의 평균 시간과 토큰(배치 비용 어림). 끝난 줄이 없으면 null */
+export function reviewCost(
+  raw: readonly { status: string; ms?: number; usage?: Record<string, number> | null }[],
+): string | null {
+  const done = raw.filter((l) => l.status === 'done')
+  if (done.length === 0) return null
+  const counted = done.flatMap((l) => (l.usage ? [l.usage] : []))
+  const tok = (k: string) =>
+    counted.length === 0
+      ? '-'
+      : String(Math.round(counted.reduce((n, u) => n + (u[k] ?? 0), 0) / counted.length))
+  const timed = done.filter((l) => typeof l.ms === 'number' && l.ms > 0)
+  const secs =
+    timed.length === 0
+      ? '-'
+      : `${Math.round(timed.reduce((n, l) => n + (l.ms ?? 0), 0) / timed.length / 1000)}초`
+  return `리뷰 한 번(끝난 반복 ${done.length}, 토큰을 적은 반복 ${counted.length}): 평균 ${secs}, 토큰 평균 입력 ${tok('input_tokens')}, 캐시 읽기 ${tok('cache_read_input_tokens')}, 캐시 쓰기 ${tok('cache_creation_input_tokens')}, 출력 ${tok('output_tokens')}`
 }
 
 // ── (C) 생성 ────────────────────────────────────────────────────────────────
@@ -444,9 +470,13 @@ async function makeTargets(
   const targets: Target[] = []
   for (const key of keys) {
     const scenario = key.split('/')[0] ?? ''
-    const b = readBundles(o.results, scenario).find((x) => keyOf(x) === key)
+    const b = [M2_MAIN, ...M21_BATCHES]
+      .flatMap((src) => readBundles(o.results, scenario, null, src))
+      .find((x) => keyOf(x) === key)
     if (b === undefined)
-      throw new Error(`묶음을 찾지 못함(results/m2-main-<시나리오>의 relay3 쪽): ${key}`)
+      throw new Error(
+        `묶음을 찾지 못함(results/m2-main-<시나리오>의 relay3·relay3-noreview, m21-design·m21-sealed-<시나리오>의 relay3-m21): ${key}`,
+      )
     const work = path.join(b.dir, 'works', b.work)
     const ev = readJson<EvidenceBundle>(path.join(work, 'evidence.json'))
     const co = await makeCheckout(b, o.scenarios, ev)

@@ -44,6 +44,7 @@ const KEEP: (keyof TrackLine)[] = [
 
 const readJson = <T>(p: string): T => JSON.parse(readFileSync(p, 'utf8')) as T
 const note = (text: string) => process.stderr.write(`${text}\n`)
+/** 건너뛰거나 가르지 못한 것의 수(까닭마다). trackWorks가 돌 때마다 비운다 */
 const counts = new Map<string, number>()
 const count = (k: string) => counts.set(k, (counts.get(k) ?? 0) + 1)
 
@@ -82,7 +83,11 @@ export function ledgerLines(
   id: string,
   exports: { head: string; ms: number }[] | null = null,
 ): TrackLine[] {
-  if (!existsSync(file)) return []
+  if (!existsSync(file)) {
+    // 묶은 기록에서 앱 저장소를 뺐으면(M3 runs/) 장부가 없다: 조용히 빈 장부가 되지 않게 센다
+    count('장부 파일 없음(이 Work의 장부 줄 없음)')
+    return []
+  }
   const out: TrackLine[] = []
   for (const text of readFileSync(file, 'utf8').split(/\r?\n/)) {
     if (!text.trim()) continue
@@ -143,7 +148,12 @@ function sameAsExport(dir: string, runDir: string, short: string, lines: TrackLi
   const last = conclusions.at(-1)
   const evPath = path.join(dir, 'evidence.json')
   const diffPath = path.join(runDir, 'final', `${short}.diff`)
-  if (last === undefined || !existsSync(evPath) || !existsSync(diffPath)) return null
+  if (last === undefined) return null
+  if (!existsSync(evPath) || !existsSync(diffPath)) {
+    // 묶은 기록이 증거나 final diff를 따로 두었으면(M2 runs/의 *.extra) 함께 풀어야 한다
+    count('같은 변경을 가르지 못함: evidence.json이나 final diff 없음')
+    return null
+  }
   const ev = readJson<EvidenceBundle>(evPath)
   if (ev.head !== last.head) return null
   const d = diffStats(readFileSync(diffPath, 'utf8'))
@@ -289,13 +299,12 @@ function folderWorks(protocol: string, folder: string): TrackWork[] {
   return out
 }
 
-function main(args: string[]) {
-  const [out, ...folders] = args
-  if (out === undefined || !out.endsWith('.jsonl') || folders.length === 0) {
-    note('쓰는 법: node scripts/track-replay.ts <규약>.jsonl <결과 폴더>...')
-    process.exit(1)
-  }
-  const protocol = path.basename(out, '.jsonl')
+/** 결과 폴더들의 Work 줄(정렬, 같은 Work가 두 번이면 던짐)과 건너뛰거나 가르지 못한 것의 수 */
+export function trackWorks(
+  protocol: string,
+  folders: string[],
+): { works: TrackWork[]; counts: Map<string, number> } {
+  counts.clear()
   // M2·M2.1 배치는 report.json이 있는 것만(끝나지 않은 배치, 예: *.aborted-restart는 건너뜀). M3 순차는 끝난 실행만(complete)
   const all = folders.flatMap((f) => folderWorks(protocol, f))
   const key = (w: TrackWork) =>
@@ -312,9 +321,19 @@ function main(args: string[]) {
     if (seen.has(key(w))) throw new Error(`같은 Work가 두 번: ${key(w).replaceAll('\0', '/')}`)
     seen.add(key(w))
   }
-  writeFileSync(out, all.map((w) => JSON.stringify(w)).join('\n') + '\n')
-  for (const [k, n] of [...counts].sort()) note(`${k}: ${n}`)
-  note(`${out}: ${all.length}개`)
+  return { works: all, counts: new Map(counts) }
+}
+
+function main(args: string[]) {
+  const [out, ...folders] = args
+  if (out === undefined || !out.endsWith('.jsonl') || folders.length === 0) {
+    note('쓰는 법: node scripts/track-replay.ts <규약>.jsonl <결과 폴더>...')
+    process.exit(1)
+  }
+  const { works, counts: seen } = trackWorks(path.basename(out, '.jsonl'), folders)
+  writeFileSync(out, works.map((w) => JSON.stringify(w)).join('\n') + '\n')
+  for (const [k, n] of [...seen].sort()) note(`${k}: ${n}`)
+  note(`${out}: ${works.length}개`)
 }
 
 const entry = process.argv[1]

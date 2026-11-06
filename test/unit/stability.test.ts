@@ -11,7 +11,12 @@ import {
   stabilityOf,
   type GenerationRun,
 } from '../../src/engine/stability.ts'
-import { generationSummary, readJsonl, reviewSummary } from '../../scripts/gate-repeat.ts'
+import {
+  generationSummary,
+  readJsonl,
+  reviewCost,
+  reviewSummary,
+} from '../../scripts/gate-repeat.ts'
 import { generationRuns, readReplay, type ReplayBundle } from '../support/gate-replay.ts'
 
 const evidence = (over: Partial<EvidenceBundle> = {}): EvidenceBundle => ({
@@ -139,6 +144,21 @@ describe('(B) reviewStability', () => {
     )
     const text = reviewSummary(readJsonl(file))
     expect(text).toMatch(/반복이 둘 이상인 head 8개 가운데 올림 유무가 갈림 0, 올림 갈래/)
+    expect(text).toMatch(/리뷰 한 번\(끝난 반복 54, 토큰을 적은 반복 54\): 평균 \d+초/)
+  })
+
+  test('reviewCost: 끝난 반복만의 평균 시간과 토큰(배치 비용 어림)', () => {
+    const usage = (input: number, out: number) => ({ input_tokens: input, output_tokens: out })
+    const lines = [
+      { status: 'done', ms: 10_000, usage: usage(10, 100) },
+      { status: 'done', ms: 20_000, usage: usage(30, 300) },
+      { status: 'done', ms: 0, usage: null },
+      { status: 'failed', ms: 90_000, usage: usage(1000, 1000) },
+    ]
+    expect(reviewCost(lines)).toBe(
+      '리뷰 한 번(끝난 반복 3, 토큰을 적은 반복 2): 평균 15초, 토큰 평균 입력 20, 캐시 읽기 0, 캐시 쓰기 0, 출력 200',
+    )
+    expect(reviewCost([{ status: 'failed' }])).toBeNull()
   })
 })
 

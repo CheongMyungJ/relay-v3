@@ -136,20 +136,34 @@ function nonGoalsOf(file: string): string[] {
   }
 }
 
-/** 배치 하나(results/m2-main-<시나리오>)의 relay3·relay3-noreview 내보내기 묶음. report는 시나리오의 리포트(widerRequest) */
+/** 묶음을 읽는 배치: results/<prefix>-<시나리오>의 이 쪽들. 기본은 M2 main 배치의 relay3·relay3-noreview */
+export interface BatchSource {
+  prefix: string
+  arms: readonly string[]
+}
+
+export const M2_MAIN: BatchSource = { prefix: 'm2-main', arms: ARMS }
+/** M2.1 배치(설계 셋, 봉인 셋)의 relay3-m21 쪽. 관문 5회 (A)의 대상(gate-repeat.ts targets)이 쓴다 */
+export const M21_BATCHES: BatchSource[] = ['m21-design', 'm21-sealed'].map((prefix) => ({
+  prefix,
+  arms: ['relay3-m21'],
+}))
+
+/** 배치 하나(results/<prefix>-<시나리오>)의 내보내기 묶음. report는 시나리오의 리포트(widerRequest) */
 export function readBundles(
   results: string,
   scenario: string,
   report: string | string[] | null = null,
+  source: BatchSource = M2_MAIN,
 ): Bundle[] {
-  const batch = path.join(results, `m2-main-${scenario}`)
+  const batch = path.join(results, `${source.prefix}-${scenario}`)
   const sDir = path.join(batch, scenario)
   if (!existsSync(path.join(batch, 'report.json')) || !existsSync(sDir)) return []
   const out: Bundle[] = []
   for (const name of readdirSync(sDir).sort()) {
     const [, arm = '', n] = /^(.+)-(\d+)$/.exec(name) ?? []
     const dir = path.join(sDir, name)
-    if (!ARMS.includes(arm) || !existsSync(path.join(dir, 'run.json'))) continue
+    if (!source.arms.includes(arm) || !existsSync(path.join(dir, 'run.json'))) continue
     const run = readJson<StoredRun>(path.join(dir, 'run.json'))
     const success = run.outcome?.success
     if (run.error !== undefined && run.error !== null) continue

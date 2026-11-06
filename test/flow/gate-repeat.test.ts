@@ -178,8 +178,10 @@ describe('gate-repeat: (A) check와 (B) 리뷰 반복', () => {
     expect(lines[0]?.raises).toEqual({ 'structure/medium': 1 })
     expect(r.stdout).toContain('반복이 둘 이상인 head 2개 가운데 올림 유무가 갈림 0, 올림 갈래')
     expect(r.stdout).toContain('--dry: 가짜 리뷰어')
-    // 줄에 모델 이름 칸이 없다
+    // 줄에 모델 이름 칸이 없고, 비용 어림의 토큰 칸(가짜 리뷰어는 빈 usage)과 요약의 한 번 비용이 있다
     expect(lines.some((l) => 'model' in l)).toBe(false)
+    expect(lines.map((l) => l.usage)).toEqual([{}, {}, {}, {}])
+    expect(r.stdout).toContain('리뷰 한 번(끝난 반복 4, 토큰을 적은 반복 4)')
     expect(await repoState(repo)).toBe(before)
   })
 
@@ -198,7 +200,8 @@ describe('gate-repeat: (A) check와 (B) 리뷰 반복', () => {
 })
 
 describe('gate-repeat targets: 평가 결과의 묶음에서 대상 만들기', () => {
-  test('시나리오 레포 + 품질 기준 덧씌우기가 base, final diff가 head인 checkout과 targets.json', async () => {
+  /** results/<batch>-<시나리오>/<시나리오>/<run>에 묶음 w1 하나인 평가 결과와 시나리오 레포 */
+  async function evalResults(batch: string, run: string) {
     const root = await makeTempDir('relay-gate-repeat-eval-')
     const scenarios = join(root, 'scenarios')
     const results = join(root, 'results')
@@ -222,9 +225,9 @@ describe('gate-repeat targets: 평가 결과의 묶음에서 대상 만들기', 
       cwd: tmp,
       encoding: 'utf8',
     }).stdout
-    const runDir = join(results, `m2-main-${s}`, s, 'relay3-1')
+    const runDir = join(results, `${batch}-${s}`, s, run)
     const head = 'a'.repeat(40)
-    await writeFiles(join(results, `m2-main-${s}`), { 'report.json': '{}\n' })
+    await writeFiles(join(results, `${batch}-${s}`), { 'report.json': '{}\n' })
     await writeFiles(runDir, {
       'run.json': JSON.stringify({
         error: null,
@@ -241,6 +244,11 @@ describe('gate-repeat targets: 평가 결과의 묶음에서 대상 만들기', 
         diff: { files: 2, added: 4, deleted: 1, paths: ['src/calc.js', 'test/calc.test.js'] },
       }),
     })
+    return { root, results, scenarios, s }
+  }
+
+  test('시나리오 레포 + 품질 기준 덧씌우기가 base, final diff가 head인 checkout과 targets.json', async () => {
+    const { root, results, scenarios, s } = await evalResults('m2-main', 'relay3-1')
     const into = join(root, 'targets')
     const args = ['targets', '--bundle', `${s}/relay3-1/w1`, '--into', into]
     const r = await gateRepeat([...args, '--results', results, '--scenarios', scenarios])
@@ -270,5 +278,28 @@ describe('gate-repeat targets: 평가 결과의 묶음에서 대상 만들기', 
     const c = await gateRepeat(['check', '--targets', target, '--repeats', '1', '--out', out])
     expect(c.code, c.stderr).toBe(0)
     expect(readLines<CheckLine>(out).map((l) => l.status)).toEqual(['done'])
+  })
+
+  test('M2.1 배치(m21-design, m21-sealed)의 relay3-m21 묶음에서도 만든다', async () => {
+    for (const batch of ['m21-design', 'm21-sealed']) {
+      const { root, results, scenarios, s } = await evalResults(batch, 'relay3-m21-2')
+      const into = join(root, 'targets')
+      const args = ['targets', '--bundle', `${s}/relay3-m21-2/w1`, '--into', into]
+      const r = await gateRepeat([...args, '--results', results, '--scenarios', scenarios])
+      expect(r.code, r.stderr).toBe(0)
+      const list = JSON.parse(readFileSync(join(into, 'targets.json'), 'utf8')) as Target[]
+      expect(list.map((t) => t.name)).toEqual([`${s}/relay3-m21-2/w1`])
+      const show = spawnSync('git', ['show', 'HEAD:src/calc.js'], {
+        cwd: join(into, `${s}_relay3-m21-2_w1`),
+        encoding: 'utf8',
+      }).stdout
+      expect(show).toBe(calc('hi'))
+    }
+    // M2 배치에 없는 쪽 이름은 M2 배치에서 찾지 않는다
+    const { root, results, scenarios, s } = await evalResults('m2-main', 'relay3-m21-1')
+    const args = ['targets', '--bundle', `${s}/relay3-m21-1/w1`, '--into', join(root, 'targets')]
+    const r = await gateRepeat([...args, '--results', results, '--scenarios', scenarios])
+    expect(r.code).toBe(1)
+    expect(r.stderr).toContain('묶음을 찾지 못함')
   })
 })
