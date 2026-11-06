@@ -133,6 +133,18 @@ export function anchorOf(text: string): string | null {
   return a !== undefined && ANCHOR.test(a) ? a : null
 }
 
+/** 규칙 항목(머리글이 읽히고 `kind: rule`)인가 */
+export function isRule(text: string): boolean {
+  const fm = frontMatter(text)
+  return fm.ok && fm.data.get('kind') === 'rule'
+}
+
+/** 규칙 항목의 선택 머리글 `check:`(검사의 명령이나 lint 규칙 이름, M3d V42). 규칙이 아니거나 없으면 null */
+export function checkOf(text: string): string | null {
+  const fm = frontMatter(text)
+  return fm.ok && fm.data.get('kind') === 'rule' ? (fm.data.get('check') ?? null) : null
+}
+
 /** 글에 나온 파일 경로(`a/b.c` 꼴) */
 export function pathsIn(text: string): string[] {
   return [...new Set(text.match(/[\w.-]+(?:\/[\w.-]+)+\.[A-Za-z0-9]+/g) ?? [])]

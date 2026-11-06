@@ -3,11 +3,12 @@
 //   Work가 계약 tidy로 집은 항목은 '진행 중: 잡힘(<Work id>)'(잡힘은 앱이 저장소에서 읽는다, main/works-debt.ts claimedDebt).
 // - 확인(증거, 알림): 기준의 빚 가운데 계약 tidy의 것, 이 diff가 바꾼 경로에 닿은 것, 이 diff가 항목 파일을 바꾼 것마다
 //   종류별 결정론 갚음(paid·open·unknown), 계약 tidy 항목의 anchor에 닿은 바뀐 파일의 바뀐 줄(정리 몫)과 상한
-//   (quality.json tidy_max_lines, 기본 100). 사람 머지 사실이 아니다.
+//   (quality.json tidy_max_lines, 기본 100). 사람 머지 사실이 아니다. rule_violation은 규칙 승격(M3d, promote.ts)이 가른다.
 
 import { dirsOf, lineCounts, lsTree, revParse } from '../adapters/git.ts'
 import { touching } from '../core/debt.ts'
 import type {
+  CommandEvidence,
   Contract,
   DebtItem,
   DebtPayoff,
@@ -16,6 +17,9 @@ import type {
   QualityConfig,
 } from '../core/types.ts'
 import { DEBT_DIR, debtAt } from './debt-record.ts'
+import { readEntries } from './knowledge.ts'
+import type { KnowledgeEntry } from './knowledge-format.ts'
+import { fastOutcome, ruleFacts, rulePayoff, type FastOutcome, type RuleFacts } from './promote.ts'
 
 /** request.md에 붙이는 빚 목록의 제목 */
 export const TIDY_TITLE = '## 이 레포의 빚 (relay가 읽음)'
@@ -76,11 +80,13 @@ export interface PayoffFacts {
   deleted: boolean
   /** anchor 파일의 head 줄 수. 파일이 없으면 null, 셀 수 없으면(폴더, 바이너리) undefined */
   lines: number | null | undefined
+  /** rule_violation(M3d): 검사를 적은 head 규칙 항목과 허용 목록, 빠른 명령. 규칙 승격이 꺼졌으면 없다 */
+  rule?: RuleFacts
 }
 
 /**
  * 종류마다 갚았나. accepted_regression(file_lines 래칫): 그 파일이 max 이하가 되었거나 없어졌으면 갚음. tidy·test_gap: 세션이
- * 항목 파일을 지웠으면 갚음(한 일은 사람이 PR에서 본다). rule_violation은 규칙 승격(M3d) 전이라 가르지 못한다
+ * 항목 파일을 지웠으면 갚음(한 일은 사람이 PR에서 본다). rule_violation은 승격된 검사가 그 경로에서 통과하면 갚음(rulePayoff)
  */
 export function payoff(
   item: DebtItem,
@@ -93,7 +99,7 @@ export function payoff(
     case 'test_gap':
       return { status: f.deleted ? 'paid' : 'open', detail: file }
     case 'rule_violation':
-      return { status: 'unknown', detail: `규칙 승격(M3d) 전이라 가르지 못함 (${file})` }
+      return rulePayoff(item, q, f.rule, file)
     case 'accepted_regression': {
       const metric = item.anchor.metric ?? '?'
       const spec = q?.ratchets.find((r) => r.id === metric)
@@ -131,6 +137,8 @@ export interface TidyInput {
   exists: (path: string) => boolean
   /** head의 파일 줄 수(셀 수 있는 것만) */
   lines: ReadonlyMap<string, number>
+  /** 규칙 승격(M3d)이 켜졌으면 head의 지식 항목과 빠른 명령의 결과(rule_violation의 갚음) */
+  rules?: { head: readonly KnowledgeEntry[]; commands: FastOutcome }
 }
 
 /** 묶음의 tidy 칸(순수). 항목은 계약 tidy의 차례, 그 뒤 나이 순 */
@@ -147,6 +155,7 @@ export function tidyEvidence(o: TidyInput): TidyEvidence {
     ...payoff(i, o.q, {
       deleted: !o.exists(debtFile(i.id)),
       lines: !o.exists(i.anchor.path) ? null : o.lines.get(i.anchor.path),
+      ...(o.rules === undefined ? {} : { rule: ruleFacts(i, o.rules.head, o.rules.commands) }),
     }),
   })
   const byId = new Map(o.items.map((i) => [i.id, i]))
@@ -173,12 +182,13 @@ export function tidyEvidence(o: TidyInput): TidyEvidence {
   }
 }
 
-/** 이 diff의 곁들일 정리 확인. 증거 묶음의 tidy 칸이다. git만 읽는다 */
+/** 이 diff의 곁들일 정리 확인. 증거 묶음의 tidy 칸이다. git만 읽는다. commands는 규칙 승격(M3d)이 켜졌을 때의 명령 결과 */
 export async function checkTidy(
   root: string,
   diff: DiffFacts,
   q: QualityConfig | null,
   contract: Contract | null,
+  commands: readonly CommandEvidence[] | null = null,
 ): Promise<TidyEvidence> {
   const { ids, items } = await debtAt(root, diff.base)
   const read = new Set(items.map((i) => i.id))
@@ -191,6 +201,8 @@ export async function checkTidy(
     .map((i) => i.anchor.path)
   const lines = new Map<string, number>()
   for (const [p, n] of await lineCounts(root, diff.head, anchors)) if (n !== null) lines.set(p, n)
+  const ruled = commands !== null && items.some((i) => i.kind === 'rule_violation')
+  const head = ruled ? await readEntries(root, diff.head) : []
   return tidyEvidence({
     items,
     broken: new Set([...ids].filter((id) => !read.has(id))),
@@ -199,5 +211,6 @@ export async function checkTidy(
     q,
     exists,
     lines,
+    ...(commands === null ? {} : { rules: { head, commands: fastOutcome(q, commands) } }),
   })
 }

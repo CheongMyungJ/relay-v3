@@ -3,7 +3,7 @@
 // 훅은 Claude Code 내장 HTTP 훅으로 앱의 127.0.0.1 서버에 보낸다. 자동 메모리는 끈다.
 // 쉬는 세션에 주는 되먹임(V24)은 자료 파일(feedbackText)과 그 파일을 가리키는 터미널 한 줄(feedbackLine)이다.
 
-import type { FeedbackFact, ReviewFinding } from './types.ts'
+import type { FeedbackFact, M3Switches, ReviewFinding } from './types.ts'
 
 /** relay MCP 서버 이름과 도구 이름 (mcp-bridge, Works.onControl과 같이 쓴다) */
 export const MCP_SERVER = 'relay_work'
@@ -66,15 +66,16 @@ export interface InstructionsInput {
   baseBranch: string
   workBranch: string
   questionMode: 'confirm_each' | 'draft_first'
-  /** 지식 잇기(M3a, V38)가 켜졌나 */
-  knowledge?: boolean
-  /** 곁들일 정리(M3c)가 켜졌나 */
-  tidy?: boolean
+  /** 켜진 M3 장치(V39): knowledge 지식 잇기, tidy 곁들일 정리, promote 규칙 승격. 없는 장치는 꺼짐 */
+  m3?: Partial<M3Switches>
 }
 
 /** 지식 잇기(V38)의 읽기와 쓰기. v2의 지식 형식(D293, D296, D299)이다 */
 const KNOWLEDGE_READ = ` If \`docs/knowledge/\` exists, read the entries related to the request before you write the contract; the request file may end with a list of related entries that relay picked (titles and paths).`
 const KNOWLEDGE_WRITE = `\n\nKnowledge: \`docs/knowledge/[<area>/]<name>.md\` keeps facts for later Works, one entry per file (area: lowercase letters, digits, \`-\`). Of the contract's \`human_rules\`, save the ones later work will also need as knowledge entries in this Work and commit them; do not save scope instructions that only apply to this Work ("leave X alone this time"): code that does not follow a rule yet goes under \`## 아직 규칙을 따르지 않는 곳\` of that rule's entry. An entry starts with a front matter between \`---\` lines: \`kind: rule | fact | history | pitfall\`, \`source: human | investigation\`, and optionally \`anchor: <the code name the entry is about>\`. Then a \`# \` title and \`## 규칙\` (for a rule) or \`## 내용\` (otherwise); optional sections are \`## 아직 규칙을 따르지 않는 곳\` and \`## 아직 정하지 않은 것\` (rule only; what the human said is not decided yet) and \`## 바뀐 이력\`. When a rule changes, edit its entry and add a line to \`## 바뀐 이력\`. relay checks the knowledge on the head: an entry with a format error sends the change to the human; an anchor that is not in the head and an entry whose \`## 아직 규칙을 따르지 않는 곳\` lists a file you changed without editing the entry are shown to the human.`
+
+/** 규칙 승격(M3d, V42): 기계로 볼 수 있는 규칙은 검사로, `check:`와 quality.json rules, 허용 목록은 줄어들기만, rule_violation 갚음 */
+const PROMOTE = `\n\nRule checks: when you write or edit a \`kind: rule\` entry in \`docs/knowledge/\` and a machine can check the rule, add the check to the repository (the lint config, or a script that a fast command in \`.relay/quality.json\` runs), name it in the entry's front matter as \`check: <command or lint rule name>\` and list the same name in \`rules\` of \`.relay/quality.json\` (a guard file: the human sees the change). The entry's \`## 아직 규칙을 따르지 않는 곳\` is that check's allow list: the check skips exactly those paths, and the list only shrinks; a path added to the list of a rule whose check is in \`rules\` sends the change to the human. A \`rule_violation\` debt item names the check in \`anchor.metric\`: it is paid when its path is off the allow list and the fast commands pass. relay shows the human the rules whose check is not in \`rules\` as rules kept only in words.`
 
 /** 곁들일 정리(M3c): request.md 끝의 빚 목록, 계약 tidy, 상한, 갚는 법 */
 const TIDY = ` The request file may end with the debt items of the repository (oldest first). You may put the ids of items on paths this Work changes anyway into \`tidy\`; the human keeps or removes them with the contract. Leave items marked as in progress (another Work took them). A tidy-up stays inside the files the Work changes and within \`tidy_max_lines\` changed lines (\`.relay/quality.json\`, default 100). Paying an item: for \`accepted_regression\` of a file-size ratchet, bring the file down to the ratchet's max; for \`tidy\` and \`test_gap\`, do what it says. Then delete the item's file in \`.relay/debt/\`. The evidence shows the human which items are paid and which taken items are not.`
@@ -94,7 +95,7 @@ export function instructionsText(o: InstructionsInput): string {
   const tag = `[${o.contractId}:C1.1]`
   const examplesFile = `${o.examplesDir.replace(/\/+$/, '')}/${o.contractId}.json`
   const guarded = [...new Set([o.baseBranch, 'main', 'master'])].map((b) => `\`${b}\``)
-  const k = o.knowledge === true
+  const k = o.m3?.knowledge === true
   return `# relay Work ${o.workId}
 
 You work on one relay Work in this repository. Work branch: \`${o.workBranch}\`. Base branch: \`${o.baseBranch}\`. The request is in the file the first prompt names. relay is the app that shows your terminal to the human, next to the contract and the evidence.
@@ -118,7 +119,7 @@ The contract is JSON:
 - \`non_goals\`: what this Work does not do.
 - \`human_rules\`: rules only the human knows (business rules, time zones, compatibility promises, who uses the behavior).
 - \`hint\`: the human's suggestion about the kind of work, if the request has one.
-- \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.${o.tidy === true ? TIDY : ''}
+- \`tidy\`: ids of debt items you take on as a tidy-up, or \`[]\`.${o.m3?.tidy === true ? TIDY : ''}
 - \`delivery\` (optional): how the units are delivered; see Units below.
 
 The contract explains the request:
@@ -138,7 +139,7 @@ Ask the human with \`AskUserQuestion\` for facts only the human knows. Do not as
 
 ## 4. After approval
 
-How you do the work is up to you. relay writes the contract's examples to \`${examplesFile}\` in this worktree, as an object from example id to \`{input, output?, error?, note?}\`: a draft when \`${TOOL_SUBMIT}\` accepts the contract, and the approved version when the human approves it or approves a contract change. Do not edit this file. Commit it with your tests, and have the tests read the examples from it. relay runs the acceptance tests with the approved file in place; a committed file that is missing or differs from the approved one sends the change to the human. Put the tag \`${tag}\` in the name of a test (or of its describe block) that shows example C1.1: relay matches tests to contract lines by these tags only.${k ? KNOWLEDGE_WRITE : ''}
+How you do the work is up to you. relay writes the contract's examples to \`${examplesFile}\` in this worktree, as an object from example id to \`{input, output?, error?, note?}\`: a draft when \`${TOOL_SUBMIT}\` accepts the contract, and the approved version when the human approves it or approves a contract change. Do not edit this file. Commit it with your tests, and have the tests read the examples from it. relay runs the acceptance tests with the approved file in place; a committed file that is missing or differs from the approved one sends the change to the human. Put the tag \`${tag}\` in the name of a test (or of its describe block) that shows example C1.1: relay matches tests to contract lines by these tags only.${k ? KNOWLEDGE_WRITE : ''}${o.m3?.promote === true ? PROMOTE : ''}
 
 ## 5. Evidence
 

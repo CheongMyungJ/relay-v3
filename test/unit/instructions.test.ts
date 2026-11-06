@@ -143,7 +143,7 @@ describe('instructionsText', () => {
   })
 
   test('지식 잇기(V38): 켜면 읽기·근거·쓰기와 v2 형식을 담고, 끄면 지식 폴더를 말하지 않는다', () => {
-    const on = instructionsText({ ...base, questionMode: 'confirm_each', knowledge: true })
+    const on = instructionsText({ ...base, questionMode: 'confirm_each', m3: { knowledge: true } })
     for (const s of [
       'If `docs/knowledge/` exists, read the entries related to the request before you write the contract',
       '`{type: "knowledge", id}` (id: the path of a knowledge entry)',
@@ -162,7 +162,9 @@ describe('instructionsText', () => {
     const off = instructionsText({ ...base, questionMode: 'confirm_each' })
     expect(off).not.toContain('docs/knowledge')
     expect(off).toContain('relay checks code and request grounds')
-    expect(instructionsText({ ...base, questionMode: 'confirm_each', knowledge: false })).toBe(off)
+    expect(
+      instructionsText({ ...base, questionMode: 'confirm_each', m3: { knowledge: false } }),
+    ).toBe(off)
   })
 
   test('질문 방식: 결정마다 확인은 입출력 예시와 오류 동작을 따로, 초안 우선은 초안을 먼저', () => {

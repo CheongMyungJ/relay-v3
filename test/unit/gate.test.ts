@@ -193,6 +193,16 @@ const FACTS: Fact[] = [
     },
     '지식 형식 오류: docs/knowledge/a.md (첫 `# ` 제목 줄 없음)',
   ],
+  [
+    '승격된 규칙의 허용 목록이 늚(V42)',
+    {
+      knowledge: {
+        changed: ['docs/knowledge/a.md'],
+        issues: [{ path: 'docs/knowledge/a.md', kind: 'allow', detail: '`src/c.js`가 더해짐' }],
+      },
+    },
+    '규칙의 허용 목록이 늚: docs/knowledge/a.md (`src/c.js`가 더해짐)',
+  ],
   ['리뷰 없음', { review: null }, '리뷰 없음'],
   ['리뷰 실패', { review: { status: 'failed', findings: [] } }, '리뷰 실패'],
   ['리뷰 건너뜀', { review: { status: 'skipped', findings: [] } }, '리뷰를 건너뜀'],
@@ -304,10 +314,11 @@ describe('까닭은 엄격한 것부터 모두 모은다', () => {
       expect(run({ examples_file }).conclusion).toBe('auto_merge_candidate')
   })
 
-  test('지식의 anchor·아직 따르지 않는 곳은 알림이고, 끈 장치(null)와 M3 앞의 묶음(칸 없음)은 사실이 없다(V38)', () => {
+  test('지식의 anchor·아직 따르지 않는 곳·말로만은 알림이고, 끈 장치(null)와 M3 앞의 묶음(칸 없음)은 사실이 없다(V38)', () => {
     const issues = [
       { path: 'docs/knowledge/a.md', kind: 'anchor' as const, detail: 'x' },
       { path: 'docs/knowledge/b.md', kind: 'not_yet' as const, detail: 'y' },
+      { path: 'docs/knowledge/c.md', kind: 'spoken' as const, detail: '말로만(V42)' },
     ]
     for (const knowledge of [{ changed: [], issues }, null, undefined])
       expect(run({ knowledge }).conclusion).toBe('auto_merge_candidate')

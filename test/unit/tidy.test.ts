@@ -98,10 +98,17 @@ describe('payoff', () => {
     })
   })
 
-  test('rule_violation은 가르지 못함(M3d)', () => {
-    expect(payoff(item('a', { kind: 'rule_violation' }), q, { deleted: true, lines: 1 })).toEqual({
+  test('rule_violation은 규칙 승격이 가른다: 꺼졌으면 모름, 켜졌으면 rulePayoff(자세한 것은 promote.test.ts)', () => {
+    const rule = item('a', { kind: 'rule_violation', anchor: { path: 'src/a.js', metric: 'no-x' } })
+    expect(payoff(rule, q, { deleted: true, lines: 1 })).toEqual({
       status: 'unknown',
-      detail: '규칙 승격(M3d) 전이라 가르지 못함 (항목 파일을 지움)',
+      detail: '규칙 승격(M3d)이 꺼져 있어 가르지 못함 (항목 파일을 지움)',
+    })
+    const promoted = quality({ rules: ['no-x'] })
+    const facts = { entries: ['docs/knowledge/x.md'], allowed: [], commands: 'pass' as const }
+    expect(payoff(rule, promoted, { deleted: false, lines: 1, rule: facts })).toEqual({
+      status: 'paid',
+      detail: '`src/a.js`가 허용 목록에서 빠지고 빠른 명령이 통과 (항목 파일이 남음)',
     })
   })
 
@@ -172,7 +179,7 @@ describe('tidyEvidence', () => {
       ['nope', 'unknown', '기준의 빚 장부에 없음'],
       ['bad', 'unknown', '기준의 항목 파일을 읽지 못함(형식)'],
       ['gone', 'paid', '항목 파일을 지움'],
-      ['rule', 'unknown', '규칙 승격(M3d) 전이라 가르지 못함 (항목 파일이 남음)'],
+      ['rule', 'unknown', '규칙 승격(M3d)이 꺼져 있어 가르지 못함 (항목 파일이 남음)'],
       ['dir', 'open', '항목 파일이 남음'],
     ])
     expect(t.items[0]).toMatchObject({ path: 'src/calc.js', kind: 'tidy', reason: 'calc를 정리' })
@@ -240,7 +247,7 @@ describe('품질 기준과 지침', () => {
       workBranch: 'relay/c',
       questionMode: 'confirm_each',
     } as const
-    const on = instructionsText({ ...base, tidy: true })
+    const on = instructionsText({ ...base, m3: { tidy: true } })
     for (const s of [
       'The request file may end with the debt items of the repository (oldest first)',
       'Leave items marked as in progress',
@@ -251,6 +258,6 @@ describe('품질 기준과 지침', () => {
       expect(on, s).toContain(s)
     const off = instructionsText(base)
     expect(off).not.toContain('tidy_max_lines')
-    expect(instructionsText({ ...base, tidy: false })).toBe(off)
+    expect(instructionsText({ ...base, m3: { tidy: false } })).toBe(off)
   })
 })

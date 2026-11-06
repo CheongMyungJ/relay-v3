@@ -66,14 +66,16 @@ test('M3 장치 설정(V38): 장치마다 덮고, 모르는 장치나 참·거�
   const home = await makeTempDir('relay-home-')
   const app = await kit.openApp(home)
   const project = await app.works.addProject(kit.repo.dir)
-  expect(project.settings.m3).toEqual({ knowledge: true, debt: true, tidy: true })
+  expect(project.settings.m3).toEqual({ knowledge: true, debt: true, tidy: true, promote: true })
   const off = await app.works.updateSettings(project.id, { m3: { knowledge: false } })
   expect(off.settings).toMatchObject({
-    m3: { knowledge: false, debt: true, tidy: true },
+    m3: { knowledge: false, debt: true, tidy: true, promote: true },
     auto_merge: false,
   })
   const tidy = await app.works.updateSettings(project.id, { m3: { tidy: false } })
-  expect(tidy.settings.m3).toEqual({ knowledge: false, debt: true, tidy: false })
+  expect(tidy.settings.m3).toEqual({ knowledge: false, debt: true, tidy: false, promote: true })
+  const promote = await app.works.updateSettings(project.id, { m3: { promote: false } })
+  expect(promote.settings.m3).toEqual({ knowledge: false, debt: true, tidy: false, promote: false })
   await expect(
     app.works.updateSettings(project.id, { m3: { knowledge: 'no' } as never }),
   ).rejects.toThrow(/m3/)
@@ -87,5 +89,6 @@ test('M3 장치 설정(V38): 장치마다 덮고, 모르는 장치나 참·거�
     knowledge: false,
     debt: true,
     tidy: false,
+    promote: false,
   })
 })

@@ -407,20 +407,37 @@ function FindingGroups(p: { findings: ReviewFinding[]; view: WorkView; unit?: st
   )
 }
 
-/** 지식 확인(V38): 바뀐 지식 파일 수와 문제마다 한 줄. 장치를 껐으면(null) 칸이 없다 */
-function Knowledge(p: { k: NonNullable<EvidenceBundle['knowledge']> }) {
+type KnowledgeEvidence = NonNullable<EvidenceBundle['knowledge']>
+
+function Issues(p: { items: KnowledgeEvidence['issues']; id?: string }) {
   return (
-    <Fold title="지식" count={p.k.issues.length}>
-      <p className="muted">바뀐 지식 파일 {p.k.changed.length}개</p>
-      <ul className="fact-list">
-        {p.k.issues.map((i, n) => (
-          <li key={n}>
-            <Tag tone={KNOWLEDGE_ISSUE[i.kind].tone}>{KNOWLEDGE_ISSUE[i.kind].label}</Tag>
-            <code>{i.path}</code>
-            <span className="muted">{i.detail}</span>
-          </li>
-        ))}
-      </ul>
+    <ul className="fact-list" data-testid={p.id}>
+      {p.items.map((i, n) => (
+        <li key={n}>
+          <Tag tone={KNOWLEDGE_ISSUE[i.kind].tone}>{KNOWLEDGE_ISSUE[i.kind].label}</Tag>
+          <code>{i.path}</code>
+          <span className="muted">{i.detail}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * 지식 확인(V38)과 규칙 승격(V42): 바뀐 지식 파일 수와 문제마다 한 줄, 말로만 남은 규칙(규칙 승격이 켜졌을 때)은 따로 모은다.
+ * 두 장치를 껐으면(null) 칸이 없다. 접힌 칸의 수는 말로만을 뺀 문제다
+ */
+function Knowledge(p: { k: KnowledgeEvidence; promote: boolean }) {
+  const spoken = p.k.issues.filter((i) => i.kind === 'spoken')
+  const rest = p.k.issues.filter((i) => i.kind !== 'spoken')
+  return (
+    <Fold title="지식" count={rest.length}>
+      <p className="muted" data-testid="knowledge-summary">
+        바뀐 지식 파일 {p.k.changed.length}개
+        {p.promote ? ` · 말로만 남은 규칙 ${spoken.length}개` : ''}
+      </p>
+      <Issues items={rest} />
+      {spoken.length > 0 ? <Issues items={spoken} id="knowledge-spoken" /> : null}
     </Fold>
   )
 }
@@ -505,7 +522,7 @@ function Details(p: { view: WorkView; e: EvidenceBundle; unit?: string; integrat
           ))}
         </ul>
       </Fold>
-      {e.knowledge ? <Knowledge k={e.knowledge} /> : null}
+      {e.knowledge ? <Knowledge k={e.knowledge} promote={view.m3.promote} /> : null}
       {e.tidy ? <TidyFold t={e.tidy} /> : null}
       {p.integration ? null : (
         <Fold title="리뷰 지적" count={findings.length}>

@@ -258,8 +258,7 @@ export async function newWork(
       baseBranch: base,
       workBranch: branch,
       questionMode: project.settings.question_mode,
-      knowledge: rec.m3.knowledge,
-      tidy: rec.m3.tidy,
+      m3: rec.m3,
     }),
   )
   return rec

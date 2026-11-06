@@ -54,19 +54,26 @@ export async function checkKnowledgeGround(
     : { ok: true, detail: `지식 항목이 있음 (${path})` }
 }
 
+const inDir = (p: string | undefined) => p !== undefined && p.startsWith(`${KNOWLEDGE_DIR}/`)
+// 지식 폴더의 .md(README는 사람의 안내라 뺀다). 지식 경로가 아닌 것(영역이 두 단계, 영역 이름에 대문자 등)은 형식 오류다
+const entryLike = (p: string | undefined) =>
+  inDir(p) && p?.endsWith('.md') === true && !/\/readme\.md$/i.test(p)
+const touchedOf = (diff: DiffFacts) =>
+  diff.files.filter((f) => entryLike(f.path) || entryLike(f.old_path))
+
+/** 이 diff가 바꾼 지식 파일(옮겼으면 새 자리, 지웠으면 옛 자리). 묶음의 knowledge.changed다 */
+export function knowledgeChanged(diff: DiffFacts): string[] {
+  const touched = touchedOf(diff)
+  return [...new Set(touched.map((f) => (entryLike(f.path) ? f.path : (f.old_path ?? ''))))]
+}
+
 /** 이 diff의 지식 확인. 증거 묶음의 knowledge 칸이다 */
 export async function checkKnowledge(
   root: string,
   diff: DiffFacts,
 ): Promise<{ changed: string[]; issues: KnowledgeIssue[] }> {
-  const inDir = (p: string | undefined) => p !== undefined && p.startsWith(`${KNOWLEDGE_DIR}/`)
-  // 지식 폴더의 .md(README는 사람의 안내라 뺀다). 지식 경로가 아닌 것(영역이 두 단계, 영역 이름에 대문자 등)은 형식 오류다
-  const entryLike = (p: string | undefined) =>
-    inDir(p) && p?.endsWith('.md') === true && !/\/readme\.md$/i.test(p)
-  const touched = diff.files.filter((f) => entryLike(f.path) || entryLike(f.old_path))
-  const changed = [
-    ...new Set(touched.map((f) => (entryLike(f.path) ? f.path : (f.old_path ?? '')))),
-  ]
+  const touched = touchedOf(diff)
+  const changed = knowledgeChanged(diff)
   const issues: KnowledgeIssue[] = []
   for (const f of touched)
     if (f.status !== 'D' && entryLike(f.path) && !isKnowledgePath(f.path))

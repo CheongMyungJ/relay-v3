@@ -192,10 +192,11 @@ function ratchetFacts(e: EvidenceBundle): string[] {
   ]
 }
 
-/** 지식 형식 오류(V38). anchor와 아직 따르지 않는 곳은 알림이라 사실이 아니다 */
+/** 지식 형식 오류(V38)와 승격된 규칙의 늘어난 허용 목록(V42). anchor·아직 따르지 않는 곳·말로만은 알림이라 사실이 아니다 */
 function knowledgeFacts(k: EvidenceBundle['knowledge']): string[] {
-  const format = (k?.issues ?? []).filter((i) => i.kind === 'format')
-  return format.map((i) => `지식 형식 오류: ${i.path} (${clip(i.detail)})`)
+  const facts = (k?.issues ?? []).filter((i) => i.kind === 'format' || i.kind === 'allow')
+  const label = (kind: string) => (kind === 'format' ? '지식 형식 오류' : '규칙의 허용 목록이 늚')
+  return facts.map((i) => `${label(i.kind)}: ${i.path} (${clip(i.detail)})`)
 }
 
 function contractFacts(contract: Contract | null): string[] {

@@ -73,7 +73,7 @@ export interface QualityConfig {
   /** 승인된 예시 자료 폴더 */
   examples_dir: string
   ratchets: RatchetSpec[]
-  /** 지식에서 승격된 검사의 위치(설명용, 판정에 쓰지 않음) */
+  /** 지식에서 승격된 검사의 이름(M3d): 규칙 항목의 `check:`가 여기 있으면 승격됨, 없으면 말로만 */
   rules: string[]
   auto: AutoCondition[]
   /** 곁들인 정리(M3c) 몫의 바뀐 줄 상한. 없으면 100 */
@@ -299,13 +299,13 @@ export interface FeedbackFact {
 // ── M3 장치 (docs/m3-design.md) ──────────────────────────────────────────────
 
 /** M3 장치. 프로젝트 설정 m3과 환경 변수 RELAY_M3(engine/m3.ts)가 켜고 끈다. 장치를 더하면 이름을 더한다 */
-export type M3Device = 'knowledge' | 'debt' | 'tidy'
+export type M3Device = 'knowledge' | 'debt' | 'tidy' | 'promote'
 export type M3Switches = Record<M3Device, boolean>
 
-/** 지식 확인 문제(V38). format은 형식 오류(사람 머지 사실), anchor·not_yet은 알림 */
+/** 지식 확인 문제(V38, V42). format·allow(승격된 규칙의 허용 목록이 늚)는 사람 머지 사실, anchor·not_yet·spoken(말로만)은 알림 */
 export interface KnowledgeIssue {
   path: string
-  kind: 'format' | 'anchor' | 'not_yet'
+  kind: 'format' | 'anchor' | 'not_yet' | 'spoken' | 'allow'
   detail: string
 }
 
@@ -351,7 +351,7 @@ export interface EvidenceBundle {
     prompt_version?: number
     request?: boolean
   } | null
-  /** 지식 확인(M3a, V38): 이 diff가 바꾼 지식 파일과 문제. 장치를 껐거나 M3 앞의 묶음은 null이거나 칸이 없다 */
+  /** 지식 확인(M3a V38, 규칙 승격 M3d V42): 이 diff가 바꾼 지식 파일과 문제. 두 장치를 껐거나 M3 앞의 묶음은 null이거나 칸이 없다 */
   knowledge?: { changed: string[]; issues: KnowledgeIssue[] } | null
   /** 빚 기록 커밋(M3b): 앱이 from(잰 head) 위에 .relay/debt/의 items만 더해 head로 옮겼다. 다시 재지 않은 묶음이다 */
   debt_commit?: { from: string; items: string[] } | null
@@ -429,7 +429,7 @@ export interface DebtItem {
   created: string
 }
 
-/** 빚 한 항목의 갚음(M3c). unknown: 가르지 못함(rule_violation, 파일 줄 수가 아닌 래칫, 기준에 없는 id). kind null은 없는 id */
+/** 빚 한 항목의 갚음(M3c). unknown: 가르지 못함(승격되지 않은 rule_violation, 파일 줄 수가 아닌 래칫, 기준에 없는 id). kind null은 없는 id */
 export interface DebtPayoff extends Pick<DebtItem, 'id' | 'reason'> {
   path: string
   kind: DebtKind | null

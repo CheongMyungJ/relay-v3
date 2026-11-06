@@ -48,7 +48,8 @@ import {
   testsOf,
 } from './judge.ts'
 import { coveredDebt } from './debt-record.ts'
-import { checkKnowledge } from './knowledge.ts'
+import { checkKnowledge, knowledgeChanged } from './knowledge.ts'
+import { checkPromote } from './promote.ts'
 import { checkTidy } from './tidy.ts'
 import { message, workspace, type Workspace } from './workspace.ts'
 
@@ -83,6 +84,11 @@ export interface CheckOptions extends Partial<M3Switches> {
   debt?: boolean
   /** 곁들일 정리(M3c, V41): 빚의 갚음과 정리 몫(묶음의 tidy). 계약은 examplesContractPath(없으면 contractPath). 기본 꺼짐(null) */
   tidy?: boolean
+  /**
+   * 규칙 승격(M3d, V42): 말로만 남은 규칙과 승격된 규칙의 늘어난 허용 목록(묶음의 knowledge.issues), tidy가 켜졌으면
+   * rule_violation의 갚음. 기본 꺼짐
+   */
+  promote?: boolean
 }
 
 /** worktree 잠금을 기다리는 기본 시간 */
@@ -178,13 +184,28 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
   } finally {
     await release?.().catch(() => {})
   }
-  const knowledge =
+  const known =
     opts.knowledge === true
       ? await checkKnowledge(root, diff).catch((e) => {
           missing.push(`지식 확인: ${message(e)}`)
           return null
         })
       : null
+  const promoted =
+    opts.promote === true
+      ? await checkPromote(root, diff, q).catch((e) => {
+          missing.push(`규칙 승격 확인: ${message(e)}`)
+          return null
+        })
+      : null
+  // 두 장치가 한 칸에 문제를 둔다. 하나만 켜졌으면 그 장치의 문제만
+  const knowledge =
+    known === null && promoted === null
+      ? null
+      : {
+          changed: known?.changed ?? knowledgeChanged(diff),
+          issues: [...(known?.issues ?? []), ...(promoted ?? [])],
+        }
   const paths = diff.files.map((f) => f.path)
   const debt =
     opts.debt === true
@@ -195,10 +216,12 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
       : null
   const tidy =
     opts.tidy === true
-      ? await checkTidy(root, diff, q, whole).catch((e) => {
-          missing.push(`빚 갚음 확인: ${message(e)}`)
-          return null
-        })
+      ? await checkTidy(root, diff, q, whole, opts.promote === true ? commands : null).catch(
+          (e) => {
+            missing.push(`빚 갚음 확인: ${message(e)}`)
+            return null
+          },
+        )
       : null
 
   const bundle: EvidenceBundle = {

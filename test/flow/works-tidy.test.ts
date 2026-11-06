@@ -65,7 +65,7 @@ async function measured(works: Awaited<ReturnType<typeof open>>['works'], projec
 test('켜면: 빚 목록과 지침, 증거의 갚은 빚·건드린 곳의 빚(알림), 잡힘은 다른 Work에 진행 중', async () => {
   const { app, works, project } = await open()
   const a = await measured(works, project)
-  expect(works.record(a).m3).toEqual({ knowledge: true, debt: true, tidy: true })
+  expect(works.record(a).m3).toEqual({ knowledge: true, debt: true, tidy: true, promote: true })
   const request = (await app.store.readText(a, 'request.md')) ?? ''
   expect(request.startsWith(`${REQUEST}\n\n${TIDY_TITLE}\n`)).toBe(true)
   expect(request.split('\n').filter((l) => l.startsWith('- '))).toEqual([
@@ -105,7 +105,12 @@ test('켜면: 빚 목록과 지침, 증거의 갚은 빚·건드린 곳의 빚(�
 test('RELAY_M3=off: 목록·지침·tidy 칸 없이 M2.2 그대로', async () => {
   const { app, works, project } = await open('off')
   const id = await measured(works, project)
-  expect(works.record(id).m3).toEqual({ knowledge: false, debt: false, tidy: false })
+  expect(works.record(id).m3).toEqual({
+    knowledge: false,
+    debt: false,
+    tidy: false,
+    promote: false,
+  })
   expect(await app.store.readText(id, 'request.md')).toBe(`${REQUEST}\n`)
   const start = (await kit.fake()).find((e) => e.type === 'start')
   expect(String(start?.instructions)).not.toContain('tidy_max_lines')

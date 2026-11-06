@@ -105,7 +105,7 @@ async function run(m3?: string) {
 
 test('켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge와 형식 오류의 사람 머지, relay_check', async () => {
   const { app, works, id, groundings, instructions } = await run()
-  expect(works.record(id).m3).toEqual({ knowledge: true, debt: true, tidy: true })
+  expect(works.record(id).m3).toEqual({ knowledge: true, debt: true, tidy: true, promote: true })
   const request = (await app.store.readText(id, 'request.md')) ?? ''
   expect(request.startsWith(`${REQUEST}\n\n${LIST_HEADING}\n`)).toBe(true)
   expect(request).toContain('- clamp는 hi로 자른다 — `docs/knowledge/calc/clamp.md`')
@@ -129,6 +129,9 @@ test('켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge�
           '이 diff가 `src/calc.js`를 바꿨는데 항목의 `## 아직 규칙을 따르지 않는 곳`에 그대로 있고 항목은 고치지 않음',
       },
       { path: 'docs/knowledge/calc/lo.md', kind: 'format', detail: '첫 `# ` 제목 줄 없음' },
+      // 규칙 승격(M3d)도 켜져 있다: check가 없는 규칙은 말로만(알림, [흐름] works-promote.test.ts)
+      { path: 'docs/knowledge/calc/clamp.md', kind: 'spoken', detail: '검사(`check:`)가 없음' },
+      { path: 'docs/knowledge/calc/lo.md', kind: 'spoken', detail: '검사(`check:`)가 없음' },
     ],
   })
   expect(v.gate?.reasons).toContain(
@@ -146,7 +149,12 @@ test('켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge�
 
 test('RELAY_M3=off: 목록·지침·근거 확인·knowledge 칸 없이 M2 그대로', async () => {
   const { app, works, id, groundings, instructions } = await run('off')
-  expect(works.record(id).m3).toEqual({ knowledge: false, debt: false, tidy: false })
+  expect(works.record(id).m3).toEqual({
+    knowledge: false,
+    debt: false,
+    tidy: false,
+    promote: false,
+  })
   expect(await app.store.readText(id, 'request.md')).toBe(`${REQUEST}\n`)
   expect(instructions).not.toContain('docs/knowledge/')
   expect(groundings.filter((g) => g.ground.type === 'knowledge').map((g) => g.detail)).toEqual([

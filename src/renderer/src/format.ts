@@ -85,11 +85,13 @@ export const SIGNAL_LABEL: Record<SignalKind, string> = {
   structure_change: '구조 변경',
 }
 
-/** 지식 확인의 문제(V38): 형식 오류는 관문의 사실, 나머지는 알림 */
+/** 지식 확인의 문제(V38, V42): 형식 오류와 허용 목록이 늚은 관문의 사실, 나머지는 알림 */
 export const KNOWLEDGE_ISSUE: Record<KnowledgeIssue['kind'], { label: string; tone: Tone }> = {
   format: { label: '형식 오류', tone: 'bad' },
   anchor: { label: 'anchor', tone: 'warn' },
   not_yet: { label: '아직 따르지 않는 곳', tone: 'warn' },
+  allow: { label: '허용 목록이 늚', tone: 'bad' },
+  spoken: { label: '말로만', tone: 'muted' },
 }
 
 export const RATCHET: Record<RatchetResult['status'], { label: string; tone: Tone }> = {

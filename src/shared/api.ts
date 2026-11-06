@@ -42,7 +42,7 @@ export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   review: 'all',
   merge_method: 'squash',
   question_mode: 'confirm_each',
-  m3: { knowledge: true, debt: true, tidy: true },
+  m3: { knowledge: true, debt: true, tidy: true, promote: true },
 }
 
 /**

@@ -1,4 +1,4 @@
-// [단위] M3 장치의 스위치(V39, engine/m3.ts: knowledge M3a, debt M3b, tidy M3c): 프로젝트 설정은 장치마다, RELAY_M3이 있으면 그것이 모두를 덮는다
+// [단위] M3 장치의 스위치(V39, engine/m3.ts: knowledge M3a, debt M3b, tidy M3c, promote M3d): 프로젝트 설정은 장치마다, RELAY_M3이 있으면 그것이 모두를 덮는다
 import { describe, expect, test } from 'vitest'
 import { M3_DEVICES, M3_OFF, M3_ON, m3Settings, m3Switches } from '../../src/engine/m3.ts'
 import { DEFAULT_SETTINGS } from '../../src/shared/api.ts'
@@ -12,10 +12,11 @@ describe('m3Settings', () => {
   })
 
   test('장치마다 참·거짓만 받고 틀린 칸과 모르는 장치는 버린다', () => {
-    expect(m3Settings({ knowledge: false })).toEqual({ knowledge: false, debt: true, tidy: true })
-    expect(m3Settings({ knowledge: 'no', debt: 0, rules: false })).toEqual(M3_ON)
-    expect(m3Settings({ debt: false })).toEqual({ knowledge: true, debt: false, tidy: true })
-    expect(m3Settings({ tidy: false })).toEqual({ knowledge: true, debt: true, tidy: false })
+    expect(m3Settings({ knowledge: false })).toEqual({ ...M3_ON, knowledge: false })
+    expect(m3Settings({ knowledge: 'no', debt: 0, rules: false, promote: 'off' })).toEqual(M3_ON)
+    expect(m3Settings({ debt: false })).toEqual({ ...M3_ON, debt: false })
+    expect(m3Settings({ tidy: false })).toEqual({ ...M3_ON, tidy: false })
+    expect(m3Settings({ promote: false })).toEqual({ ...M3_ON, promote: false })
     expect(m3Settings('off')).toEqual(M3_ON)
   })
 })
@@ -24,7 +25,7 @@ describe('m3Switches', () => {
   test('RELAY_M3이 없거나 비면 프로젝트 설정', () => {
     for (const env of [undefined, '', '  '])
       expect(m3Switches({ knowledge: false }, env)).toEqual({
-        switches: { knowledge: false, debt: true, tidy: true },
+        switches: { ...M3_ON, knowledge: false },
         errors: [],
       })
   })
@@ -39,20 +40,24 @@ describe('m3Switches', () => {
 
   test('쉼표로 이은 이름은 그 장치만 켜고, 모르는 이름은 알린다', () => {
     expect(m3Switches({ knowledge: false }, 'knowledge')).toEqual({
-      switches: { knowledge: true, debt: false, tidy: false },
+      switches: { ...M3_OFF, knowledge: true },
       errors: [],
     })
     expect(m3Switches({ debt: false }, 'debt')).toEqual({
-      switches: { knowledge: false, debt: true, tidy: false },
+      switches: { ...M3_OFF, debt: true },
       errors: [],
     })
     expect(m3Switches({ tidy: false }, 'tidy')).toEqual({
-      switches: { knowledge: false, debt: false, tidy: true },
+      switches: { ...M3_OFF, tidy: true },
+      errors: [],
+    })
+    expect(m3Switches({ promote: false }, 'promote')).toEqual({
+      switches: { ...M3_OFF, promote: true },
       errors: [],
     })
     expect(m3Switches(undefined, 'rules, knowledge,')).toEqual({
-      switches: { knowledge: true, debt: false, tidy: false },
-      errors: ["RELAY_M3: 모르는 장치 'rules' (knowledge, debt, tidy)"],
+      switches: { ...M3_OFF, knowledge: true },
+      errors: ["RELAY_M3: 모르는 장치 'rules' (knowledge, debt, tidy, promote)"],
     })
   })
 })

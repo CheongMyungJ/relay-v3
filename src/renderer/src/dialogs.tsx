@@ -296,6 +296,23 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
             onChange={(e) => set('m3', { ...s.m3, tidy: e.target.checked })}
           />
         </label>
+        <label className="switch-row">
+          <span>
+            <span className="switch-title">규칙 승격</span>
+            <span className="help">
+              기계로 볼 수 있는 지식 규칙을 lint 설정이나 스크립트의 검사로 옮겨 check:에 적게 하고,
+              말로만 남은 규칙과 승격된 규칙의 늘어난 허용 목록을 증거에 보입니다. 새로 만드는
+              Work에 적용됩니다.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            checked={s.m3.promote}
+            onChange={(e) => set('m3', { ...s.m3, promote: e.target.checked })}
+          />
+        </label>
         <ErrorLine text={act.error} />
         <div className="row end">
           <button type="button" className="ghost" onClick={p.onClose}>
