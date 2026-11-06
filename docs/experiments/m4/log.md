@@ -20,3 +20,4 @@
     - 09 `857686411cc46b2a62e8fc036c95e7a1f2c4b45808df608c3fee9f86d10ab8e4`
     - 47 `5702d69623a8fc427410e3dd875227387fe4e298562a8c93d2f502ac0f13fed8`
   - 재생 고정 자료 `test/fixtures/track-replay`, `gate-replay`의 파일을 이름 순으로 `sha256sum`한 출력의 sha256: `af58e6d2a250e20ed98f949a416600407c6a90775834b41b9c39a9626a894e7e`
+- 배치 기준 SHA: relay-v3 `d287c4a`(규약 고정 커밋). 배치 시작 22:52 UTC.
