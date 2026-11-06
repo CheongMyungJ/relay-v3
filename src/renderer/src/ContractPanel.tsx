@@ -1,6 +1,7 @@
 // [계약] 패널 (docs/m2-modules.md 4절): 목표, 그 바로 밑에 비목표(V29), hint, 줄 표(종류, 글, 근거와 확인됨/추정, 예시
 // 입력→출력, 확인 방법), 사람만 아는 규칙. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 승인을 기다리면
 // [승인]과 늘 보이는 고칠 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과 제안의 차이, [받아들이기]·[거절하기].
+// Work를 만들 때 찾은 기록 안 된 나빠짐(M3b)은 맨 위에 알린다.
 import { useState } from 'react'
 import type { Contract, ContractLine, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
@@ -17,12 +18,25 @@ import {
   type DeltaItem,
   type Tone,
 } from './format.ts'
+import { unrecordedText } from './debt.ts'
 import { Empty, ErrorLine, Tag, useAction } from './ui.tsx'
 
 export function ContractPanel({ view }: { view: WorkView }) {
   const shown = view.pendingContract ?? view.contract
+  const unrecorded = unrecordedText(view)
   return (
     <div className="panel-body" data-testid="contract-panel">
+      {unrecorded ? (
+        <div className="callout tone-warn" role="note" data-testid="unrecorded">
+          <p className="callout-title">기록 안 된 나빠짐</p>
+          <ul className="plain-list">
+            {view.unrecorded.map((u, i) => (
+              <li key={i}>{u}</li>
+            ))}
+          </ul>
+          <p className="muted small">{unrecorded}</p>
+        </div>
+      ) : null}
       {view.state === 'awaiting_approval' && view.pendingContract ? (
         <ApproveBox id={view.id} />
       ) : null}

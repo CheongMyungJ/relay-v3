@@ -102,6 +102,11 @@ export interface WorkRecord {
   feedback: { rounds: number; sent: FeedbackRound[] }
   /** M3 장치의 스위치(V38). Work를 만들 때 정해 끝까지 지닌다. 옛 기록(M3 앞)에는 없다(읽을 때 모두 끔) */
   m3: M3Switches
+  /**
+   * 기록 안 된 나빠짐(M3b): 새 Work를 만들 때 실적 장부의 앞 기록과 기준 브랜치를 견줘 찾은 것(request.md 끝과 [계약]에 보인다).
+   * 장치가 꺼졌거나 없으면 빈 것. 옛 기록에는 없다(읽을 때 빈 것)
+   */
+  unrecorded: string[]
 }
 
 export type WorkFile =
@@ -188,6 +193,7 @@ export function upgradeWork(raw: WorkRecord): WorkRecord {
     exports,
     integration_path: rec.integration_path ?? null,
     m3: { ...M3_OFF, ...rec.m3 },
+    unrecorded: rec.unrecorded ?? [],
   }
 }
 

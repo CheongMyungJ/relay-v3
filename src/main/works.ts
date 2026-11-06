@@ -22,8 +22,8 @@ import {
   type MergeResult,
   type NewWorkInput,
   type PreparedEnd,
-  type ProjectSettings,
   type ProjectView,
+  type SettingsInput,
   type WorkList,
   type WorkView,
 } from '../shared/api.ts'
@@ -269,7 +269,7 @@ export class Works implements WorkCtx {
     return this.projects.add(path)
   }
 
-  updateSettings(projectId: string, s: Partial<ProjectSettings>): Promise<ProjectView> {
+  updateSettings(projectId: string, s: SettingsInput): Promise<ProjectView> {
     return this.projects.updateSettings(projectId, s)
   }
 
@@ -506,9 +506,9 @@ export class Works implements WorkCtx {
     if (this.works.has(id)) this.feedback.typed(id, data)
   }
 
-  /** [머지]: 내보내기 하나. unit은 단위 브랜치의 내보내기(V22) */
-  async merge(id: string, unit?: string): Promise<MergeResult> {
-    const r = await this.evidence.exports.merge(id, unit ?? null, 'human')
+  /** [머지]: 내보내기 하나. unit은 단위 브랜치의 내보내기(V22). o.debt는 [빚으로 남기고 머지](M3b) */
+  async merge(id: string, unit?: string, o: { debt?: boolean } = {}): Promise<MergeResult> {
+    const r = await this.evidence.exports.merge(id, unit ?? null, 'human', o.debt === true)
     return r.ok ? { ok: true } : { ok: false, error: r.error ?? '머지하지 못함' }
   }
 

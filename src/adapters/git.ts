@@ -115,6 +115,17 @@ export async function diffRaw(
   return { nameStatus, numstat, patch }
 }
 
+/** 두 커밋 사이에 바뀐 파일(옮김은 지움과 새로 생김으로 본다). 기록 안 된 나빠짐(M3b)이 앞 기록과 기준을 견준다 */
+export async function changedPaths(repo: string, a: string, b: string): Promise<string[]> {
+  checkRef(a)
+  checkRef(b)
+  const out = await git(
+    ['diff', ...DIFF_FIXED, '--name-only', '-z', '--no-renames', a, b, '--'],
+    repo,
+  )
+  return splitNul(out)
+}
+
 /** sha의 파일 바이트. 파일이 없거나 파일이 아니면 null. sha가 없으면 던진다 */
 async function blobBytes(repo: string, sha: string, path: string): Promise<Buffer | null> {
   checkRef(sha)

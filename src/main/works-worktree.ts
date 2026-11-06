@@ -22,6 +22,7 @@ import {
 import { parseQuality } from '../core/quality.ts'
 import type { DebtItem, QualityConfig } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
+import { unrecordedRegressions, unrecordedSection } from '../engine/debt-record.ts'
 import { relatedKnowledge } from '../engine/knowledge.ts'
 import { m3Switches } from '../engine/m3.ts'
 import { EVENTS, type NewWorkInput } from '../shared/api.ts'
@@ -208,6 +209,7 @@ export async function newWork(
     end_memos: [],
     feedback: { rounds: 0, sent: [] },
     m3: m3Switches(project.settings.m3, deps.m3).switches,
+    unrecorded: [],
   }
   const text = hint ? `${request}\n\n## 일의 성격 제안\n\n${hint}\n` : `${request}\n`
   // 지식 잇기(V38): 기준의 docs/knowledge/에서 요청과 겹치는 항목의 제목과 경로. 읽지 못해도 Work는 만든다
@@ -217,7 +219,18 @@ export async function newWork(
         return ''
       })
     : ''
-  await store.writeText(id, 'request.md', text + related)
+  // 기록 안 된 나빠짐(M3b): 장부의 앞 기록 뒤로 기준에 나빠진 채 들어온 래칫. 찾지 못해도 Work는 만든다
+  if (rec.m3.debt)
+    rec.unrecorded = await unrecordedRegressions({
+      repo: project.path,
+      base: ref,
+      ledger: await store.readLedger(),
+      project: project.id,
+    }).catch((e: unknown) => {
+      deps.log?.('기록 안 된 나빠짐을 찾지 못함', e)
+      return []
+    })
+  await store.writeText(id, 'request.md', text + related + unrecordedSection(rec.unrecorded))
   await store.writeText(
     id,
     'instructions.md',

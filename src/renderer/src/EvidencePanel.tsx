@@ -10,7 +10,8 @@
 import { useState, type ReactNode } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
-import { EndArmed, EndBox, EndMemos } from './EndPanels.tsx'
+import { debtAsk, debtCommitText } from './debt.ts'
+import { DebtChoice, EndArmed, EndBox, EndMemos } from './EndPanels.tsx'
 import { exportSection, integrationText } from './exports.ts'
 import {
   KNOWLEDGE_ISSUE,
@@ -239,6 +240,11 @@ function Verdict(p: { gate: GateResult; view: WorkView; qualityNotice: boolean; 
           <span>
             기준 <code>{shortSha(e.base)}</code>
           </span>
+          {e.debt_commit ? (
+            <span data-testid="debt-commit" title={debtCommitText(e)?.title}>
+              {debtCommitText(e)?.text}
+            </span>
+          ) : null}
           <span>{timeText(e.created_at)}</span>
           <span data-testid="review-meta">
             {reviewMeta(e.review, {
@@ -263,13 +269,17 @@ function Verdict(p: { gate: GateResult; view: WorkView; qualityNotice: boolean; 
 function Actions({ view, unit, measure }: { view: WorkView; unit?: string; measure: boolean }) {
   const act = useAction()
   const [merged, setMerged] = useState<string | null>(null)
+  const [asking, setAsking] = useState(false)
   const running = view.evidenceRunning || view.reviewRunning
   const measurable = measure && (view.state === 'working' || view.state === 'recontract')
-  const merge = () =>
+  // 빚 확인(M3b)은 Work 브랜치의 내보내기(one_branch)만 묻는다
+  const asks = unit === undefined ? debtAsk(view) : null
+  const merge = (debt = false) =>
     void act.run(async () => {
-      const r = await window.relay.merge(view.id, unit)
+      const r = await window.relay.merge(view.id, unit, debt ? { debt: true } : {})
       if (!r.ok) throw new Error(r.error ?? '머지하지 못함')
-      setMerged('머지했습니다')
+      setAsking(false)
+      setMerged(debt ? '빚을 기록하고 머지했습니다' : '머지했습니다')
     })
   return (
     <div className="actions">
@@ -298,7 +308,7 @@ function Actions({ view, unit, measure }: { view: WorkView; unit?: string; measu
                 ? undefined
                 : '관문이 계산되고 구현 중이며, PR이 열려 있고 증거를 잰 head를 가리킬 때'
             }
-            onClick={merge}
+            onClick={() => (asks ? setAsking(true) : merge())}
           >
             머지
           </button>
@@ -314,6 +324,15 @@ function Actions({ view, unit, measure }: { view: WorkView; unit?: string; measu
           </button>
         ) : null}
       </div>
+      {asking && asks ? (
+        <DebtChoice
+          asks={asks}
+          verb="머지"
+          busy={act.busy}
+          onChoose={merge}
+          onCancel={() => setAsking(false)}
+        />
+      ) : null}
       {merged && !act.error ? <p className="muted small">{merged}</p> : null}
       <ErrorLine text={act.error} />
     </div>

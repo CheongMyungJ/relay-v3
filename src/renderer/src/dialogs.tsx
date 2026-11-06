@@ -261,6 +261,25 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
             onChange={(e) => set('m3', { ...s.m3, knowledge: e.target.checked })}
           />
         </label>
+        <label className="switch-row">
+          <span>
+            <span className="switch-title">빚 기록</span>
+            <span className="help">
+              래칫이 나빠진 채 머지하거나 끝낼 때 .relay/debt/에 빚으로 남길지 한 번 묻고, 새 Work를
+              만들 때 기록 안 된 나빠짐을 알립니다. 새로 만드는 Work에 적용됩니다.
+              {p.project.unrecordedDebt > 0
+                ? ` 받아들였지만 기록하지 않은 나빠짐: ${p.project.unrecordedDebt}건.`
+                : ''}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            checked={s.m3.debt}
+            onChange={(e) => set('m3', { ...s.m3, debt: e.target.checked })}
+          />
+        </label>
         <ErrorLine text={act.error} />
         <div className="row end">
           <button type="button" className="ghost" onClick={p.onClose}>

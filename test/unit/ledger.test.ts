@@ -1,6 +1,12 @@
-// [단위] 실적 장부(그림자): 일치·불일치, 버전이 바뀌면 다시 잼, Work를 조건마다 한 건으로(V22 내보내기), 장부 읽기
+// [단위] 실적 장부(그림자): 일치·불일치, 버전이 바뀌면 다시 잼, Work를 조건마다 한 건으로(V22 내보내기), 장부 읽기,
+// 받아들였지만 빚으로 기록하지 않은 나빠짐의 수(M3b)
 import { describe, expect, test } from 'vitest'
-import { parseLedger, trackRecord, type LedgerEntry } from '../../src/core/ledger.ts'
+import {
+  acceptedUnrecorded,
+  parseLedger,
+  trackRecord,
+  type LedgerEntry,
+} from '../../src/core/ledger.ts'
 
 const NOW = { model: 'opus', claude_version: '2.1.300', relay_version: '0.1.0' }
 
@@ -156,5 +162,50 @@ describe('parseLedger', () => {
 
   test('빈 글은 빈 장부', () => {
     expect(parseLedger('')).toEqual([])
+  })
+})
+
+describe('acceptedUnrecorded (M3b)', () => {
+  const accepted = (work: string, debt: string[], more: Partial<LedgerEntry> = {}) =>
+    shadow(work, 'h', {
+      merged_head: 'h',
+      by: 'human',
+      condition: null,
+      shadow: false,
+      accepted: { ratchets: ['file-size'], debt },
+      ...more,
+    })
+
+  test('내보내기마다 마지막으로 받아들인 줄의 빚이 비면 하나로 센다', () => {
+    const entries = [
+      accepted('a', []),
+      accepted('b', ['r-file-size-src-a-js']),
+      // 같은 내보내기를 다시 받아들이면 마지막 것: 기록 없이 끝냈다가 앱 밖에서 머지됨
+      accepted('c', ['r-file-size-src-a-js']),
+      accepted('c', []),
+      // 단위가 다르면 다른 내보내기다(V22)
+      accepted('d', [], { export: 'api' }),
+      accepted('d', [], { export: 'ui' }),
+      // 받아들인 것이 없는 줄과 다른 프로젝트는 세지 않는다
+      merged('e', 'h'),
+      accepted('f', [], { project: 'p2' }),
+    ]
+    expect(acceptedUnrecorded(entries, 'p1')).toBe(4)
+    expect(acceptedUnrecorded(entries, 'p2')).toBe(1)
+    expect(acceptedUnrecorded([], 'p1')).toBe(0)
+  })
+
+  test('accepted와 worse 칸을 읽고, 모양이 다르면 그 줄을 버린다', () => {
+    const worse = [
+      { id: 'tests', status: 'worse' as const, base: 3, head: 2, detail: '시험 수 3 → 2' },
+    ]
+    const good = accepted('a', ['x'], { worse })
+    const text = [
+      JSON.stringify(good),
+      JSON.stringify({ ...good, accepted: { ratchets: 'file-size', debt: [] } }),
+      JSON.stringify({ ...good, accepted: { ratchets: [], debt: [1] } }),
+      JSON.stringify({ ...good, worse: 'file-size' }),
+    ].join('\n')
+    expect(parseLedger(text)).toEqual([good])
   })
 })

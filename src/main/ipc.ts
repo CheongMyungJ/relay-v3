@@ -8,7 +8,7 @@ import {
   type HandPick,
   type IpcResult,
   type NewWorkInput,
-  type ProjectSettings,
+  type SettingsInput,
 } from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
 import { exportable } from './works-evidence.ts'
@@ -29,6 +29,9 @@ const obj = (v: unknown, what: string): Record<string, unknown> => {
 
 /** 단위(V22): 없으면 Work 브랜치의 내보내기 */
 const unitArg = (v: unknown): string | undefined => (v === undefined ? undefined : str(v, '단위'))
+/** 빚 확인(M3b): debt가 참일 때만 [빚으로 남기고 머지·끝내기] */
+const debtArg = (v: unknown): { debt?: true } =>
+  obj(v, '입력').debt === true ? { debt: true } : {}
 
 /** 단위 브랜치의 끝(V22): 브랜치 → SHA 또는 null */
 const tipsArg = (v: unknown): Record<string, string | null> => {
@@ -78,7 +81,7 @@ export function registerIpc(o: {
       return path ? works.addProject(path) : null
     },
     [IPC.updateSettings]: (id, s) =>
-      works.updateSettings(str(id, 'id'), obj(s, '설정') as Partial<ProjectSettings>),
+      works.updateSettings(str(id, 'id'), obj(s, '설정') as SettingsInput),
     [IPC.createWork]: (input) => {
       const i = obj(input, '입력')
       const w: NewWorkInput = {
@@ -99,7 +102,9 @@ export function registerIpc(o: {
         message: typeof x.message === 'string' ? x.message : '',
       })
     },
-    [IPC.merge]: (id, unit) => works.merge(str(id, 'id'), unitArg(unit)),
+    // o는 빚 확인(M3b): debt가 참이면 [빚으로 남기고 머지]
+    [IPC.merge]: (id, unit, o) =>
+      works.merge(str(id, 'id'), unitArg(unit), o === undefined ? {} : debtArg(o)),
     // [끝내기]와 [그래도 끝내기](V25): head는 화면의 HEAD나 상자의 head, force는 [그래도 끝내기], tips는 화면의 단위
     // 브랜치의 끝(V22)
     [IPC.end]: (id, input) => {
@@ -108,6 +113,7 @@ export function registerIpc(o: {
         ...(x.head === undefined ? {} : { head: str(x.head, 'head') }),
         ...(x.force === true ? { force: true } : {}),
         ...(x.tips === undefined ? {} : { tips: tipsArg(x.tips) }),
+        ...debtArg(x),
       })
     },
     [IPC.cancelEnd]: (id) => works.cancelEnd(str(id, 'id')),

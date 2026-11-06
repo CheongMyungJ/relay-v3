@@ -45,6 +45,8 @@ export function workView(ctx: WorkCtx, rec: WorkRecord, feedback: FeedbackDesk):
       units && evidence
         ? [...rt.outside, ...openItems(evidence, rt.contract, rt.head, false)]
         : null,
+    m3: { ...rec.m3 },
+    unrecorded: rec.unrecorded,
   }
 }
 

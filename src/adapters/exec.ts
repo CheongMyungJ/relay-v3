@@ -287,19 +287,28 @@ function gitEnv(): NodeJS.ProcessEnv {
   return env
 }
 
+/** git에 더 줄 것: 표준 입력과 더할 환경 변수(git 위치 변수를 뺀 뒤 얹는다. 빚 기록의 임시 index, M3b) */
+export interface GitInput {
+  input?: string
+  env?: Record<string, string>
+}
+
 /** git을 셸 없이 돌려 표준 출력을 바이트로 돌려준다. 실패하면 GitError를 던진다 */
-export function gitBytes(args: string[], cwd: string): Promise<Buffer> {
+export function gitBytes(args: string[], cwd: string, o: GitInput = {}): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const out: Buffer[] = []
     const err: Buffer[] = []
     const child = spawn('git', args, {
       cwd,
-      env: gitEnv(),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...gitEnv(), ...o.env },
+      stdio: [o.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
     })
-    child.stdout.on('data', (c: Buffer) => out.push(c))
-    child.stderr.on('data', (c: Buffer) => err.push(c))
+    // git이 입력을 다 읽기 전에 끝나도(EPIPE) 던지지 않는다: 까닭은 종료 코드와 stderr에 있다
+    child.stdin?.on('error', () => {})
+    if (o.input !== undefined) child.stdin?.end(o.input)
+    child.stdout?.on('data', (c: Buffer) => out.push(c))
+    child.stderr?.on('data', (c: Buffer) => err.push(c))
     child.on('error', (e) => reject(new GitError(args, null, e.message)))
     child.on('close', (code) => {
       if (code === 0) resolve(Buffer.concat(out))
@@ -309,6 +318,6 @@ export function gitBytes(args: string[], cwd: string): Promise<Buffer> {
 }
 
 /** git을 셸 없이 돌려 표준 출력을 돌려준다. 실패하면 GitError(stderr 포함)를 던진다 */
-export async function git(args: string[], cwd: string): Promise<string> {
-  return (await gitBytes(args, cwd)).toString('utf8')
+export async function git(args: string[], cwd: string, o: GitInput = {}): Promise<string> {
+  return (await gitBytes(args, cwd, o)).toString('utf8')
 }

@@ -2,7 +2,7 @@
 // 머지·닫힘은 그 Work(V22: 그 내보내기)의 줄(같은 줄을 고쳐 쓰거나 새 줄)에 by, merged_head, closed로 남는다.
 // 실적은 조건마다 '자동이었으면 머지했을 head를 사람이 그대로 머지했나'다. 버전이 바뀌면 다시 잰다(philosophy 원칙 4).
 
-import type { Conclusion } from './types.ts'
+import type { Conclusion, RatchetResult } from './types.ts'
 
 export interface LedgerEntry {
   ts: string
@@ -21,6 +21,10 @@ export interface LedgerEntry {
   model?: string
   claude_version?: string
   relay_version: string
+  /** 내보내기 결론 줄(M3b): 이 head의 나빠진 래칫. 다음 Work가 기록 안 된 나빠짐을 찾는 앞 기록이다 */
+  worse?: RatchetResult[]
+  /** 사람이 나빠진 래칫을 받아들여 머지하거나 끝냄(M3b): 그 래칫 id와 기록한 빚 id(비면 기록하지 않음) */
+  accepted?: { ratchets: string[]; debt: string[] }
 }
 
 /** 일치율 기준 */
@@ -110,8 +114,25 @@ function isEntry(v: unknown): v is LedgerEntry {
     optString(e['export']) &&
     optString(e['model']) &&
     optString(e['claude_version']) &&
-    typeof e['relay_version'] === 'string'
+    typeof e['relay_version'] === 'string' &&
+    (e['worse'] === undefined || Array.isArray(e['worse'])) &&
+    (e['accepted'] === undefined || isAccepted(e['accepted']))
   )
+}
+
+const strings = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === 'string')
+
+function isAccepted(v: unknown): boolean {
+  const a = v as Record<string, unknown> | null
+  return typeof a === 'object' && a !== null && strings(a['ratchets']) && strings(a['debt'])
+}
+
+/** 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b): 내보내기마다 마지막으로 받아들인 줄의 debt가 빈 것 */
+export function acceptedUnrecorded(entries: LedgerEntry[], project: string): number {
+  const last = new Map<string, boolean>()
+  for (const e of entries)
+    if (e.project === project && e.accepted) last.set(exportKey(e), e.accepted.debt.length === 0)
+  return [...last.values()].filter(Boolean).length
 }
 
 /** ledger.jsonl을 읽는다. 줄마다 JSON 하나, 깨진 줄과 모양이 다른 줄은 건너뛴다 */

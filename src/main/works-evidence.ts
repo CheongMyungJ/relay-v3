@@ -16,7 +16,7 @@ import { gate, openItems } from '../core/gate.ts'
 import type { Contract, EvidenceBundle, GateResult, Integration, Policy } from '../core/types.ts'
 import type { PrInfo } from '../shared/api.ts'
 import type { ExportRecord, WorkRecord } from './store.ts'
-import { ExportDesk, exportable, ledgerEntry, policyFor, unitOf } from './works-exports.ts'
+import { ExportDesk, exportable, exportLine, policyFor, unitOf } from './works-exports.ts'
 import { ReviewDesk, reusable } from './works-review.ts'
 import {
   contractFile,
@@ -445,7 +445,7 @@ export class EvidenceRunner {
       )
       // 장부 줄과 정책 머지는 내보내기 계기에서만(V23): 중간 head가 그림자 실적이나 자동 머지에 닿지 않게
       if (trigger !== null)
-        await deps.store.appendLedger(ledgerEntry(deps, rec, x, project, bundle.head, result))
+        await deps.store.appendLedger(exportLine(deps, rec, x, project, bundle, result))
       // 사람이 기본 브랜치에 품질 기준을 커밋했으면 알림(V20)을 거둔다
       this.ctx.refreshQuality(project.id)
       this.ctx.note(id, {

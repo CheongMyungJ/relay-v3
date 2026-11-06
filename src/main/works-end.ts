@@ -19,6 +19,7 @@ import { raises } from '../core/review.ts'
 import { nextState } from '../core/work.ts'
 import type { EndInput, EndMemo, EndPending, PreparedEnd } from '../shared/api.ts'
 import type { WorkRecord } from './store.ts'
+import { debtable, recordDebt } from './works-debt.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import {
   delivered,
@@ -77,7 +78,7 @@ export class EndDesk {
     const rec = this.ctx.record(id)
     const ok = nextState(rec.state, { type: 'ended' })
     if (!ok.ok) throw new Error(ok.errors.join('; '))
-    if (o.force === true) return this.force(rec, o.head)
+    if (o.force === true) return this.force(rec, o.head, o.debt === true)
     const head = o.head === undefined ? await workHead(rec) : await this.sameHead(id, o.head)
     const tips = await this.checkTips(id, o.tips)
     this.ctx.runtime(id).endMoved = null
@@ -358,9 +359,15 @@ export class EndDesk {
   /**
    * [그래도 끝내기](V18의 [끝 확정] 그대로): head(상자의 head)가 지금 HEAD일 때만 끝낸다. 상자 뒤 세션이 커밋했으면(Stop이
    * 아직 오지 않아 상자가 남았어도) 끝내지 않고 던진다: 사람은 새 커밋의 증거를 본 적이 없다. 그 head를 내보내기로 재지
-   * 않았으면(계약이 바뀐 뒤 등) 먼저 잰다(안전망, 리뷰와 장부). 재는 사이 HEAD가 바뀌어도 끝내지 않는다
+   * 않았으면(계약이 바뀐 뒤 등) 먼저 잰다(안전망, 리뷰와 장부). 재는 사이 HEAD가 바뀌어도 끝내지 않는다. debt는 [빚으로 남기고
+   * 끝내기](M3b): 나빠진 래칫을 Work 브랜치에 빚으로 커밋하고(열린 PR이 있으면 push) 그 head로 끝낸다. 받아들인 나빠짐은
+   * 기록했든 아니든 장부에 남긴다
    */
-  private async force(rec: WorkRecord, head: string | undefined): Promise<PreparedEnd> {
+  private async force(
+    rec: WorkRecord,
+    head: string | undefined,
+    debt: boolean,
+  ): Promise<PreparedEnd> {
     if (head === undefined) throw new Error('[그래도 끝내기]에는 상자의 head가 필요함')
     const id = rec.id
     await this.sameHead(id, head)
@@ -371,8 +378,16 @@ export class EndDesk {
     await this.sameHead(id, head)
     await this.checkTips(id, tips)
     const open = (await this.openOf(rec, head, tips)) ?? []
-    await this.finish(rec, head, tips, { how: 'box', head, open: open.length })
-    return { head, ended: true, armed: false, open }
+    const x = rec.exports[0]
+    let at = head
+    if (debt && x && debtable(rec, x, this.ctx.runtime(id).bundles.get(x.branch))) {
+      // 상자는 이 head의 것이다: 빚 커밋으로 HEAD가 옮겨도 '세션이 새로 커밋함'으로 지우지 않게 먼저 거둔다
+      rec.end_pending = null
+      at = (await recordDebt(this.ctx, rec, x)) ?? head
+    }
+    await this.evidence.exports.ledgerAccepted(rec)
+    await this.finish(rec, at, tips, { how: 'box', head: at, open: open.length })
+    return { head: at, ended: true, armed: false, open }
   }
 
   /** 끝낸다(V37): 이 끝들의 리뷰 메모를 Work에 두고 ended에 그 수를 남긴다 */

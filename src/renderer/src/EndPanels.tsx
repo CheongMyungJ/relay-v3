@@ -2,8 +2,10 @@
 // 보인다(V22: 통합 증거와 내보내기마다의 열린 것, 없는 단위 브랜치). 메인이 work.json에 두므로 다른 Work로 갔다 와도 남는다.
 // 상자의 [세션에 넘기기](V24, V35)는 열린 것에 보이는 올림과 저절로 가지 않은 세션 몫 사실을 보내고, 끝을 '고친 뒤 끝냄'으로
 // 다시 건다: 세션이 고치고 쉬면 메인이 끝내거나 상자를 다시 띄운다. 그동안은 걸린 끝의 칸에 그 글과 [취소]가 보인다.
-// [끝내기]로 끝난 Work는 끝낼 때 남은 리뷰 메모(V37)를 접어 보인다.
+// [끝내기]로 끝난 Work는 끝낼 때 남은 리뷰 메모(V37)를 접어 보인다. [머지]와 [그래도 끝내기]의 빚 확인(M3b)도 여기에 둔다.
+import { useState } from 'react'
 import type { WorkView } from '../../shared/api.ts'
+import { debtAsk, debtTexts, type DebtVerb } from './debt.ts'
 import { handable, passByExport } from './exports.ts'
 import { endMemosText, raiseLabel } from './findings.ts'
 import { SEVERITY, endHanded, endTexts, openText } from './format.ts'
@@ -46,6 +48,12 @@ export function EndArmed({ view }: { view: WorkView }) {
 export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
   const act = useAction()
   const { view } = p
+  const [asking, setAsking] = useState(false)
+  const force = (debt: boolean) =>
+    void act.run(() =>
+      window.relay.end(view.id, { head: p.head, force: true, ...(debt ? { debt: true } : {}) }),
+    )
+  const asks = debtAsk(view)
   // 열린 것에 보이는 올림과 세션 몫 사실을 세션에 보내고 끝을 다시 건다(V24, V35): 상자가 떠 있는 동안은 세션 몫도 저절로
   // 가지 않는다
   const hand = view.state === 'working' && handable(view)
@@ -57,14 +65,21 @@ export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
           <li key={i}>{openText(fact, view)}</li>
         ))}
       </ul>
+      {asking && asks ? (
+        <DebtChoice
+          asks={asks}
+          verb="끝내기"
+          busy={act.busy}
+          onChoose={force}
+          onCancel={() => setAsking(false)}
+        />
+      ) : null}
       <div className="row">
         <button
           type="button"
           className="primary"
-          disabled={act.busy}
-          onClick={() =>
-            void act.run(() => window.relay.end(view.id, { head: p.head, force: true }))
-          }
+          disabled={act.busy || (asking && asks !== null)}
+          onClick={() => (asks ? setAsking(true) : force(false))}
         >
           그래도 끝내기
         </button>
@@ -93,6 +108,54 @@ export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
         ) : null}
       </div>
       <ErrorLine text={act.error} />
+    </div>
+  )
+}
+
+/**
+ * 빚 확인(M3b): 나빠진 래칫을 보이고 [빚으로 남기고 …](debt 참) / [그냥 …](거짓) / [취소]. 한 번만 묻는다: 기록하면 증거에
+ * 빚 기록 커밋이 적혀 다시 묻지 않는다
+ */
+export function DebtChoice(p: {
+  asks: string[]
+  verb: DebtVerb
+  busy: boolean
+  onChoose: (debt: boolean) => void
+  onCancel: () => void
+}) {
+  const t = debtTexts(p.asks, p.verb)
+  return (
+    <div className="callout tone-warn" role="region" aria-label="빚 확인" data-testid="debt-ask">
+      <p className="callout-title">{t.title}</p>
+      {p.asks.length > 1 ? (
+        <ul className="plain-list">
+          {p.asks.map((a, i) => (
+            <li key={i}>{a}</li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="muted small">{t.note}</p>
+      <div className="row">
+        <button
+          type="button"
+          className="primary"
+          disabled={p.busy}
+          onClick={() => p.onChoose(true)}
+        >
+          {t.record}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={p.busy}
+          onClick={() => p.onChoose(false)}
+        >
+          {t.skip}
+        </button>
+        <button type="button" className="ghost" disabled={p.busy} onClick={p.onCancel}>
+          취소
+        </button>
+      </div>
     </div>
   )
 }

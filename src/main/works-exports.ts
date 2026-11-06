@@ -9,13 +9,17 @@ import type { PrCheck } from '../adapters/gh.ts'
 import type { EvidenceBundle, GateResult, Policy } from '../core/types.ts'
 import { trackRecord, type LedgerEntry } from '../core/ledger.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
+import { worseOf } from '../engine/debt-record.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
+import { acceptedOf, debtable, recordDebt } from './works-debt.ts'
 import { autoConditions } from './works-review.ts'
 import {
+  delivered,
   exportContract,
   isActive,
+  message,
   perUnit,
   readTips,
   tipOf,
@@ -28,6 +32,10 @@ import {
 export type MergeOutcome = MergeResult & { wait?: boolean }
 
 const PR_POLL_MS = 120_000
+
+/** 빚 기록 커밋을 push한 뒤 PR이 그 head를 가리키기를 기다리는 횟수와 간격(M3b) */
+const PR_WAIT_TRIES = 5
+const PR_WAIT_MS = 1_000
 
 const short = (sha: string | null) => (sha ? sha.slice(0, 7) : '?')
 
@@ -86,6 +94,19 @@ export function ledgerEntry(
   }
 }
 
+/** 내보내기 계기의 결론 줄. 나빠진 래칫(M3b)을 함께 남긴다: 다음 Work가 기록 안 된 나빠짐을 찾는 앞 기록이다 */
+export function exportLine(
+  deps: WorksDeps,
+  rec: WorkRecord,
+  x: ExportRecord,
+  project: ProjectRecord,
+  bundle: EvidenceBundle,
+  result: Pick<GateResult, 'conclusion' | 'condition' | 'shadow'>,
+): LedgerEntry {
+  const worse = worseOf(bundle.ratchets)
+  return ledgerEntry(deps, rec, x, project, bundle.head, result, worse.length > 0 ? { worse } : {})
+}
+
 /** 관문의 정책: 프로젝트 설정, 묶음이 쓴 quality.json의 auto, 서버 보호, 그림자 실적 */
 export async function policyFor(
   ctx: WorkCtx,
@@ -124,12 +145,13 @@ export class ExportDesk {
    * [머지]와 정책 머지(내보내기 하나): 구현 중이고, 관문이 지금 계약으로 계산됐고, PR이 Work의 기준으로 가고 그 head가
    * 묶음의 head와 같고, CI(statusCheckRollup)가 실패·진행 중이 아니고, gh가 머지할 수 있다고 할 때만 `gh pr merge
    * --match-head-commit`. 장부에 누가 어느 head를 머지했는지 남기고, 내보내기의 PR이 모두 끝났으면 Work를 끝낸다. 한 Work의
-   * 머지는 한 번에 하나다
+   * 머지는 한 번에 하나다. debt는 사람의 [빚으로 남기고 머지](M3b): 머지할 수 있는 PR이면 먼저 빚을 커밋하고 push한다
    */
   async merge(
     id: string,
     unit: string | null,
     by: 'human' | 'policy' = 'human',
+    debt = false,
   ): Promise<MergeOutcome> {
     const rec = this.ctx.record(id)
     const rt = this.ctx.runtime(id)
@@ -140,6 +162,10 @@ export class ExportDesk {
       return { ok: false, error: unit === null ? '단위를 골라 주세요' : `단위가 없음: ${unit}` }
     rt.merging = true
     try {
+      if (debt && by === 'human') {
+        const r = await this.recordFirst(rec, x).catch((e: unknown) => message(e))
+        if (typeof r === 'string') return { ok: false, error: `빚을 기록하지 못함: ${r}` }
+      }
       return await this.mergeOnce(rec, x, by)
     } finally {
       rt.merging = false
@@ -191,13 +217,54 @@ export class ExportDesk {
       return fail(`GitHub가 머지할 수 없다고 함 (${status.mergeable}, ${status.mergeStateStatus})`)
     const r = await gh.mergePr(project.path, pr.number, bundle.head, project.settings.merge_method)
     if (!r.ok) return fail(r.error ?? 'gh pr merge 실패')
-    await this.ledgerFate(rec, x, bundle.head, { by, merged_head: bundle.head })
+    const accepted = by === 'human' ? acceptedOf(bundle) : {}
+    await this.ledgerFate(rec, x, bundle.head, { by, merged_head: bundle.head, ...accepted })
+    if (accepted.accepted) this.ctx.refreshQuality(project.id)
     x.pr = { ...pr, state: 'MERGED', mergedAt: this.ctx.deps.now() }
     rec.error = null
     this.ctx.note(id, { type: 'merged', by, head: bundle.head, pr: pr.number, ...unitOf(x) })
     await this.ctx.save(rec)
     await this.settleWork(rec)
     return { ok: true }
+  }
+
+  /**
+   * [빚으로 남기고 머지](M3b): 구현 중이고, 지금 계약의 묶음이 기록할 빚을 지녔고, 열린 PR이 Work의 기준으로 가며 묶음의
+   * head를 가리킬 때만 빚을 커밋하고 push한다(아니면 그대로 두고 머지가 까닭을 말한다). push 뒤 PR이 새 head를 가리킬 때까지
+   * 잠깐 다시 읽는다(GitHub가 늦게 갱신한다)
+   */
+  private async recordFirst(rec: WorkRecord, x: ExportRecord): Promise<void> {
+    const rt = this.ctx.runtime(rec.id)
+    const bundle = rt.bundles.get(x.branch)
+    if (!canMerge(rec.state) || !x.gate || !bundle || !debtable(rec, x, bundle)) return
+    if (!this.runner.sameContract(bundle, exportContract(rt, x))) return
+    const pr = await this.refreshPr(rec, x, true)
+    if (pr?.state !== 'OPEN' || pr.baseRefName !== rec.base || pr.headRefOid !== bundle.head) return
+    const head = await recordDebt(this.ctx, rec, x)
+    for (let i = 0; head !== null && i < PR_WAIT_TRIES; i++) {
+      if ((await this.refreshPr(rec, x, true))?.headRefOid === head) return
+      await new Promise((r) => setTimeout(r, PR_WAIT_MS))
+    }
+  }
+
+  /** [그래도 끝내기](M3b): 머지되지 않은 내보내기마다 받아들인 나빠진 래칫을 장부에 남긴다(빚을 기록했으면 그 id) */
+  async ledgerAccepted(rec: WorkRecord): Promise<void> {
+    const rt = this.ctx.runtime(rec.id)
+    for (const x of rec.exports) {
+      const b = rt.bundles.get(x.branch)
+      const accepted = acceptedOf(b)
+      if (!b || delivered(x) || !accepted.accepted) continue
+      const result = {
+        conclusion: x.gate?.conclusion ?? 'human_merge',
+        condition: null,
+        shadow: false,
+      }
+      const project = this.ctx.projectOf(rec)
+      await this.ctx.deps.store.appendLedger(
+        ledgerEntry(this.ctx.deps, rec, x, project, b.head, result, accepted),
+      )
+    }
+    this.ctx.refreshQuality(rec.project)
   }
 
   /** PR의 head가 증거의 head와 다를 때 할 일: PR이 지금 끝을 가리키지 않으면 push, 가리키면 다시 재기 */
@@ -234,7 +301,7 @@ export class ExportDesk {
     rec: WorkRecord,
     x: ExportRecord,
     head: string,
-    fate: Pick<LedgerEntry, 'by' | 'merged_head' | 'closed'>,
+    fate: Pick<LedgerEntry, 'by' | 'merged_head' | 'closed' | 'accepted'>,
   ): Promise<void> {
     const conclusion = x.gate?.conclusion ?? 'human_merge'
     const entry = ledgerEntry(
@@ -274,9 +341,12 @@ export class ExportDesk {
   private async fate(rec: WorkRecord, x: ExportRecord, pr: PrInfo): Promise<void> {
     if (!isActive(rec.state)) return
     if (pr.state === 'MERGED') {
+      // 잰 head를 앱 밖에서 머지했으면 그 나빠진 래칫도 받아들였다(M3b: 빚으로 기록하지 못함)
+      const b = this.ctx.runtime(rec.id).bundles.get(x.branch)
       await this.ledgerFate(rec, x, pr.headRefOid, {
         by: 'human-override',
         merged_head: pr.headRefOid,
+        ...(b?.head === pr.headRefOid ? acceptedOf(b) : {}),
       })
       this.ctx.note(rec.id, {
         type: 'merged_outside',

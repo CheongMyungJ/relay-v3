@@ -8,6 +8,7 @@ import { basename, join } from 'node:path'
 import { git } from '../adapters/exec.ts'
 import { defaultBase, repoRoot, showFile } from '../adapters/git.ts'
 import { repoKey } from '../adapters/store.ts'
+import { acceptedUnrecorded } from '../core/ledger.ts'
 import { parseQuality } from '../core/quality.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
 import { writeDraft } from '../engine/init.ts'
@@ -17,6 +18,7 @@ import {
   EVENTS,
   type DraftQualityResult,
   type ProjectSettings,
+  type SettingsInput,
   type ProjectView,
   type QualityState,
 } from '../shared/api.ts'
@@ -75,6 +77,8 @@ export class ProjectDesk {
   private readonly deps: WorksDeps
   private readonly records = new Map<string, ProjectRecord>()
   private readonly quality = new Map<string, Quality>()
+  /** 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b, 실적 장부) */
+  private readonly unrecorded = new Map<string, number>()
 
   constructor(deps: WorksDeps) {
     this.deps = deps
@@ -101,6 +105,7 @@ export class ProjectDesk {
       quality: this.quality.get(p.id)?.state ?? 'missing',
       qualityDraft: this.quality.get(p.id)?.draft ?? false,
       qualityRef: this.quality.get(p.id)?.ref ?? null,
+      unrecordedDebt: this.unrecorded.get(p.id) ?? 0,
     }
   }
 
@@ -151,7 +156,7 @@ export class ProjectDesk {
     return this.view(p)
   }
 
-  async updateSettings(projectId: string, s: Partial<ProjectSettings>): Promise<ProjectView> {
+  async updateSettings(projectId: string, s: SettingsInput): Promise<ProjectView> {
     const p = this.records.get(projectId)
     if (!p) throw new Error(`프로젝트가 없음: ${projectId}`)
     // m3은 장치마다 덮는다(준 장치만 바뀐다). 모르는 장치나 참·거짓이 아닌 값은 잘못된 값이다
@@ -167,14 +172,18 @@ export class ProjectDesk {
   }
 
   /**
-   * 품질 기준 상태를 다시 잰다. id가 없으면 모든 프로젝트. 바뀌었으면 화면에 알린다. 기본 브랜치에 커밋(origin이 있으면
-   * push)한 기준은 다음에 잴 때(목록을 다시 읽을 때, 새 Work, 증거) 보인다
+   * 품질 기준 상태와 장부의 '받아들였지만 기록하지 않음'(M3b)을 다시 잰다. id가 없으면 모든 프로젝트. 바뀌었으면 화면에
+   * 알린다. 기본 브랜치에 커밋(origin이 있으면 push)한 기준은 다음에 잴 때(목록을 다시 읽을 때, 새 Work, 증거) 보인다
    */
   async refresh(id?: string): Promise<void> {
     const targets = id === undefined ? [...this.records.values()] : [this.records.get(id)]
+    const ledger = await this.deps.store.readLedger()
     let changed = false
     for (const p of targets) {
       if (!p) continue
+      const n = acceptedUnrecorded(ledger, p.id)
+      if (this.unrecorded.get(p.id) !== n) changed = true
+      this.unrecorded.set(p.id, n)
       const q = await qualityOf(p)
       const before = this.quality.get(p.id)
       if (before?.state === q.state && before.draft === q.draft && before.ref === q.ref) continue

@@ -109,7 +109,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ### `src/adapters/exec.ts`
 - `run(cmd: string, opts: { cwd: string; timeoutMs: number; env?: Record<string, string> }): Promise<{ exit: number | null; timed_out: boolean; duration_ms: number; stdout: string; stderr: string }>` — `sh -c`(Windows는 `cmd /d /s /c`). 던지지 않는다(명령이나 환경 값의 NUL도 exit null과 stderr로). 시간이 넘으면 프로세스 묶음을 끝낸다. 시간 제한은 타이머 상한(2^31-1ms)으로 자른다. 출력은 뒤쪽 64KB만 남긴다.
 - `scrubbedEnv(base: NodeJS.ProcessEnv): Record<string, string>` — 자격 증명을 뺀다: `GH_TOKEN`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `NPM_TOKEN`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, `GPG_AGENT_INFO`, 그리고 이름(대문자로 바꿔)에 `TOKEN`, `SECRET`, `PASSWORD`·`PASSWD`, `PASSPHRASE`, `CREDENTIAL`, `API_KEY`·`APIKEY`, `ACCESS_KEY`·`PRIVATE_KEY`·`SIGNING_KEY`·`ENCRYPTION_KEY`·`DEPLOY_KEY`·`SSH_KEY`, `ASKPASS`가 들었거나, `_KEY`·`_PAT`로 끝나거나, 조각 머리에 `AUTH`(`AUTHOR`는 뺀다)가 있거나, `NPM_CONFIG_*AUTH*`인 것. git 위치 변수(`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, `GIT_PREFIX`)도 뺀다(git 훅 안에서 relay를 부르면 명령의 git이 사용자 레포를 건드린다). `CI=1`을 넣는다. HOME 아래 설정 파일(~/.npmrc, gh 설정 등)의 자격 증명은 막지 못한다.
-- `git(args: string[], cwd: string): Promise<string>` — 실패하면 던진다(stderr 포함. 메시지는 `-c` 설정을 빼고 긴 SHA를 줄여 잘려도 까닭이 남게). git 위치 변수는 뺀다.
+- `git(args: string[], cwd: string, o?: { input?: string; env?: Record<string, string> }): Promise<string>` — 실패하면 던진다(stderr 포함. 메시지는 `-c` 설정을 빼고 긴 SHA를 줄여 잘려도 까닭이 남게). git 위치 변수는 뺀다. o는 표준 입력과, 위치 변수를 뺀 뒤 얹는 환경 변수(M3b 빚 기록의 임시 index, `GIT_AUTHOR_*`).
 
 ### `src/adapters/git.ts`
 - `repoRoot(cwd)`, `revParse(repo, ref)`, `mergeBase(repo, a, b)`, `defaultBase(repo)`(origin/HEAD → origin/main → main → master 순으로 있는 것).
@@ -120,6 +120,12 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 - `dirsOf(files: string[]): Set<string>` — 모든 조상 디렉터리.
 - `lineCounts(repo, sha, paths): Promise<Map<string, number | null>>` — 없으면 null, 바이너리는 건너뜀.
 - `hasWord(repo, sha, word, exclude): Promise<boolean>` — sha의 파일에 낱말이 있나(`git grep -q -I -w -F`, exclude 아래와 바이너리는 뺀다. 못 찾음(종료 1)은 거짓, 다른 실패는 던진다). 지식 항목의 anchor(V38).
+- `changedPaths(repo, a, b): Promise<string[]>` — 두 커밋 사이 바뀐 파일(`diff --name-only --no-renames`: 옮김은 지움과 새로 생김). 기록 안 된 나빠짐(M3b).
+
+### `src/adapters/git-write.ts` — git 쓰기 (M3b, V40)
+git.ts는 읽기만 한다. 앱이 레포에 쓰는 것은 빚 기록 하나다.
+- `commitFiles(repo, { branch, expect, files, message, author, worktree? }): Promise<string>` — 브랜치 끝이 expect일 때만 files(레포 기준 경로 → 내용)를 더한 커밋 하나를 만든다: 임시 index(`GIT_INDEX_FILE`)에 `read-tree`, `hash-object -w --stdin`, `update-index --add --cacheinfo`, `write-tree`, `commit-tree -p`(작성자·커미터 author), `update-ref <ref> <새> <옛>`(그사이 옮았으면 실패). 작업 트리와 다른 index는 건드리지 않는다. worktree가 그 브랜치를 checkout했으면 더한 파일만 `git checkout <새> -- <경로>`로 맞춘다(세션의 staged·unstaged 변경은 그대로). 경로는 상대이고 `.`·`..`·빈 조각이 없어야 한다.
+- `pushBranch(repo, branch, remote = 'origin')` — `git push <remote> refs/heads/<b>:refs/heads/<b>`(빨리 감기만).
 
 ### `src/adapters/store.ts`
 - `relayHome(env)` — `RELAY_HOME` 또는 `~/.relay-v3`.
@@ -156,9 +162,15 @@ v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 �
 - knowledge.ts(git): `readEntries(root, sha)`, `relatedKnowledge(root, ref, request)`(새 Work), `checkKnowledgeGround(id, fileAt)`, `checkKnowledge(root, diff): Promise<{ changed: string[]; issues: KnowledgeIssue[] }>` — changed는 이 diff가 바꾼(더함·고침·옮김·지움) 지식 폴더의 .md(README 빼고). issues: 바꾼 파일이 지식 경로가 아니면 format, 바꾼 항목마다 `checkEntryFormat`(format)과 anchor의 마지막 조각이 head의 코드(지식 폴더 밖)에 없으면 anchor. 바꾸지 않은 항목은 `## 아직 규칙을 따르지 않는 곳`의 경로를 이 diff가 바꿨으면 not_yet(v2 D296), anchor를 이 diff가 지운 줄에 있고 head에 없으면 anchor.
 
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
-- `M3_DEVICES`, `M3_ON`(프로젝트 설정의 기본), `M3_OFF`(M3 앞의 Work 기록).
+- `M3_DEVICES`(`knowledge` M3a, `debt` M3b), `M3_ON`(프로젝트 설정의 기본), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt가 꺼짐).
 - `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 켬.
 - `m3Switches(project, env: string | undefined): { switches; errors }` — env(RELAY_M3)가 비었으면 프로젝트 설정, `off`·`0`·`none`·`false`는 모두 끔, `on`·`1`·`all`·`true`는 모두 켬, 쉼표로 이은 장치 이름은 그것만 켬(모르는 이름은 errors). CLI `relay check`는 프로젝트가 없어 env만 본다(없으면 켬).
+
+### `src/engine/debt-record.ts` — 받아들인 나빠짐의 빚 기록 (M3b, V40)
+- `worseOf(ratchets)`, `debtAt(repo, sha): Promise<{ ids; items }>`(sha의 `.relay/debt/<id>.md`: 있는 id 모두와 읽은 항목).
+- `debtFiles(worse, source, date, taken): { items; files }` — 래칫마다 core `debtFromRatchet`, taken과 겹치는 id는 `-2`, `-3`. files는 `.relay/debt/<id>.md` → `formatDebt`.
+- `debtMessage(workId, worse, items): string` — 제목 `relay: 받아들인 나빠짐을 빚으로 기록 (<래칫 id들>)`, 항목마다 한 줄, 트레일러 `Relay-Work: <id>`와 항목마다 `Relay-Debt: <id>`. `RELAY_AUTHOR`는 `relay <relay@localhost>`.
+- `unrecordedRegressions({ repo, base, ledger, project }): Promise<string[]>` — 기록 안 된 나빠짐(m2-modules 3절 createWork). 줄은 `<래칫>: <경로> <앞> → <기준> (앱 밖에서 머지됨 | 앞 기록 뒤 기준에 들어옴)`, 파일이 없는 래칫은 `<래칫>: <detail> (…)`. 20개까지, 넘으면 '외 n개'. `unrecordedSection(lines)`은 request.md에 붙이는 절(없으면 빈 글).
 
 ### `src/engine/init.ts` — 품질 기준 초안 (V19, V20)
 - `draftFor(root): Promise<QualityConfig>` — `git ls-files -z --cached --others --exclude-standard`의 파일 목록과 작업 트리의 `package.json`으로 `draftQuality`.

@@ -33,13 +33,16 @@ export interface ProjectSettings {
   m3: M3Switches
 }
 
+/** 설정 바꾸기의 입력: 준 칸만 바뀐다. m3은 준 장치만(V39) */
+export type SettingsInput = Partial<Omit<ProjectSettings, 'm3'>> & { m3?: Partial<M3Switches> }
+
 export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   auto_merge: false,
   min_shadow: 20,
   review: 'all',
   merge_method: 'squash',
   question_mode: 'confirm_each',
-  m3: { knowledge: true },
+  m3: { knowledge: true, debt: true },
 }
 
 /**
@@ -68,6 +71,8 @@ export interface ProjectView {
    * 커밋하고 push해야 쓰인다
    */
   qualityRef: string | null
+  /** 실적 장부에서 사람이 나빠진 래칫을 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b, core acceptedUnrecorded) */
+  unrecordedDebt: number
 }
 
 /** [초안 만들기]의 답(V20). 이미 파일이 있으면 덮지 않고 written false. path는 작업 트리의 .relay/quality.json */
@@ -153,6 +158,10 @@ export interface WorkView {
    * one_branch는 null
    */
   integration: string[] | null
+  /** M3 장치의 스위치(V39): Work를 만들 때 정한 값. 화면은 debt(M3b)로 [머지]·[그래도 끝내기]의 빚 확인을 띄운다 */
+  m3: M3Switches
+  /** 기록 안 된 나빠짐(M3b): Work를 만들 때 실적 장부의 앞 기록과 기준 브랜치를 견줘 찾은 것. [계약]이 위에 알린다 */
+  unrecorded: string[]
 }
 
 /**
@@ -274,6 +283,14 @@ export interface MergeResult {
 }
 
 /**
+ * [머지]의 입력(M3b). debt는 확인에서 [빚으로 남기고 머지]: 증거의 나빠진 래칫을 .relay/debt/에 커밋하고 push한 뒤
+ * 머지한다. 없거나 거짓이면 [그냥 머지](장부에 '받아들였지만 기록하지 않음')
+ */
+export interface MergeInput {
+  debt?: boolean
+}
+
+/**
  * [끝내기](V25)의 답: 끝남(ended), 걸림(armed: 내보내기 증거와 리뷰를 기다림), 상자(open: 열린 것) 가운데 하나. head는 본
  * HEAD이고, [그래도 끝내기]가 재는 사이 정책이 머지해 끝났으면 null
  */
@@ -292,6 +309,8 @@ export interface EndInput {
   head?: string
   force?: boolean
   tips?: Record<string, string | null>
+  /** [그래도 끝내기]의 빚 확인(M3b)에서 [빚으로 남기고 끝내기]. MergeInput.debt와 같다 */
+  debt?: boolean
 }
 
 /** terminal.attach의 답: 최근 출력(최대 200KB)과 그다음 조각의 번호. 이후 조각은 seq ≥ 이 값만 받는다 */
@@ -341,15 +360,15 @@ export interface RelayApi {
   list(): Promise<WorkList>
   /** 폴더 고르기 대화상자. 고르지 않으면 null */
   addProject(): Promise<ProjectView | null>
-  updateSettings(projectId: string, s: Partial<ProjectSettings>): Promise<ProjectView>
+  updateSettings(projectId: string, s: SettingsInput): Promise<ProjectView>
   createWork(o: NewWorkInput): Promise<WorkView>
   /** 멈춘 세션을 --resume으로 다시 연다 */
   resumeWork(id: string): Promise<void>
   approveContract(id: string): Promise<void>
   askChanges(id: string, message: string): Promise<void>
   answerChange(id: string, o: ChangeAnswer): Promise<void>
-  /** [머지]: 내보내기 하나. unit은 단위 브랜치의 내보내기(V22, branch_per_unit에서는 꼭 준다) */
-  merge(id: string, unit?: string): Promise<MergeResult>
+  /** [머지]: 내보내기 하나. unit은 단위 브랜치의 내보내기(V22, branch_per_unit에서는 꼭 준다). o는 빚 확인(M3b) */
+  merge(id: string, unit?: string, o?: MergeInput): Promise<MergeResult>
   /**
    * [끝내기](V25): 지금 HEAD의 내보내기 증거(리뷰 포함)에 열린 것이 없으면 끝낸다. 아직 재지 않았으면 걸어 두고 재며, 열린
    * 것이 있으면 상자로 둔다. force([그래도 끝내기])는 head(상자의 head)가 지금 HEAD일 때만 끝낸다. 다르면 던진다
