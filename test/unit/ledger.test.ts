@@ -1,14 +1,27 @@
-// [단위] 실적 장부(그림자): 일치·불일치, 버전이 바뀌면 다시 잼, Work를 조건마다 한 건으로(V22 내보내기), 장부 읽기,
-// 받아들였지만 빚으로 기록하지 않은 나빠짐의 수(M3b)
+// [단위] 실적 장부(그림자): 일치·불일치, 판이 바뀌면 다시 잼(M4a 판 열쇠), Work를 조건마다 한 건으로(V22 내보내기), 장부
+// 읽기(M4a 칸), 받아들였지만 빚으로 기록하지 않은 나빠짐의 수(M3b)
 import { describe, expect, test } from 'vitest'
+import { GATE_VERSION } from '../../src/engine/gate-version.ts'
 import {
   acceptedUnrecorded,
+  claudeMinor,
+  epochKey,
   parseLedger,
   trackRecord,
+  type EpochSource,
   type LedgerEntry,
 } from '../../src/engine/ledger.ts'
 
-const NOW = { model: 'opus', claude_version: '2.1.300', relay_version: '0.1.0' }
+/** 지금 판(판 열쇠의 재료). 결론 줄도 이 판으로 적는다 */
+const EPOCH: Required<EpochSource> = {
+  conds: { small: 'a1b2c3d4e5f6', docs: '0f9e8d7c6b5a' },
+  model_observed: 'model-a',
+  effort: 'medium',
+  claude_version: '2.1.300 (Claude Code)',
+  gate_version: GATE_VERSION,
+  review_prompt: 4,
+}
+const NOW = { ...EPOCH, relay_version: '0.1.0' }
 
 /** 조건 small을 채운 그림자 결론 하나 */
 function shadow(work: string, head: string, more: Partial<LedgerEntry> = {}): LedgerEntry {
@@ -91,16 +104,43 @@ describe('trackRecord', () => {
     expect(trackRecord(other, 'p1', 0, NOW)).toEqual({})
   })
 
-  test('모델·Claude Code·relay 버전이 지금과 다른 결론은 세지 않는다(머지 기록의 버전은 상관없음)', () => {
+  test('판 열쇠의 칸이 지금과 다른 결론은 세지 않는다(머지 기록의 판은 상관없음)', () => {
     const old = matches(20)
-    for (const field of ['model', 'claude_version', 'relay_version'] as const) {
-      expect(trackRecord(old, 'p1', 20, { ...NOW, [field]: 'new' })).toEqual({})
-    }
+    const others: EpochSource[] = [
+      { ...EPOCH, conds: { small: 'ffffffffffff' } },
+      { ...EPOCH, model_observed: 'model-b' },
+      { ...EPOCH, effort: 'high' },
+      { ...EPOCH, claude_version: '2.2.0 (Claude Code)' },
+      { ...EPOCH, gate_version: GATE_VERSION + 1 },
+      { ...EPOCH, review_prompt: 5 },
+    ]
+    for (const current of others) expect(trackRecord(old, 'p1', 20, current)).toEqual({})
     const decidedNow = Array.from({ length: 20 }, (_, i) => [
       shadow(`w${i}`, `h${i}`),
-      { ...merged(`w${i}`, `h${i}`), relay_version: '0.2.0' },
+      { ...merged(`w${i}`, `h${i}`), relay_version: '0.2.0', model_observed: 'model-b' },
     ]).flat()
     expect(trackRecord(decidedNow, 'p1', 20, NOW)).toEqual({ small: true })
+  })
+
+  test('Claude Code patch, relay 버전·빌드, 요청한 모델은 판 열쇠가 아니다', () => {
+    const lines = matches(20).map((e) =>
+      e.condition === null
+        ? e
+        : { ...e, relay_version: '9.9.9', relay_build: 'abc', model_requested: 'other' },
+    )
+    expect(
+      trackRecord(lines, 'p1', 20, { ...EPOCH, claude_version: '2.1.999 (Claude Code)' }),
+    ).toEqual({
+      small: true,
+    })
+  })
+
+  test('판을 모르는 결론은 지금 판과 같지 않다: M4a 앞의 줄, 리뷰 모델·effort를 모름(양쪽 다 몰라도)', () => {
+    const without = (field: keyof EpochSource) =>
+      matches(20).map((e) => ({ ...e, [field]: undefined }))
+    expect(trackRecord(without('gate_version'), 'p1', 20, NOW)).toEqual({})
+    for (const field of ['model_observed', 'effort', 'conds', 'review_prompt'] as const)
+      expect(trackRecord(without(field), 'p1', 20, { ...EPOCH, [field]: undefined })).toEqual({})
   })
 
   test('Work를 조건마다 한 건으로 센다(V22): 그 조건을 채운 내보내기가 모두 그 head로 머지돼야 일치', () => {
@@ -142,6 +182,28 @@ describe('trackRecord', () => {
   })
 })
 
+describe('판 열쇠 (M4a)', () => {
+  test('claudeMinor: major.minor만, 못 읽으면 null', () => {
+    expect(claudeMinor('2.1.318 (Claude Code)')).toBe('2.1')
+    expect(claudeMinor('10.20')).toBe('10.20')
+    expect(claudeMinor(' 3.0.1')).toBe('3.0')
+    expect(claudeMinor('0.0.0 (가짜 Claude Code)')).toBe('0.0')
+    expect(claudeMinor('Claude Code 2.1')).toBeNull()
+    expect(claudeMinor('2')).toBeNull()
+    expect(claudeMinor(undefined)).toBeNull()
+  })
+
+  test('epochKey: 조건마다, 같은 판이면 같고 칸 하나라도 모르면 null', () => {
+    expect(epochKey(EPOCH, 'small')).not.toBeNull()
+    expect(epochKey(EPOCH, 'small')).toBe(epochKey({ ...EPOCH, claude_version: '2.1.5' }, 'small'))
+    expect(epochKey(EPOCH, 'small')).not.toBe(epochKey(EPOCH, 'docs'))
+    expect(epochKey(EPOCH, 'missing')).toBeNull()
+    expect(epochKey({ ...EPOCH, effort: '' }, 'small')).toBeNull()
+    expect(epochKey({ ...EPOCH, claude_version: 'unknown' }, 'small')).toBeNull()
+    expect(epochKey({ ...EPOCH, gate_version: 0 }, 'small')).toBeNull()
+  })
+})
+
 describe('parseLedger', () => {
   test('줄마다 JSON, 빈 줄·깨진 줄·모양이 다른 줄은 건너뛴다', () => {
     const a = shadow('w', 'h')
@@ -158,6 +220,44 @@ describe('parseLedger', () => {
       JSON.stringify(b) + '\r',
     ].join('\n')
     expect(parseLedger(text)).toEqual([a, b])
+  })
+
+  test('M4a 칸을 읽고, 모양이 다르면 그 줄을 버린다(옛 줄은 그대로 읽힌다)', () => {
+    const line = shadow('w', 'h', {
+      met: ['small', 'docs'],
+      model_requested: 'default',
+      relay_build: 'abc123',
+      pr: 7,
+      base_sha: 'b'.repeat(40),
+      approved_by: 'human',
+    })
+    const old: LedgerEntry = {
+      ts: '2026-11-01T00:00:00Z',
+      project: 'p1',
+      work: 'w',
+      head: 'h',
+      conclusion: 'human_merge',
+      condition: 'small',
+      shadow: true,
+      relay_version: '0.0.0',
+    }
+    const bad = [
+      { met: 'small' },
+      { met: [1] },
+      { conds: ['x'] },
+      { conds: { small: 3 } },
+      { gate_version: '1' },
+      { review_prompt: Number.NaN },
+      { model_observed: 1 },
+      { effort: false },
+      { pr: '7' },
+      { base_sha: null },
+      { approved_by: 'robot' },
+    ]
+    const text = [line, old, ...bad.map((b) => ({ ...line, ...b }))]
+      .map((e) => JSON.stringify(e))
+      .join('\n')
+    expect(parseLedger(text)).toEqual([line, old])
   })
 
   test('빈 글은 빈 장부', () => {

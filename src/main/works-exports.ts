@@ -7,13 +7,14 @@
 
 import type { PrCheck } from '../adapters/gh.ts'
 import type { EvidenceBundle, GateResult, Policy } from '../core/types.ts'
-import { trackRecord, type LedgerEntry } from '../engine/ledger.ts'
+import type { LedgerEntry } from '../engine/ledger.ts'
 import { canMerge, nextState, type WorkEvent } from '../core/work.ts'
 import { worseOf } from '../engine/debt-record.ts'
 import type { MergeResult, PrInfo } from '../shared/api.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import type { EvidenceRunner } from './works-evidence.ts'
 import { acceptedOf, debtable, recordDebt } from './works-debt.ts'
+import { epochLine, trackFor, type ExportJob } from './works-ledger.ts'
 import { autoConditions } from './works-review.ts'
 import {
   delivered,
@@ -57,7 +58,7 @@ export function blockingChecks(checks: PrCheck[]): { failed: string[]; pending: 
   return { failed: names(['fail', 'cancel']), pending: names(['pending']) }
 }
 
-/** 장부의 판: 결론을 낼 때의 모델·Claude Code·relay 버전 */
+/** 장부 줄마다 적는 버전: 모델(deps.model), Claude Code, relay. 판 열쇠는 내보내기 결론 줄의 M4a 칸이다(works-ledger.ts) */
 export function versions(deps: WorksDeps): {
   model?: string
   claude_version?: string
@@ -94,20 +95,22 @@ export function ledgerEntry(
   }
 }
 
-/** 내보내기 계기의 결론 줄. 나빠진 래칫(M3b)을 함께 남긴다: 다음 Work가 기록 안 된 나빠짐을 찾는 앞 기록이다 */
+/**
+ * 내보내기 계기의 결론 줄. 나빠진 래칫(M3b)을 함께 남긴다: 다음 Work가 기록 안 된 나빠짐을 찾는 앞 기록이다. M4a의 칸(채운
+ * 조건 전부, 조건 hash, 판, PR·base, 승인 주체)은 works-ledger.ts epochLine
+ */
 export function exportLine(
   deps: WorksDeps,
-  rec: WorkRecord,
-  x: ExportRecord,
-  project: ProjectRecord,
-  bundle: EvidenceBundle,
+  j: ExportJob,
   result: Pick<GateResult, 'conclusion' | 'condition' | 'shadow'>,
 ): LedgerEntry {
+  const { rec, x, project, bundle } = j
   const worse = worseOf(bundle.ratchets)
-  return ledgerEntry(deps, rec, x, project, bundle.head, result, worse.length > 0 ? { worse } : {})
+  const extra = { ...epochLine(deps, j, result), ...(worse.length > 0 ? { worse } : {}) }
+  return ledgerEntry(deps, rec, x, project, bundle.head, result, extra)
 }
 
-/** 관문의 정책: 프로젝트 설정, 묶음이 쓴 quality.json의 auto, 서버 보호, 그림자 실적 */
+/** 관문의 정책: 프로젝트 설정, 묶음이 쓴 quality.json의 auto, 서버 보호, 이 묶음의 판(M4a)의 그림자 실적 */
 export async function policyFor(
   ctx: WorkCtx,
   rec: WorkRecord,
@@ -117,12 +120,11 @@ export async function policyFor(
   const { deps } = ctx
   const conditions = await autoConditions(rec.worktree, bundle)
   const server = await deps.gh.serverProtection(project.path, rec.base).catch(() => null)
-  const ledger = await deps.store.readLedger()
   return {
     auto_merge_enabled: project.settings.auto_merge,
     conditions,
     server,
-    track_record_ok: trackRecord(ledger, project.id, project.settings.min_shadow, versions(deps)),
+    track_record_ok: await trackFor(ctx, rec, project, conditions, bundle),
   }
 }
 

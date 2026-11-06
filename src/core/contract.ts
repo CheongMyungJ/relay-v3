@@ -384,7 +384,8 @@ export function contractHash(c: Contract): string {
   return qualityHash(stableJson(c))
 }
 
-function stableJson(v: unknown): string {
+/** 키를 정렬한 JSON(undefined 칸은 뺀다). contractHash와 조건 hash(engine/track.ts condHashes)가 쓴다 */
+export function stableJson(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`
   if (isObj(v)) {
     const keys = Object.keys(v)

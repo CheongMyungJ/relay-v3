@@ -8,6 +8,7 @@ import {
   toolCommand,
   type HookServerOptions,
 } from '../../src/main/hooks.ts'
+import { SessionLog } from '../../src/main/works-session-log.ts'
 
 let server: HookServer | undefined
 
@@ -103,6 +104,28 @@ describe('훅', () => {
     expect(JSON.parse(r.text)).toEqual({ decision: 'block', reason: '형식 오류' })
     expect(await post(port, '/hook/w1/Stop', {}, auth('tok-1'))).toEqual({ status: 200, text: '' })
     expect(seen.logs).toEqual(['훅 처리 실패 (w1 Stop)'])
+  })
+
+  test('세션 기록(noteHook, M4a)은 처리 앞에 본문을 보고, 던져도 처리와 답은 그대로다', async () => {
+    const order: string[] = []
+    const log = new SessionLog()
+    const { port, seen } = await start({
+      noteHook: (workId, event, body) => {
+        order.push(`note ${event}`)
+        if (event === 'Stop') throw new Error('기록 실패')
+        log.noteHook(workId, event, body)
+      },
+      onHook: async (_w, event) => {
+        order.push(`hook ${event}`)
+        return null
+      },
+    })
+    const tool = { ...bash('ls'), effort: { level: 'high' } }
+    expect((await post(port, '/hook/w1/PostToolUse', tool, auth('tok-1'))).status).toBe(200)
+    expect(await post(port, '/hook/w1/Stop', {}, auth('tok-1'))).toEqual({ status: 200, text: '' })
+    expect(order).toEqual(['note PostToolUse', 'hook PostToolUse', 'note Stop', 'hook Stop'])
+    expect(log.effort('w1')).toBe('high')
+    expect(seen.logs).toEqual(['세션 기록 실패 (w1 Stop)'])
   })
 
   test('PreToolUse(Bash)의 막을 명령은 처리와 상관없이 deny로 답한다: 기준 브랜치와 main·master', async () => {

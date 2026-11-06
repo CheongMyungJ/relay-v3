@@ -10,6 +10,7 @@ import type { SessionState, WorkEvent } from '../core/work.ts'
 import type { HookEvent } from '../core/instructions.ts'
 import type { FeedbackHold } from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
+import type { SessionLog } from './works-session-log.ts'
 import {
   branchExport,
   type ExportRecord,
@@ -69,6 +70,10 @@ export interface WorksDeps {
   claudeVersion?: string
   /** 세션과 리뷰의 모델. 없으면 CLI 기본값 */
   model?: string
+  /** 세션 기록(M4a: 훅 본문의 effort). 훅 서버의 noteHook과 같은 것을 준다. 없으면 effort를 모른다 */
+  sessionLog?: SessionLog
+  /** 앱 checkout의 git commit(M4a 장부의 relay_build, 감사용). 모르면 없다 */
+  relayBuild?: string
   /** 처리 실패를 알린다. 기본 console.error */
   log?: (message: string, error?: unknown) => void
   /**

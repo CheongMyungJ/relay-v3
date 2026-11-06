@@ -1,9 +1,22 @@
 import { readFile, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { claudeJson, claudeJsonArgs, claudeVersion, findClaude } from '../../src/adapters/claude.ts'
+import {
+  claudeJson,
+  claudeJsonArgs,
+  claudeVersion,
+  findClaude,
+  streamOutput,
+} from '../../src/adapters/claude.ts'
+import { runFile } from '../../src/adapters/pty.ts'
 import { FAKE_CLAUDE } from '../support/fakes.ts'
 import { cleanupAll, makeTempDir } from '../support/repo.ts'
+
+/** 녹화본에 있는 출력 칸(test/fixtures/recorded-fields.json) */
+const RECORDED = JSON.parse(
+  readFileSync(new URL('../fixtures/recorded-fields.json', import.meta.url), 'utf8'),
+) as { stream: Record<string, string[]> }
 
 let tmp: string
 let reviewFile: string
@@ -84,7 +97,7 @@ describe('claudeVersion', () => {
 })
 
 describe('claudeJsonArgs', () => {
-  test('-p, json 출력, 스키마, 도구 제한, 권한 모드 default, 세션 안 남김', () => {
+  test('-p, stream-json 출력(--verbose), 스키마, 도구 제한, 권한 모드 default, 세션 안 남김', () => {
     const args = claudeJsonArgs({
       schema: SCHEMA,
       allowedTools: ['Read', 'Grep', 'Glob', 'Bash(git diff:*)'],
@@ -92,7 +105,8 @@ describe('claudeJsonArgs', () => {
     })
     expect(args[0]).toBe('-p')
     const val = (name: string) => args[args.indexOf(name) + 1]
-    expect(val('--output-format')).toBe('json')
+    expect(val('--output-format')).toBe('stream-json')
+    expect(args).toContain('--verbose')
     expect(JSON.parse(val('--json-schema') ?? '')).toEqual(SCHEMA)
     expect(val('--tools')).toBe('Read,Grep,Glob,Bash')
     expect(val('--allowedTools')).toBe('Read,Grep,Glob,Bash(git diff:*)')
@@ -123,13 +137,14 @@ describe('claudeJson (가짜 claude -p)', () => {
       env: { FAKE_CLAUDE_REVIEW: reviewFile, ...env },
     })
 
-  test('structured_output과 usage를 돌려주고 프롬프트는 표준 입력으로 간다', async () => {
+  test('structured_output, usage, 리뷰어의 모델을 돌려주고 프롬프트는 표준 입력으로 간다', async () => {
     const log = join(tmp, 'ok.jsonl')
-    const r = await call({ FAKE_CLAUDE_LOG: log })
+    const r = await call({ FAKE_CLAUDE_LOG: log, FAKE_CLAUDE_MODEL: 'fake-model-a' })
     expect(r).toEqual({
       ok: true,
       value: { findings: [{ severity: 'high', raise: 'security', text: '비밀이 샌다' }] },
       usage: expect.objectContaining({ input_tokens: 1000, output_tokens: 50 }),
+      model: 'fake-model-a',
     })
     const entry = JSON.parse((await readFile(log, 'utf8')).trim()) as Record<string, unknown>
     expect(entry).toMatchObject({ type: 'review', cwd: tmp })
@@ -137,6 +152,40 @@ describe('claudeJson (가짜 claude -p)', () => {
     expect(entry.args).toEqual(
       claudeJsonArgs({ schema: SCHEMA, allowedTools: ['Read', 'Grep', 'Glob'] }),
     )
+  })
+
+  test('assistant 이벤트가 없으면 모델 없이 돌려준다(M4a: 판 칸은 모름)', async () => {
+    const r = await call({ FAKE_CLAUDE_MODEL: '' })
+    expect(r.ok).toBe(true)
+    expect(r).not.toHaveProperty('model')
+  })
+
+  test('가짜의 출력 칸은 relay-v2 녹화본에 있는 것뿐이다 (recorded-fields.json)', async () => {
+    const out = await runFile(
+      FAKE_CLAUDE,
+      [...claudeJsonArgs({ schema: SCHEMA, allowedTools: [] })],
+      {
+        cwd: tmp,
+        timeoutMs: 30_000,
+        input: 'x',
+        env: { FAKE_CLAUDE_REVIEW: reviewFile },
+      },
+    )
+    const recorded = RECORDED.stream
+    const events = out.stdout
+      .split('\n')
+      .filter((l) => l.trim() !== '')
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+    expect(events.map((e) => e['type'])).toEqual(['assistant', 'result'])
+    for (const e of events) {
+      const part = String(e['type'])
+      expect(Object.keys(e).filter((k) => !(recorded[part] ?? []).includes(k))).toEqual([])
+      const message = e['message'] as Record<string, unknown> | undefined
+      if (message)
+        expect(
+          Object.keys(message).filter((k) => !(recorded[`${part}.message`] ?? []).includes(k)),
+        ).toEqual([])
+    }
   })
 
   test('실패는 던지지 않고 까닭과 함께 돌려준다', async () => {
@@ -174,5 +223,24 @@ describe('claudeJson (가짜 claude -p)', () => {
       error: 'claude -p 시간 초과 (1000ms)',
     })
     expect(Date.now() - started).toBeLessThan(10_000)
+  })
+})
+
+describe('streamOutput', () => {
+  test('마지막 result 이벤트와 assistant의 마지막 message.model. JSON이 아닌 줄과 다른 이벤트는 건너뛴다', () => {
+    const lines = [
+      JSON.stringify({ type: 'system', subtype: 'init' }),
+      'not json',
+      JSON.stringify({ type: 'assistant', message: { model: 'm1', content: [] } }),
+      JSON.stringify({ type: 'user', message: { content: [] } }),
+      JSON.stringify({ type: 'assistant', message: { model: 'm2', content: [] } }),
+      JSON.stringify({ type: 'assistant', message: { content: [] } }),
+      JSON.stringify({ type: 'result', is_error: false, structured_output: { findings: [] } }),
+    ]
+    expect(streamOutput(lines.join('\r\n'))).toEqual({
+      result: { type: 'result', is_error: false, structured_output: { findings: [] } },
+      model: 'm2',
+    })
+    expect(streamOutput('')).toEqual({ result: null })
   })
 })

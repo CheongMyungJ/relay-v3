@@ -8,6 +8,11 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
+import { parseQuality } from '../../src/core/quality.ts'
+import { REVIEW_PROMPT_VERSION } from '../../src/core/review.ts'
+import { GATE_VERSION } from '../../src/engine/gate-version.ts'
+import type { EpochSource } from '../../src/engine/ledger.ts'
+import { condHashes } from '../../src/engine/track.ts'
 import type { WorkView } from '../../src/shared/api.ts'
 import { calc, QUALITY_TEXT, TESTS_BASE } from './calc.ts'
 import { fakeGhOnPath } from './fakes.ts'
@@ -22,6 +27,28 @@ import {
 
 export const RELAY_VERSION = '0.0.0-test'
 export const CLAUDE_VERSION = '0.0.0 (가짜 Claude Code)'
+/** 가짜 claude가 리뷰 출력에 적는 모델(test/support/fake-claude, FAKE_CLAUDE_MODEL의 기본)과 훅 본문의 effort */
+export const FAKE_MODEL = 'fake-review-model'
+export const FAKE_EFFORT = 'medium'
+
+/**
+ * 이 레포(quality.json)와 가짜 claude로 낸 내보내기 결론 줄의 판(M4a 판 열쇠의 재료)과 버전. 앞선 실적을 장부에 미리 적을 때
+ * 쓴다: 판이 같아야 지금 실적에 든다
+ */
+export function flowEpoch(): Required<EpochSource> & { relay_version: string } {
+  const q = parseQuality(QUALITY_TEXT)
+  if (!q.ok) throw new Error(q.errors.join('; '))
+  return {
+    conds: condHashes(q.value.auto),
+    model_observed: FAKE_MODEL,
+    effort: FAKE_EFFORT,
+    claude_version: CLAUDE_VERSION,
+    gate_version: GATE_VERSION,
+    review_prompt: REVIEW_PROMPT_VERSION,
+    relay_version: RELAY_VERSION,
+  }
+}
+
 export const REQUEST = 'clamp fix: 값이 위로 넘으면 hi로 잘라야 하는데 lo가 나와요.'
 
 // 계약 id는 지침이 준 것(작업 브랜치 relay/<계약 id>). 가짜 claude가 {contractId}를 채운다
@@ -133,7 +160,7 @@ export interface FlowKit {
     home: string,
     o?: Pick<
       OpenAppOptions,
-      'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check' | 'humanQuietMs' | 'm3'
+      'prPollMs' | 'claudeBin' | 'reviewDisabled' | 'check' | 'humanQuietMs' | 'm3' | 'relayBuild'
     >,
   ): Promise<TestApp>
   /** 시험이 열고 스스로 닫은 앱을 목록에서 뺀다 */
@@ -229,6 +256,7 @@ export function flowKit(): FlowKit {
         ...(o.check ? { check: o.check } : {}),
         ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
         ...(o.m3 !== undefined ? { m3: o.m3 } : {}),
+        ...(o.relayBuild ? { relayBuild: o.relayBuild } : {}),
       })
       apps.push(app)
       return app

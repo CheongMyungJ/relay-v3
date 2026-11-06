@@ -1,6 +1,6 @@
 # M4 설계: 그림자 실적
 
-- 상태: **설계**(2026-11-06). 아직 만들지 않았다. 16절의 질문에 답을 받았다(아래).
+- 상태: **만드는 중**(2026-11-06). M4-0(2.1절)과 M4a(3.4절)를 만들었다. M4b~M4g는 아직이고, M4h(자기 실행)는 사용자 결정으로 나중이다. 16절의 질문에 답을 받았다(아래).
 - **사용자 결정(2026-11-06, ✅):**
   - Q10 자기 실행: **도구만 만들고 relay-v3 자기 실행은 나중에 따로 정한다.** quality.json PR, main 보호·필수 검사, 앱으로 relay-v3 개발하기는 하지 않는다. 그래서 M4h(10절)는 '나중'이고, M4의 숫자는 재생과 평가 자료로만 낸다.
   - Q2 M5 숫자: **12절의 안 그대로**(일치 ≥ 20, V3 그대로; 끝이 정해진 n ≥ 30; 일치율 ≥ 0.95; lift > 0; 창 30일; 창이 닫힌 이 조건의 머지 ≥ 20에서 귀속 0·미정 0; 결정론 5회 갈림 0; 지금 관문 판의 재생 거짓 자동 0). M5 규약이 이것을 그대로 쓴다.
@@ -124,6 +124,30 @@ export const GATE_EPOCHS: Readonly<Record<number, number>> = { 1: 1 }
 - **이어 세기:** 올림 PR에서 digest가 그대로면 `GATE_EPOCHS[새 판] = GATE_EPOCHS[앞 판]`으로 이어 둔다. 철학의 '재생 평가를 지나면 다시 연다'의 길을 그대로 쓴다. 바뀌었으면 새 epoch이고 표본은 처음부터다.
 - **정직한 한계:** 재생 자료 208개에 보이지 않는 관문 동작 바뀜은 digest가 잡지 못하고, 그런 바뀜은 이어 세어진다. 파일 hash가 올림을 강제하므로 사람이 올림 PR에서 그 바뀜을 본다는 것이 남은 막음이다. relay-v3에서는 이 파일들이 `human_paths`에 들어가 늘 사람이 머지한다(10절). 이 한계를 V 줄에 적는다.
 - 판은 장부 줄에 숫자로 남고 epoch는 읽을 때 코드의 표로 계산하므로, 나중에 이어 세기를 고쳐도 장부를 다시 쓰지 않는다.
+
+### 3.4 만든 것 (M4a, V46·V47)
+
+- **장부 칸(3.1):** `engine/ledger.ts` `LedgerEntry`에 `met`, `conds`, `gate_version`, `review_prompt`, `model_requested`, `model_observed`, `effort`, `relay_build`, `pr`, `base_sha`, `approved_by`. `isEntry`(`parseLedger`)는 이 칸이 없으면 옛 줄로 읽고, 있는데 모양이 다르면 그 줄을 버린다. 칸은 내보내기 결론 줄(`exportLine`)에만 쓴다. 머지·닫힘 줄과 [그래도 끝내기]의 받아들임 줄은 그대로다.
+- **met과 조건 hash:** `engine/track.ts` `conditionsMet`(조건마다 그 조건 하나만 둔 정책으로 `gate`)과 `condHashes`(core `stableJson`을 내놓고 `qualityHash` 앞 12자). 새 파일 `main/works-ledger.ts` `epochLine`이 줄의 칸을 만들고 `works-exports.ts` `exportLine(deps, job, result)`이 붙인다. `works-evidence.ts`는 부르는 한 줄만 바꿨다(`exportLine(deps, { ...review, bundle }, result)`, 599줄 그대로).
+- **model_observed:** `adapters/claude.ts` `claudeJson`이 `--output-format stream-json --verbose`로 부르고 `streamOutput`이 마지막 result 이벤트와 assistant의 마지막 `message.model`을 읽는다. `works-review.ts` `claudeReview`가 결과에 `model`을, 리뷰 끝이 묶음의 `review.model`(core `types.ts`에 한 칸)을 둔다. 가짜 claude는 stream-json(assistant 하나와 result)을 내고 `FAKE_CLAUDE_MODEL`(기본 `fake-review-model`, 빈 글이면 assistant를 내지 않음)을 쓴다.
+- **effort:** 새 파일 `main/works-session-log.ts` `SessionLog`(Work마다 마지막 `effort.level`, 메모리). `HookServer`의 새 선택 `noteHook`이 본문을 `onHook` 앞에 넘긴다(던져도 처리는 이어 감). `index.ts`와 [흐름]의 앱이 하나를 만들어 훅 서버와 `WorksDeps.sessionLog`에 함께 준다. `works.ts`(598줄)는 건드리지 않았다.
+- **relay_build:** `index.ts`가 시작할 때 앱 폴더(`app.getAppPath()`)가 git checkout의 맨 위면 그 HEAD를 `WorksDeps.relayBuild`로 준다.
+- **판 열쇠(3.2):** `engine/ledger.ts` `epochKey(e, 조건)`과 `claudeMinor`. `trackRecord(entries, project, minShadow, current: EpochSource)`는 결론 줄의 열쇠가 지금 판과 같은 줄만 센다(모르는 칸이 있으면 null, 어떤 판과도 같지 않음). 지금 판은 `works-ledger.ts` `epochOf`(그 묶음의 리뷰 모델, Work의 effort, `deps.claudeVersion`, `GATE_VERSION`, `REVIEW_PROMPT_VERSION`, 정책 조건의 hash)이고 `policyFor`가 `trackFor`로 읽는다.
+- **관문 판(3.3):** `engine/gate-version.ts`(`GATE_VERSION = 1`, `GATE_EPOCHS = { 1: 1 }`, `gateEpoch`). [단위] `gate-version.test.ts`와 자료 `test/fixtures/gate-version.json`(셈 `test/support/gate-version.ts`, 쓰기 `scripts/gate-version-fixture.ts`). 판 1의 재생: 208개 가운데 조건을 채운 묶음 22개.
+- **녹화 칸 목록(14절):** `test/fixtures/recorded-fields.json`(relay-v2 녹화본 `claude.json`의 stream.shapes의 assistant·assistant.message·result 칸, effort가 있는 훅 이벤트의 칸, 앱이 읽는 칸 둘). [어댑터] `claude.test.ts`가 가짜의 출력 칸이 그 안인지 본다.
+- **시험:** [단위] `ledger.test.ts`(판 열쇠, M4a 칸 읽기), `track.test.ts`, `gate-version.test.ts`, `session-log.test.ts`. [어댑터] `claude.test.ts`, `hooks.test.ts`. [흐름] `works.test.ts`(내보내기 결론 줄의 M4a 칸 전부, 그 판으로 센 실적), `works-merge.test.ts`·`works-review.test.ts`(앞선 실적을 지금 판으로 적음, `works-flow.ts` `flowEpoch`). `npm run test:replay` 그대로 지남. 렌더러는 바뀌지 않아 [스모크]는 새로 두지 않았고, 메인(리뷰 출력, index.ts)이 바뀌어 있는 [스모크] 5개를 돌려 지났다.
+- core 4,847 → 4,850줄(`types.ts` 두 줄, `contract.ts` 주석 한 줄).
+
+### 3.5 설계와 다른 것 (M4a)
+
+- **실적을 리뷰 뒤 다시 읽는다.** 판 열쇠에 리뷰 모델이 들어가는데 `policyFor`는 리뷰 앞에 정책을 만든다. 그래서 리뷰 앞의 묶음은 모델을 몰라 실적이 없는 것(엄격)으로 보고, 리뷰가 끝나면 `works-ledger.ts` `refreshTrack`이 그 묶음의 판으로 그 재기의 정책(`track_record_ok`)을 그 자리에서 고친다(`works-review.ts`의 리뷰 끝. 관문과 내보내기가 같은 정책 객체를 쓴다). 설계에는 이 자리가 없었다.
+- **`trackRecord`는 판 열쇠로 세지만 표본은 아직 `condition`(첫 조건)으로 고른다.** `met`으로 세는 것은 M4c `shadowStats`에서 한다. 옛 줄(M4a 앞)은 지금 판에 들지 않는다(3.2 그대로, 엄격하게만 바뀜).
+- **자료 꼴:** `{ version, files, replay }` 대신 `{ version, files, replays: { 판: digest } }`. '재생 결론이 바뀌었는데 앞 epoch로 이어 둠'을 보려면 앞 판의 digest가 있어야 해서다. 자료를 쓰는 스크립트 `scripts/gate-version-fixture.ts`를 더했다(판을 올리지 않고 파일 hash가 바뀌었으면 쓰지 않는다). 재생 digest는 V31 시험의 'now' 래칫·V26 올림 규칙·요청을 본 리뷰로 돌린 것이다. 파일 hash는 줄 끝을 LF로 본다(Windows checkout).
+- **effort를 받는 자리:** `hooks.ts`가 `works-session-log.ts`를 직접 부르지 않고 `HookServerOptions.noteHook`(선택)을 두어 조립하는 쪽이 같은 `SessionLog`를 훅 서버와 `WorksDeps`에 준다(hooks.ts는 Works를 모른다). 메모리에만 두므로 앱을 다시 켜면 다음 훅까지 effort를 모른다(그 사이의 결론 줄은 판 모름).
+- **relay_build:** 패키지 빌드의 electron-vite `define`은 하지 않았다. 앱 폴더가 git checkout의 맨 위가 아니면(패키지 빌드, 다른 레포 안에 놓인 빌드) 칸이 없다.
+- 리뷰 뒤 장부를 다시 읽지 못하면 실적이 없는 것으로 두고 log한다(리뷰 결과는 그대로 쓴다).
+- **review_prompt**는 늘 `REVIEW_PROMPT_VERSION`이다(다시 쓴 리뷰도 이 판일 때만 다시 쓰인다). **model_requested**는 `deps.model ?? 'default'`이다: 지금 앱은 리뷰에 `--model`을 넘기지 않아 늘 'default'다. **pr**은 그 내보내기에 PR이 있을 때만 적는다([끝내기]의 내보내기는 PR이 없을 수 있다).
+- **met**은 관문이 조건을 채웠을 때만 조건마다 다시 본다(아니면 빈 것). 다시 볼 때 head는 묶음의 head, 통합 증거는 그 증거의 head다: 관문이 조건을 채웠다면 둘 다 낡지 않았다.
 
 ## 4. M4b 끝까지 따라가기와 '같은 변경'
 

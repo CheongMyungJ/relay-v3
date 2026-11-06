@@ -7,18 +7,18 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, test } from 'vitest'
 import { contractHash, examplesFileText } from '../../src/core/contract.ts'
-import { trackRecord } from '../../src/engine/ledger.ts'
 import { REVIEW_PROMPT_VERSION } from '../../src/core/review.ts'
+import { trackRecord } from '../../src/engine/ledger.ts'
 import { EVENTS, type WorkView } from '../../src/shared/api.ts'
 import { makeTempDir, runGit } from '../support/repo.ts'
 import { jsonl } from '../support/works-app.ts'
 import {
-  CLAUDE_VERSION,
   CONTRACT,
+  FAKE_MODEL,
   FIX_COMMIT,
+  flowEpoch,
   flowKit,
   PUSH_AND_PR,
-  RELAY_VERSION,
   REQUEST,
   settled,
   type Entry,
@@ -26,7 +26,9 @@ import {
 
 const kit = flowKit()
 const { scenario, fake, mcpResults, until } = kit
-const openApp = (home: string, prPollMs?: number) => kit.openApp(home, { prPollMs })
+const RELAY_BUILD = 'f'.repeat(40)
+const openApp = (home: string, prPollMs?: number) =>
+  kit.openApp(home, { prPollMs, relayBuild: RELAY_BUILD })
 
 // ── 경우 ────────────────────────────────────────────────────────────────────
 
@@ -175,6 +177,8 @@ describe('한 Work의 생애', () => {
       findings: [{ id: 'R1', severity: 'low', text: '이름이 짧음', file: 'src/calc.js', line: 5 }],
       prompt_version: REVIEW_PROMPT_VERSION,
       request: true,
+      // 리뷰어의 출력이 말한 모델(M4a, 장부의 model_observed)
+      model: FAKE_MODEL,
     })
     const asked = (await fake()).find((e) => e.type === 'review')
     expect(asked?.prompt).toContain(`## Request\n\n`)
@@ -256,9 +260,30 @@ describe('한 Work의 생애', () => {
       [true, 'human_merge', null, false, 'human'],
     ])
     expect(ledger.at(-1)).toMatchObject({ project: projectId, work: id, merged_head: head })
-    const current = { claude_version: CLAUDE_VERSION, relay_version: RELAY_VERSION }
-    expect(trackRecord(ledger, projectId, 1, current)).toEqual({ small: true })
-    expect(trackRecord(ledger, projectId, 20, current)).toEqual({ small: false })
+    // 내보내기 결론 줄의 M4a 칸: 채운 조건 전부, 조건 hash, 판(리뷰가 본 모델, 세션의 effort, Claude Code, 관문·리뷰 프롬프트
+    // 판), 요청한 모델, 앱 빌드, PR·base, 승인 주체
+    const epoch = flowEpoch()
+    expect(ledger[0]).toEqual({
+      ts: expect.any(String),
+      project: projectId,
+      work: id,
+      head,
+      conclusion: 'human_merge',
+      condition: 'small',
+      shadow: true,
+      met: ['small'],
+      ...epoch,
+      model_requested: 'default',
+      relay_build: RELAY_BUILD,
+      pr: 1,
+      base_sha: v.evidence?.base,
+      approved_by: 'human',
+    })
+    // 머지 줄은 판 칸을 적지 않는다(끝 줄)
+    expect(ledger[1]).not.toHaveProperty('gate_version')
+    expect(trackRecord(ledger, projectId, 1, epoch)).toEqual({ small: true })
+    expect(trackRecord(ledger, projectId, 20, epoch)).toEqual({ small: false })
+    expect(trackRecord(ledger, projectId, 1, { ...epoch, effort: 'high' })).toEqual({})
     const events = (await app.store.readEvents(id)).map((e) => e.type)
     expect(events).toEqual(
       expect.arrayContaining([

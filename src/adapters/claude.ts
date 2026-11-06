@@ -84,13 +84,16 @@ export interface ClaudeJsonInput {
   signal?: AbortSignal
 }
 
+/** model은 출력의 assistant 이벤트가 말한 모델(마지막 것, M4a model_observed). 못 읽으면 없다 */
 export type ClaudeJsonResult =
-  { ok: true; value: unknown; usage?: object } | { ok: false; error: string }
+  { ok: true; value: unknown; usage?: object; model?: string } | { ok: false; error: string }
 
 /**
  * claudeJson의 실행 인자. `--tools`로 쓸 수 있는 도구 자체를 allowedTools의 도구로 줄인다: `--allowedTools`만으로는
  * 레포의 .claude/settings.json이 허락한 도구(세션이 써 둔 것 포함)가 남는다. `--setting-sources user`로 레포의
- * 프로젝트·로컬 설정(세션이 써 둔 훅, env 포함)을 읽지 않는다(리뷰의 독립, V4). 세션을 남기지 않는다(재개 목록에 섞이지 않게)
+ * 프로젝트·로컬 설정(세션이 써 둔 훅, env 포함)을 읽지 않는다(리뷰의 독립, V4). 세션을 남기지 않는다(재개 목록에 섞이지 않게).
+ * 출력은 `stream-json --verbose`다(M4a): 마지막 result 이벤트는 `--output-format json`의 결과와 같은 칸이고, assistant 이벤트의
+ * `message.model`이 리뷰어의 모델을 알린다(relay-v2 녹화본 claude.json의 stream.shapes)
  */
 export function claudeJsonArgs(
   o: Pick<ClaudeJsonInput, 'schema' | 'model' | 'allowedTools'>,
@@ -101,7 +104,8 @@ export function claudeJsonArgs(
   return [
     '-p',
     '--output-format',
-    'json',
+    'stream-json',
+    '--verbose',
     '--json-schema',
     JSON.stringify(o.schema),
     '--tools',
@@ -124,9 +128,32 @@ function tail(text: string, max = 2_000): string {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
+/** stream-json 출력의 마지막 result 이벤트와 assistant 이벤트의 마지막 message.model. JSON 객체가 아닌 줄은 건너뛴다 */
+export function streamOutput(stdout: string): {
+  result: Record<string, unknown> | null
+  model?: string
+} {
+  let result: Record<string, unknown> | null = null
+  let model: string | undefined
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let e: unknown
+    try {
+      e = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (!isObject(e)) continue
+    if (e.type === 'result') result = e
+    const m = e.type === 'assistant' && isObject(e.message) ? e.message.model : undefined
+    if (typeof m === 'string' && m !== '') model = m
+  }
+  return model === undefined ? { result } : { result, model }
+}
+
 /**
  * `claude -p`를 한 번 부르고 결과의 `structured_output`을 돌려준다. 던지지 않는다: 돌리지 못함, 시간 초과, 종료 코드,
- * 읽지 못한 출력, `is_error`, 구조화된 출력 없음은 모두 `{ ok: false, error }`
+ * 읽지 못한 출력(result 이벤트 없음), `is_error`, 구조화된 출력 없음은 모두 `{ ok: false, error }`
  */
 export async function claudeJson(o: ClaudeJsonInput): Promise<ClaudeJsonResult> {
   const r = await runFile(o.bin, claudeJsonArgs(o), {
@@ -144,18 +171,18 @@ export async function claudeJson(o: ClaudeJsonInput): Promise<ClaudeJsonResult> 
       error: `claude -p 실패 (종료 ${String(r.exit)}): ${tail(r.stderr || r.stdout)}`,
     }
   }
-  let j: unknown
-  try {
-    j = JSON.parse(r.stdout)
-  } catch {
+  const { result: j, model } = streamOutput(r.stdout)
+  if (j === null)
     return { ok: false, error: `claude -p의 출력을 읽지 못함: ${tail(r.stdout, 200)}` }
-  }
-  if (!isObject(j))
-    return { ok: false, error: `claude -p의 출력이 객체가 아님: ${tail(r.stdout, 200)}` }
   if (j.is_error === true) {
     return { ok: false, error: `claude -p 오류: ${tail(String(j.result ?? '까닭 없음'), 500)}` }
   }
   const value = j.structured_output
   if (value === undefined || value === null) return { ok: false, error: '구조화된 출력 없음' }
-  return isObject(j.usage) ? { ok: true, value, usage: j.usage } : { ok: true, value }
+  return {
+    ok: true,
+    value,
+    ...(isObject(j.usage) ? { usage: j.usage } : {}),
+    ...(model === undefined ? {} : { model }),
+  }
 }

@@ -350,6 +350,8 @@ export interface EvidenceBundle {
     findings: ReviewFinding[]
     prompt_version?: number
     request?: boolean
+    /** 리뷰어의 출력이 말한 모델(M4a, 장부의 model_observed). 못 읽었거나 M4 앞의 묶음에는 없다 */
+    model?: string
   } | null
   /** 지식 확인(M3a V38, 규칙 승격 M3d V42): 이 diff가 바꾼 지식 파일과 문제. 두 장치를 껐거나 M3 앞의 묶음은 null이거나 칸이 없다 */
   knowledge?: { changed: string[]; issues: KnowledgeIssue[] } | null

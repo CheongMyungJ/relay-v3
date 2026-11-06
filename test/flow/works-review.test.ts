@@ -11,14 +11,13 @@ import { calc } from '../support/calc.ts'
 import { makeTempDir } from '../support/repo.ts'
 import { jsonl, type TestApp } from '../support/works-app.ts'
 import {
-  CLAUDE_VERSION,
   CONTRACT,
   FIX_COMMIT,
   flowKit,
   NOTE_FINDINGS,
   PUSH_AND_PR,
   RAISED_FINDINGS,
-  RELAY_VERSION,
+  flowEpoch,
   REQUEST,
   settled,
   type Entry,
@@ -151,7 +150,7 @@ describe('자동 머지가 켜진 프로젝트 (보호된 main, 조건 small의 
     await app.close()
     kit.forget(app)
     // 앞서 사람이 그림자 head를 그대로 머지한 Work 하나
-    const v = { claude_version: CLAUDE_VERSION, relay_version: RELAY_VERSION }
+    const v = flowEpoch()
     const base = { ts: '2026-11-01T00:00:00Z', project: projectId, work: 'w0', head: 'h0', ...v }
     const lines = [
       { ...base, conclusion: 'human_merge', condition: 'small', shadow: true },

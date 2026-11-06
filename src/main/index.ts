@@ -3,9 +3,10 @@
 // MCP 브리지는 이 앱의 실행 파일을 Node로 돌린다(ELECTRON_RUN_AS_NODE=1 <앱> out/main/mcp-bridge.js).
 
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { app, BrowserWindow, shell } from 'electron'
 import { claudeVersion, findClaude } from '../adapters/claude.ts'
+import { git } from '../adapters/exec.ts'
 import * as gh from '../adapters/gh.ts'
 import { relayHome } from '../adapters/store.ts'
 import { check } from '../engine/check.ts'
@@ -15,6 +16,7 @@ import { registerIpc } from './ipc.ts'
 import { SessionHost } from './sessions.ts'
 import { Store } from './store.ts'
 import { claudeReview, Works } from './works.ts'
+import { SessionLog } from './works-session-log.ts'
 
 let win: BrowserWindow | null = null
 let works: Works | null = null
@@ -58,6 +60,13 @@ function createWindow(): void {
   else void win.loadFile(join(import.meta.dirname, '../renderer/index.html'))
 }
 
+/** 앱 폴더가 git checkout의 맨 위면 그 HEAD(M4a relay_build). 다른 레포 안에 놓인 빌드는 그 레포의 commit이 아니므로 null */
+async function appBuild(dir: string): Promise<string | null> {
+  const top = (await git(['rev-parse', '--show-toplevel'], dir)).trim()
+  if (resolve(top) !== resolve(dir)) return null
+  return (await git(['rev-parse', 'HEAD'], dir)).trim()
+}
+
 async function start(): Promise<void> {
   const store = new Store({
     home: HOME,
@@ -65,11 +74,14 @@ async function start(): Promise<void> {
     newId: () => randomUUID(),
   })
   const sessions = new SessionHost()
+  // 세션 기록(M4a): 훅 본문의 effort. 훅 서버가 보고 Works가 장부 줄에 읽는다
+  const sessionLog = new SessionLog()
   hooks = new HookServer({
     controlTokenFor: (id) => works?.controlToken(id) ?? null,
     tokenFor: (id) => works?.hookToken(id) ?? null,
     protectedBranches: (id) => works?.protectedBranches(id) ?? [],
     onHook: async (id, event, body) => (works ? works.onHook(id, event, body) : null),
+    noteHook: (id, event, body) => sessionLog.noteHook(id, event, body),
     onControl: async (id, tool, args, signal) =>
       works
         ? works.onControl(id, tool, args, signal)
@@ -82,6 +94,8 @@ async function start(): Promise<void> {
     log('claude --version 실패', e)
     return undefined
   })
+  // 앱 checkout의 git commit(M4a 장부의 relay_build, 감사용). 패키지 빌드처럼 git 폴더가 없으면 모른다
+  const relayBuild = await appBuild(app.getAppPath()).catch(() => null)
   const debounceMs = Number(process.env['RELAY_DEBOUNCE_MS'] ?? '')
   // RELAY_ABLATE=review: 평가에서 리뷰를 뺀 쪽(docs/experiments/m2/protocol.md). 제품 설정이 아니다
   const reviewDisabled = (process.env['RELAY_ABLATE'] ?? '').split(',').includes('review')
@@ -103,6 +117,8 @@ async function start(): Promise<void> {
     review: claudeReview({ bin: claudeBin, log }),
     reviewDisabled,
     ...(m3 === undefined ? {} : { m3 }),
+    sessionLog,
+    ...(relayBuild ? { relayBuild } : {}),
     gh,
     now: () => new Date().toISOString(),
     newId: () => randomUUID(),

@@ -3,7 +3,9 @@
 //
 // - `--version`: FAKE_CLAUDE_VERSION(기본 `0.0.0 (가짜 Claude Code)`)을 찍는다.
 // - `-p`(리뷰 흉내, src/adapters/claude.ts claudeJson): 표준 입력의 프롬프트를 읽고 FAKE_CLAUDE_REVIEW 파일의 JSON(없으면
-//   `{ "findings": [] }`)을 structured_output으로 낸다. --output-format json과 JSON인 --json-schema가 없으면 실패한다.
+//   `{ "findings": [] }`)을 structured_output으로 stream-json(assistant 하나: message.model은 FAKE_CLAUDE_MODEL(기본
+//   fake-review-model, 빈 글이면 내지 않음), 그리고 result)으로 낸다. 칸은 녹화본에 있는 것만(test/fixtures/recorded-fields.json).
+//   --output-format stream-json, --verbose, JSON인 --json-schema가 없으면 실패한다.
 //   FAKE_CLAUDE_REVIEW_FAIL: exit(종료 코드 1), error(is_error true), garbage(JSON이 아닌 출력),
 //   empty(structured_output 없음), hang(끝나지 않음). FAKE_CLAUDE_REVIEW_MS만큼 기다린 뒤 답한다. 기록(review)에는
 //   CLAUDE_CONFIG_DIR이 있으면 그 폴더와 그 안의 이름, .claude.json·settings.json의 글을 남기고(config), 환경의
@@ -89,7 +91,9 @@ async function review() {
     process.stderr.write(`${message}\n`)
     process.exit(1)
   }
-  if (value('--output-format') !== 'json') failWith('가짜 claude: --output-format json이 아님')
+  if (value('--output-format') !== 'stream-json')
+    failWith('가짜 claude: --output-format stream-json이 아님')
+  if (!argv.includes('--verbose')) failWith('Error: --output-format=stream-json requires --verbose')
   try {
     JSON.parse(value('--json-schema') ?? '')
   } catch {
@@ -112,13 +116,19 @@ async function review() {
   const file = env.FAKE_CLAUDE_REVIEW
   const data =
     file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { findings: [] }
+  const sessionId = randomUUID()
+  const model = env.FAKE_CLAUDE_MODEL ?? 'fake-review-model'
+  const text = [{ type: 'text', text: '가짜 리뷰' }]
+  const message = { id: `msg_${sessionId.slice(0, 8)}`, type: 'message', role: 'assistant', model }
+  const event = { type: 'assistant', message: { ...message, content: text }, session_id: sessionId }
+  if (model !== '') process.stdout.write(`${JSON.stringify({ ...event, uuid: randomUUID() })}\n`)
   process.stdout.write(
     JSON.stringify({
       type: 'result',
       subtype: mode === 'error' ? 'error_during_execution' : 'success',
       is_error: mode === 'error',
       result: mode === 'error' ? '가짜 오류' : '',
-      session_id: randomUUID(),
+      session_id: sessionId,
       ...(mode === 'error' || mode === 'empty' ? {} : { structured_output: data }),
       total_cost_usd: 0.0123,
       duration_ms: 42,

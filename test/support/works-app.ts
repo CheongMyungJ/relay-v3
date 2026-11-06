@@ -13,6 +13,7 @@ import { HookServer } from '../../src/main/hooks.ts'
 import { SessionHost } from '../../src/main/sessions.ts'
 import { Store } from '../../src/main/store.ts'
 import { claudeReview, Works } from '../../src/main/works.ts'
+import { SessionLog } from '../../src/main/works-session-log.ts'
 import { FAKE_CLAUDE } from './fakes.ts'
 
 export const BRIDGE = resolve(import.meta.dirname, '../../src/main/mcp-bridge.ts')
@@ -45,6 +46,8 @@ export interface OpenAppOptions {
   humanQuietMs?: number
   /** 환경 변수 RELAY_M3(V38)처럼 M3 장치를 덮는다 */
   m3?: string
+  /** 앱 checkout의 git commit(M4a relay_build) */
+  relayBuild?: string
   log?: (message: string, error?: unknown) => void
 }
 
@@ -56,11 +59,13 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
   const log = o.log ?? (() => {})
   // 훅 서버가 먼저 떠야 포트를 Works에 줄 수 있다
   const ref: { works?: Works } = {}
+  const sessionLog = new SessionLog()
   const hooks = new HookServer({
     controlTokenFor: (id) => ref.works?.controlToken(id) ?? null,
     tokenFor: (id) => ref.works?.hookToken(id) ?? null,
     protectedBranches: (id) => ref.works?.protectedBranches(id) ?? [],
     onHook: async (id, event, body) => (ref.works ? ref.works.onHook(id, event, body) : null),
+    noteHook: (id, event, body) => sessionLog.noteHook(id, event, body),
     onControl: async (id, tool, args, signal) =>
       ref.works ? ref.works.onControl(id, tool, args, signal) : null,
     log,
@@ -86,6 +91,8 @@ export async function openApp(o: OpenAppOptions): Promise<TestApp> {
     ...(o.reviewDisabled ? { reviewDisabled: true } : {}),
     ...(o.humanQuietMs !== undefined ? { humanQuietMs: o.humanQuietMs } : {}),
     ...(o.m3 !== undefined ? { m3: o.m3 } : {}),
+    sessionLog,
+    ...(o.relayBuild ? { relayBuild: o.relayBuild } : {}),
     log,
   })
   await works.init()

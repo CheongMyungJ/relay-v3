@@ -164,6 +164,9 @@ v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 �
 ### `src/engine/ledger.ts` — 실적 장부(그림자)
 M2의 `src/core/ledger.ts`를 M4-0(m4-design 2절)에서 옮겼다. 순수 함수지만 src/core 상한 때문에 engine에 둔다(knowledge-format.ts와 같다). 약속은 [m2-modules.md](m2-modules.md) 1a절.
 
+### `src/engine/gate-version.ts`, `src/engine/track.ts` — 관문 판과 그림자 실적의 셈 (M4a)
+순수 함수다. `GATE_VERSION`·`GATE_EPOCHS`·`gateEpoch`, `conditionsMet`(조건마다 core `gate`를 따로 부름)·`condHashes`(core `stableJson`, `qualityHash`). 약속은 [m2-modules.md](m2-modules.md) 1a절. core `contract.ts`의 `stableJson`을 내놓았다(모양은 그대로).
+
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
 - `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).
 - `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 `M3_DEFAULT`의 값.

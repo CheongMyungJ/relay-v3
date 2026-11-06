@@ -27,6 +27,7 @@ import { QUALITY_PATH } from '../engine/check.ts'
 import { humanRequest } from '../engine/judge.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import { PREPARED_MAX } from './works-feedback.ts'
+import { refreshTrack } from './works-ledger.ts'
 import {
   exportContract,
   workHead,
@@ -98,12 +99,13 @@ export function claudeReview(o: {
       return { status: 'failed', findings: [] }
     }
     const usage = r.usage ? { usage: r.usage as Record<string, unknown> } : {}
+    const model = r.model === undefined ? {} : { model: r.model }
     const parsed = parseReview(r.value)
     if (!parsed.ok) {
       o.log?.(`리뷰 결과를 읽지 못함: ${parsed.errors.join('; ')}`)
-      return { status: 'failed', findings: [], ...usage }
+      return { status: 'failed', findings: [], ...usage, ...model }
     }
-    return { status: 'done', findings: parsed.value, ...usage }
+    return { status: 'done', findings: parsed.value, ...usage, ...model }
   }
 }
 
@@ -353,10 +355,20 @@ export class ReviewDesk {
       })
       // 리뷰어가 요청을 받았다(V30): 그런 리뷰만 자동 후보·그림자가 될 수 있다(V15)
       const saw = request === null ? {} : { request: true }
-      return {
+      // 리뷰어의 모델(M4a): 장부의 model_observed. 지금 판의 실적은 이 모델로 다시 읽는다(정책은 리뷰 앞에 만들었다)
+      const model = result?.model === undefined ? {} : { model: result.model }
+      const reviewed: EvidenceBundle = {
         ...bundle,
-        review: result && { status: result.status, findings: result.findings, ...version, ...saw },
+        review: result && {
+          status: result.status,
+          findings: result.findings,
+          ...version,
+          ...saw,
+          ...model,
+        },
       }
+      await refreshTrack(this.ctx, rec, j.project, j.policy, reviewed)
+      return reviewed
     } catch (e) {
       if (signal.aborted) return this.aborted(id, trigger, unit)
       this.ctx.log(`리뷰 실패 (${id})`, e)
