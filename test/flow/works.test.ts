@@ -62,7 +62,8 @@ describe('한 Work의 생애', () => {
       review: 'all',
       merge_method: 'squash',
       question_mode: 'confirm_each',
-      m3: { knowledge: true, debt: true, tidy: true, promote: true },
+      // V44: 지식 잇기는 M3 장기 평가 뒤 기본 끔
+      m3: { knowledge: false, debt: true, tidy: true, promote: true },
     })
 
     const created = await works.createWork({

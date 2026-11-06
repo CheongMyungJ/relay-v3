@@ -66,7 +66,8 @@ async function measured(works: Awaited<ReturnType<typeof open>>['works'], projec
 test('켜면: 빚 목록과 지침, 증거의 갚은 빚·건드린 곳의 빚(알림), 잡힘은 다른 Work에 진행 중', async () => {
   const { app, works, project } = await open()
   const a = await measured(works, project)
-  expect(works.record(a).m3).toEqual({ knowledge: true, debt: true, tidy: true, promote: true })
+  // 기본 설정(V44: 지식 잇기만 끔)
+  expect(works.record(a).m3).toEqual({ knowledge: false, debt: true, tidy: true, promote: true })
   const request = (await app.store.readText(a, 'request.md')) ?? ''
   expect(request.startsWith(`${REQUEST}\n\n${TIDY_TITLE}\n`)).toBe(true)
   expect(request.split('\n').filter((l) => l.startsWith('- '))).toEqual([

@@ -42,7 +42,8 @@ export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   review: 'all',
   merge_method: 'squash',
   question_mode: 'confirm_each',
-  m3: { knowledge: true, debt: true, tidy: true, promote: true },
+  // engine/m3.ts M3_DEFAULT와 같다. 지식 잇기는 M3 장기 평가(2026-11-06) 뒤 기본 끔(V44)
+  m3: { knowledge: false, debt: true, tidy: true, promote: true },
 }
 
 /**

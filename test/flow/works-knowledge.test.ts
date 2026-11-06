@@ -87,6 +87,8 @@ async function run(m3?: string) {
   const app = await kit.openApp(await makeTempDir('relay-home-'), m3 === undefined ? {} : { m3 })
   const { works } = app
   const project = await works.addProject(kit.repo.dir)
+  // 지식 잇기는 기본 끔(V44): 켜는 쪽은 사람처럼 프로젝트 설정으로 켠다(RELAY_M3이 있으면 그것이 덮는다)
+  if (m3 === undefined) await works.updateSettings(project.id, { m3: { knowledge: true } })
   const { id } = await works.createWork({ project: project.id, request: REQUEST })
   await until(() => works.view(id).state === 'awaiting_approval', '계약 제출')
   const groundings = works.view(id).groundings ?? []
@@ -103,7 +105,7 @@ async function run(m3?: string) {
   return { app, works, id, groundings, instructions: String(start.instructions) }
 }
 
-test('켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge와 형식 오류의 사람 머지, relay_check', async () => {
+test('설정에서 켜면: 관련 지식 목록, 지침, 근거 확인, 증거의 knowledge와 형식 오류의 사람 머지, relay_check', async () => {
   const { app, works, id, groundings, instructions } = await run()
   expect(works.record(id).m3).toEqual({ knowledge: true, debt: true, tidy: true, promote: true })
   const request = (await app.store.readText(id, 'request.md')) ?? ''

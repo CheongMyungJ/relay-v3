@@ -162,9 +162,9 @@ v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 �
 - knowledge.ts(git): `readEntries(root, sha)`, `relatedKnowledge(root, ref, request)`(새 Work), `checkKnowledgeGround(id, fileAt)`, `knowledgeChanged(diff): string[]`, `checkKnowledge(root, diff): Promise<{ changed: string[]; issues: KnowledgeIssue[] }>` — changed(`knowledgeChanged`)는 이 diff가 바꾼(더함·고침·옮김·지움) 지식 폴더의 .md(README 빼고). issues: 바꾼 파일이 지식 경로가 아니면 format, 바꾼 항목마다 `checkEntryFormat`(format)과 anchor의 마지막 조각이 head의 코드(지식 폴더 밖)에 없으면 anchor. 바꾸지 않은 항목은 `## 아직 규칙을 따르지 않는 곳`의 경로를 이 diff가 바꿨으면 not_yet(v2 D296), anchor를 이 diff가 지운 줄에 있고 head에 없으면 anchor.
 
 ### `src/engine/m3.ts` — M3 장치의 스위치 (V38)
-- `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(프로젝트 설정의 기본), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).
-- `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 켬.
-- `m3Switches(project, env: string | undefined): { switches; errors }` — env(RELAY_M3)가 비었으면 프로젝트 설정, `off`·`0`·`none`·`false`는 모두 끔, `on`·`1`·`all`·`true`는 모두 켬, 쉼표로 이은 장치 이름은 그것만 켬(모르는 이름은 errors). CLI `relay check`는 프로젝트가 없어 env만 본다(없으면 켬).
+- `M3_DEVICES`(`knowledge` M3a, `debt` M3b, `tidy` M3c, `promote` M3d), `M3_ON`(모두 켬, `RELAY_M3=on`), `M3_DEFAULT`(프로젝트 설정의 기본, shared `DEFAULT_SETTINGS.m3`과 같음: 지식 잇기만 끔, V44), `M3_OFF`(M3 앞의 Work 기록. M3a의 Work 기록은 debt·tidy·promote가, M3b의 것은 tidy·promote가, M3c의 것은 promote가 꺼짐).
+- `m3Settings(raw): M3Switches` — 저장된 설정. 장치마다 참·거짓만, 아니면 `M3_DEFAULT`의 값.
+- `m3Switches(project, env: string | undefined): { switches; errors }` — env(RELAY_M3)가 비었으면 프로젝트 설정, `off`·`0`·`none`·`false`는 모두 끔, `on`·`1`·`all`·`true`는 모두 켬, 쉼표로 이은 장치 이름은 그것만 켬(모르는 이름은 errors). CLI `relay check`는 프로젝트가 없어 env만 본다(없으면 `M3_DEFAULT`).
 
 ### `src/engine/debt-record.ts` — 받아들인 나빠짐의 빚 기록 (M3b, V40)
 - `worseOf(ratchets)`, `debtAt(repo, sha): Promise<{ ids; items }>`(sha의 `.relay/debt/<id>.md`: 있는 id 모두와 읽은 항목).
@@ -196,7 +196,7 @@ v2의 지식 형식(v2 D293, D296, D299)과 v2 core/knowledge.ts의 함수를 �
 ## cli (`src/cli/main.ts`, bin `relay`)
 
 - `relay init [--write]` — 초안을 출력. `--write`면 `.relay/quality.json`이 없을 때만 쓴다.
-- `relay check [--base <ref>] [--head <ref>] [--contract <file>] [--request <file>] [--json]` — 요약 줄을 찍고 묶음 경로를 알린다. `--json`이면 묶음 JSON. 지식 잇기(V38)는 환경 변수 `RELAY_M3`(V39)만 보고 정한다(없으면 켬, `off`면 끔. 모르는 장치 이름은 stderr에 알린다).
+- `relay check [--base <ref>] [--head <ref>] [--contract <file>] [--request <file>] [--json]` — 요약 줄을 찍고 묶음 경로를 알린다. `--json`이면 묶음 JSON. M3 장치(V38~V42)는 환경 변수 `RELAY_M3`(V39)만 보고 정한다(없으면 프로젝트 설정의 기본: 지식 잇기는 끔(V44), 나머지는 켬. `off`면 모두 끔. 모르는 장치 이름은 stderr에 알린다).
 - `relay gate [--evidence <file>] [--contract <file>] [--head <ref>] [--auto-merge] [--json]` — 결론과 decisive, reasons. 묶음의 레포에서 `--head`(기본 HEAD)를 읽어 gate에 넘긴다(못 읽으면 null). 서버 보호는 M1에서 null(그래서 자동 조건을 채워도 그림자다. 다만 M1 묶음은 리뷰가 없어 그 전에 '리뷰 없음'으로 사람 머지다).
 - `relay debt list|scan` — 목록, 사라진 anchor.
 - 종료 코드: 0 성공(결론과 상관없이), 1 사용 오류, 2 내부 오류. SIGINT·SIGTERM·SIGHUP(Windows는 SIGBREAK도)을 받으면 돌던 레포 명령의 프로세스 묶음을 끝내고 128+신호 번호로 끝난다(명령은 자기 묶음에서 돌아 터미널의 신호를 받지 않는다).
