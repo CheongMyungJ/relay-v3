@@ -42,6 +42,7 @@ const api: RelayApi = {
   },
   diff: (id) => call(IPC.diff, id),
   debt: (id) => call(IPC.debt, id),
+  baseDebt: (id) => call(IPC.baseDebt, id),
   draftQuality: (projectId) => call(IPC.draftQuality, projectId),
   on<E extends RelayEvent>(event: E, cb: (payload: RelayEventPayload[E]) => void): () => void {
     if (!events.has(event)) throw new Error(`모르는 이벤트: ${String(event)}`)

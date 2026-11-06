@@ -1,12 +1,13 @@
 // 곁들일 정리 (M3c, docs/m3-design.md 4절, V41). 빚의 모양과 읽기는 core debt.ts와 debt-record.ts(debtAt)다.
 // - 읽기: 새 Work의 request.md 끝에 기준의 `.relay/debt/` 목록(나이 순, 경로와 한 줄, 30개까지. 넘으면 수만). 다른 진행 중
 //   Work가 계약 tidy로 집은 항목은 '진행 중: 잡힘(<Work id>)'(잡힘은 앱이 저장소에서 읽는다, main/works-debt.ts claimedDebt).
-// - 확인(증거, 알림): 기준의 빚 가운데 계약 tidy의 것, 이 diff가 바꾼 경로에 닿은 것, 이 diff가 항목 파일을 바꾼 것마다
+// - 확인(증거, 알림): 기준의 빚 가운데 계약 tidy의 것, 이 diff가 바꾼 경로에 닿은 것(quality.json의 래칫 항목은 빼고), 이 diff가 항목 파일을 바꾼 것마다
 //   종류별 결정론 갚음(paid·open·unknown), 계약 tidy 항목의 anchor에 닿은 바뀐 파일의 바뀐 줄(정리 몫)과 상한
 //   (quality.json tidy_max_lines, 기본 100). 사람 머지 사실이 아니다. rule_violation은 규칙 승격(M3d, promote.ts)이 가른다.
 
 import { dirsOf, lineCounts, lsTree, revParse } from '../adapters/git.ts'
 import { touching } from '../core/debt.ts'
+import { QUALITY_PATH } from '../core/quality.ts'
 import type {
   CommandEvidence,
   Contract,
@@ -35,6 +36,8 @@ export type TidyEvidence = NonNullable<EvidenceBundle['tidy']>
 const debtFile = (id: string) => `${DEBT_DIR}/${id}.md`
 const inDebtDir = (path: string) => path.startsWith(`${DEBT_DIR}/`)
 const firstLine = (text: string) => text.trim().split(/\r?\n/)[0]?.trim() ?? ''
+/** quality.json에 붙은 래칫 항목(시험 수·명령 래칫, core debtFromRatchet): 파일이 아니라 quality.json을 바꿔도 닿지 않는다 */
+const ratchetItem = (i: DebtItem) => i.anchor.path === QUALITY_PATH && i.anchor.metric !== undefined
 
 /** 나이 순: created가 이른 것부터, 같으면 id */
 export function byAge(items: DebtItem[]): DebtItem[] {
@@ -59,7 +62,8 @@ export function debtSection(items: DebtItem[], claims: ReadonlyMap<string, strin
   const lines = byAge(items).map((i) => {
     const by = claims.get(i.id)
     const tail = by === undefined ? '' : `, 진행 중: 잡힘(${by})`
-    return `- \`${i.anchor.path}\`: ${firstLine(i.reason)} (${i.id}, ${i.kind}, ${i.created}${tail})`
+    const at = ratchetItem(i) ? `래칫 \`${i.anchor.metric}\`` : `\`${i.anchor.path}\``
+    return `- ${at}: ${firstLine(i.reason)} (${i.id}, ${i.kind}, ${i.created}${tail})`
   })
   return [...head, ...lines, ''].join('\n')
 }
@@ -80,6 +84,8 @@ export interface PayoffFacts {
   deleted: boolean
   /** anchor 파일의 head 줄 수. 파일이 없으면 null, 셀 수 없으면(폴더, 바이너리) undefined */
   lines: number | null | undefined
+  /** 이 diff가 anchor 파일을 옮겼으면 head의 새 경로(lines는 그 파일의 줄 수) */
+  moved?: string
   /** rule_violation(M3d): 검사를 적은 head 규칙 항목과 허용 목록, 빠른 명령. 규칙 승격이 꺼졌으면 없다 */
   rule?: RuleFacts
 }
@@ -113,14 +119,25 @@ export function payoff(
           status: 'unknown',
           detail: `래칫 ${metric}은 파일 줄 수가 아니라 가르지 못함 (${file})`,
         }
+      const where = f.moved === undefined ? file : `${f.moved}로 옮김, ${file}`
       if (f.lines === null) return { status: 'paid', detail: `파일이 없어짐 (${file})` }
       if (f.lines === undefined)
-        return { status: 'unknown', detail: `줄 수를 셀 수 없음 (${file})` }
+        return { status: 'unknown', detail: `줄 수를 셀 수 없음 (${where})` }
       return f.lines <= spec.max
-        ? { status: 'paid', detail: `${f.lines}줄 ≤ ${spec.max} (${file})` }
-        : { status: 'open', detail: `${f.lines}줄 > ${spec.max} (${file})` }
+        ? { status: 'paid', detail: `${f.lines}줄 ≤ ${spec.max} (${where})` }
+        : { status: 'open', detail: `${f.lines}줄 > ${spec.max} (${where})` }
     }
   }
+}
+
+/** 이 diff가 path를 옮긴(R) head의 새 경로. head에 있을 때만 */
+function movedTo(
+  diff: DiffFacts,
+  path: string,
+  exists: (p: string) => boolean,
+): string | undefined {
+  const to = diff.files.find((f) => f.status === 'R' && f.old_path === path)?.path
+  return to !== undefined && exists(to) ? to : undefined
 }
 
 /** tidyEvidence의 입력: 기준의 빚과 head의 사실 */
@@ -135,7 +152,7 @@ export interface TidyInput {
   q: QualityConfig | null
   /** head에 있는 파일인가(폴더도) */
   exists: (path: string) => boolean
-  /** head의 파일 줄 수(셀 수 있는 것만) */
+  /** head의 파일 줄 수(셀 수 있는 것만). 옮긴 anchor는 새 경로로 */
   lines: ReadonlyMap<string, number>
   /** 규칙 승격(M3d)이 켜졌으면 head의 지식 항목과 빠른 명령의 결과(rule_violation의 갚음) */
   rules?: { head: readonly KnowledgeEntry[]; commands: FastOutcome }
@@ -146,18 +163,29 @@ export function tidyEvidence(o: TidyInput): TidyEvidence {
   const taken = [...new Set(o.taken)]
   const changed = new Set(o.diff.files.flatMap((f) => [f.path, f.old_path ?? f.path]))
   const code = [...changed].filter((p) => !inDebtDir(p))
-  const touched = new Set(touching(o.items, code).map((i) => i.id))
-  const judge = (i: DebtItem): DebtPayoff => ({
-    id: i.id,
-    path: i.anchor.path,
-    kind: i.kind,
-    reason: firstLine(i.reason),
-    ...payoff(i, o.q, {
-      deleted: !o.exists(debtFile(i.id)),
-      lines: !o.exists(i.anchor.path) ? null : o.lines.get(i.anchor.path),
-      ...(o.rules === undefined ? {} : { rule: ruleFacts(i, o.rules.head, o.rules.commands) }),
-    }),
-  })
+  const touched = new Set(
+    touching(
+      o.items.filter((i) => !ratchetItem(i)),
+      code,
+    ).map((i) => i.id),
+  )
+  const judge = (i: DebtItem): DebtPayoff => {
+    // 옮기기만 한 anchor는 없어진 것이 아니다: 새 자리의 줄 수로 가른다
+    const moved = o.exists(i.anchor.path) ? undefined : movedTo(o.diff, i.anchor.path, o.exists)
+    const at = moved ?? i.anchor.path
+    return {
+      id: i.id,
+      path: i.anchor.path,
+      kind: i.kind,
+      reason: firstLine(i.reason),
+      ...payoff(i, o.q, {
+        deleted: !o.exists(debtFile(i.id)),
+        lines: !o.exists(at) ? null : o.lines.get(at),
+        ...(moved === undefined ? {} : { moved }),
+        ...(o.rules === undefined ? {} : { rule: ruleFacts(i, o.rules.head, o.rules.commands) }),
+      }),
+    }
+  }
   const byId = new Map(o.items.map((i) => [i.id, i]))
   const mine = taken.map((id): DebtPayoff => {
     const item = byId.get(id)
@@ -197,8 +225,9 @@ export async function checkTidy(
   const dirs = dirsOf(paths)
   const exists = (p: string) => files.has(p) || dirs.has(p.replace(/\/+$/, ''))
   const anchors = items
-    .filter((i) => i.kind === 'accepted_regression' && files.has(i.anchor.path))
-    .map((i) => i.anchor.path)
+    .filter((i) => i.kind === 'accepted_regression')
+    .map((i) => (files.has(i.anchor.path) ? i.anchor.path : movedTo(diff, i.anchor.path, exists)))
+    .filter((p): p is string => p !== undefined && files.has(p))
   const lines = new Map<string, number>()
   for (const [p, n] of await lineCounts(root, diff.head, anchors)) if (n !== null) lines.set(p, n)
   const ruled = commands !== null && items.some((i) => i.kind === 'rule_violation')

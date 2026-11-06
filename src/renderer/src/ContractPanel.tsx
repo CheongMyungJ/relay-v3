@@ -1,7 +1,8 @@
 // [계약] 패널 (docs/m2-modules.md 4절): 목표, 그 바로 밑에 비목표(V29), hint, 줄 표(종류, 글, 근거와 확인됨/추정, 예시
 // 입력→출력, 확인 방법), 사람만 아는 규칙. 단위가 있으면(V21) 줄을 단위마다 묶고 전달 방식을 보인다. 승인을 기다리면
 // [승인]과 늘 보이는 고칠 점 칸·[보내기], 계약 다시면 세션의 요청, 승인본과 제안의 차이, [받아들이기]·[거절하기].
-// Work를 만들 때 찾은 기록 안 된 나빠짐(M3b)은 맨 위에 알린다.
+// Work를 만들 때 찾은 기록 안 된 나빠짐(M3b)은 맨 위에 알린다. 곁들일 정리(M3c)는 계약 tidy의 id마다 기준 장부의 종류·경로·
+// 까닭 첫 줄을 보이고 장부에 없는 id를 알린다(사람이 무엇을 받는지 알고 승인하게).
 import { useState } from 'react'
 import type { Contract, ContractLine, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
@@ -18,7 +19,8 @@ import {
   type DeltaItem,
   type Tone,
 } from './format.ts'
-import { unrecordedText } from './debt.ts'
+import { DEBT_KIND, useLoad } from './ChangesPanel.tsx'
+import { tidyRows, unrecordedText } from './debt.ts'
 import { Empty, ErrorLine, Tag, useAction } from './ui.tsx'
 
 export function ContractPanel({ view }: { view: WorkView }) {
@@ -50,6 +52,7 @@ export function ContractPanel({ view }: { view: WorkView }) {
       ) : null}
       {shown ? (
         <ContractView
+          id={view.id}
           contract={shown}
           branch={view.branch}
           groundings={view.groundings}
@@ -224,6 +227,7 @@ function DeltaList({ title, items }: { title: string; items: DeltaItem[] }) {
 }
 
 function ContractView(p: {
+  id: string
   contract: Contract
   branch: string
   groundings: GroundingCheck[] | null
@@ -284,7 +288,7 @@ function ContractView(p: {
           ))}
 
       <TextList title="사람만 아는 규칙" items={c.human_rules} empty="없음" />
-      {c.tidy.length > 0 ? <TextList title="곁들일 정리(빚)" items={c.tidy} empty="" /> : null}
+      {c.tidy.length > 0 ? <TidyList id={p.id} ids={c.tidy} /> : null}
       {c.approved_at ? (
         <p className="muted small">
           {c.approved_by === 'human' ? '사람이' : '호출자가'} 승인함 · {timeText(c.approved_at)}
@@ -341,6 +345,42 @@ function LineRow(p: { line: ContractLine; contract: Contract; checks: GroundingC
         ) : null}
       </dl>
     </li>
+  )
+}
+
+const loadBaseDebt = (id: string) => window.relay.baseDebt(id)
+
+/** 계약 tidy(M3c): id마다 기준 장부의 종류·anchor·까닭 첫 줄. 장부에 없는 id는 알린다. 읽지 못하면 id만 */
+function TidyList(p: { id: string; ids: string[] }) {
+  const got = useLoad(loadBaseDebt, p.id, null)
+  const items = got.state === 'ok' ? got.value : []
+  return (
+    <>
+      <h3 className="section-title">곁들일 정리(빚)</h3>
+      <ul className="plain-list" data-testid="contract-tidy">
+        {tidyRows(p.ids, items).map((r) => (
+          <li key={r.id}>
+            <code>{r.id}</code>
+            {r.item ? (
+              <>
+                {' · '}
+                {DEBT_KIND[r.item.kind]} · <code>{r.item.anchor.path}</code>: {r.reason}
+              </>
+            ) : got.state === 'ok' ? (
+              <>
+                {' '}
+                <Tag tone="warn">기준의 빚 장부에 없음</Tag>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {got.state === 'error' ? <ErrorLine text={got.error} /> : null}
+      <p className="muted small">
+        기준의 <code>.relay/debt/</code>에 적힌 항목입니다. 까닭은 레포의 글이라 세션은 승인한
+        계약의 몫만 합니다.
+      </p>
+    </>
   )
 }
 

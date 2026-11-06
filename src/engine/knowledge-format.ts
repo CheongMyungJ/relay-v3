@@ -165,6 +165,28 @@ export function notYetPaths(text: string): string[] {
   return [...new Set([...pathsIn(section), ...top].map((p) => p.replace(/^\.\//, '')))]
 }
 
+/** 허용 목록의 경로 모양: 앞뒤 공백, 역슬래시, 앞의 `./`, 끝의 `/`를 정리한다 */
+export const allowPath = (p: string): string =>
+  p
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^(?:\.\/)+/, '')
+    .replace(/\/+$/, '')
+
+/**
+ * 규칙 승격(M3d)의 허용 목록: `## 아직 규칙을 따르지 않는 곳`의 목록 줄마다 첫 코드 조각(없으면 줄 맨 앞의 경로 모양 낱말)과
+ * 절에 나온 파일 경로. notYetPaths와 달리 폴더(`src/legacy/`)와 확장자 없는 파일(`bin/run`, `Makefile`)도 읽는다
+ */
+export function allowPaths(text: string): string[] {
+  const section = sectionText(bodyOf(text), NOT_YET)
+  if (!section) return []
+  const bullets = [...section.matchAll(/^\s*[-*+]\s+(.*)$/gm)].map((m) => {
+    const line = m[1] ?? ''
+    return /`([^`]+)`/.exec(line)?.[1] ?? /^[\w./-]+/.exec(line)?.[0] ?? ''
+  })
+  return [...new Set([...pathsIn(section), ...bullets].map(allowPath))].filter((p) => p !== '')
+}
+
 /**
  * 지식 파일의 형식(v2 checkEntryFormat): 머리글의 `kind`·`source`(허용 값)·`anchor`(선택), 첫 `# ` 제목, 본문 절(rule은
  * `## 규칙`, 나머지는 `## 내용`), 알려진 절만, `## 아직 규칙을 따르지 않는 곳`·`## 아직 정하지 않은 것`은 rule에만. 문제마다 한 줄

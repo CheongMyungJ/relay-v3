@@ -6,14 +6,18 @@ import type { DebtItem, DebtKind } from '../../core/types.ts'
 import { diffOpen, splitDiff } from './format.ts'
 import { Empty, ErrorLine, Spinner, Tag } from './ui.tsx'
 
-type Loaded<T> =
+export type Loaded<T> =
   { state: 'loading' } | { state: 'ok'; value: T } | { state: 'error'; error: string }
 
 const loadDiff = (id: string) => window.relay.diff(id)
 const loadDebt = (id: string) => window.relay.debt(id)
 
 /** id와 head가 바뀔 때마다 읽는다. 늦게 온 앞 답은 버린다. load는 모듈의 함수(바뀌지 않음) */
-function useLoad<T>(load: (id: string) => Promise<T>, id: string, head: string | null): Loaded<T> {
+export function useLoad<T>(
+  load: (id: string) => Promise<T>,
+  id: string,
+  head: string | null,
+): Loaded<T> {
   const key = `${id}:${head ?? ''}`
   const [got, setGot] = useState<{ key: string; value: Loaded<T> }>({
     key: '',
@@ -104,7 +108,7 @@ function patchClass(line: string): string | undefined {
   return undefined
 }
 
-const DEBT_KIND: Record<DebtKind, string> = {
+export const DEBT_KIND: Record<DebtKind, string> = {
   tidy: '정리',
   accepted_regression: '받아들인 나빠짐',
   rule_violation: '규칙 어김',

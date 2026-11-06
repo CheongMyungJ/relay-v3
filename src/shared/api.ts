@@ -399,6 +399,8 @@ export interface RelayApi {
   diff(id: string): Promise<string>
   /** 이 Work가 건드린 경로의 빚 항목 */
   debt(id: string): Promise<DebtItem[]>
+  /** [계약]의 곁들일 정리(M3c): 기준(Work 브랜치와 기준 브랜치의 공통 조상)의 빚 장부 */
+  baseDebt(id: string): Promise<DebtItem[]>
   /** [초안 만들기](V20): 품질 기준 초안을 프로젝트의 작업 트리에 쓴다. 커밋은 사람이 한다 */
   draftQuality(projectId: string): Promise<DraftQualityResult>
   /** 이벤트를 받는다. 돌려준 함수를 부르면 그만 받는다 */
@@ -427,6 +429,7 @@ export const IPC = {
   terminalResize: 'relay:terminal-resize',
   diff: 'relay:diff',
   debt: 'relay:debt',
+  baseDebt: 'relay:base-debt',
   draftQuality: 'relay:draft-quality',
 } as const
 

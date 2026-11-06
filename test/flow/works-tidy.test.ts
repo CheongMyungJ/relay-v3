@@ -6,6 +6,7 @@ import { beforeAll, expect, test } from 'vitest'
 import { formatDebt } from '../../src/core/debt.ts'
 import type { DebtItem } from '../../src/core/types.ts'
 import { TIDY_TITLE } from '../../src/engine/tidy.ts'
+import { baseDebt } from '../../src/main/works-worktree.ts'
 import { makeTempDir } from '../support/repo.ts'
 import { CONTRACT, FIX_COMMIT, flowKit, REQUEST, settled } from '../support/works-flow.ts'
 
@@ -75,6 +76,15 @@ test('켜면: 빚 목록과 지침, 증거의 갚은 빚·건드린 곳의 빚(�
   ])
   const start = (await kit.fake()).find((e) => e.type === 'start')
   expect(String(start?.instructions)).toContain('Leave items marked as in progress')
+  // [계약]의 곁들일 정리가 읽는 기준 장부: Work가 항목 파일을 지운 뒤에도 기준의 항목
+  expect((await baseDebt(works.record(a))).map((d) => d.id).sort()).toEqual(
+    DEBT.map((d) => d.id).sort(),
+  )
+  // 리뷰어에게는 사람이 쓴 요청만 간다: relay가 붙인 빚 목록은 사람의 요청이 아니다
+  const prompt = String((await kit.fake()).find((e) => e.type === 'review')?.prompt)
+  expect(prompt).toContain(`> ${REQUEST.split('\n')[0]}`)
+  expect(prompt).not.toContain('이 레포의 빚')
+  expect(prompt).not.toContain('test-gap의 까닭')
 
   const v = works.view(a)
   expect(v.evidence?.tidy).toMatchObject({

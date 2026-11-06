@@ -4,7 +4,7 @@
 // 되먹임 라운드 상한 3, works-feedback.ts PREPARED_MAX). 리뷰는 내보내기(V22: Work 브랜치 하나, 또는 단위 브랜치마다 계약의
 // 조각)의 (head, 계약 hash, 프롬프트 판)에 붙는다. 단위 브랜치의 리뷰어는 승인된 계약 전체를 받고, 증거 요약에 그 범위를
 // 알린다(채울 줄, 제 브랜치로 가는 다른 단위의 줄). 리뷰마다 AbortController를 따로 두고, 읽은 그 브랜치의 끝이나 계약이
-// 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰어는 request.md를 받고, 받았으면 리뷰 결과에 request:
+// 바뀌면 끊고 버린다. 앱을 닫을 때는 Runtime.abort가 끊는다. 리뷰어는 request.md의 사람이 쓴 몫(humanRequest: relay가 붙인 절 앞까지)을 받고, 받았으면 리뷰 결과에 request:
 // true를 붙인다(V30. 없으면 관문이 '리뷰가 요청을 보지 않음'으로 사람 머지). 리뷰 결과 가운데 세션 몫은 works-feedback.ts가
 // 쉬는 세션에 보낸다(V24).
 
@@ -24,6 +24,7 @@ import {
 } from '../core/review.ts'
 import type { Contract, EvidenceBundle, Integration, Policy } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
+import { humanRequest } from '../engine/judge.ts'
 import type { ExportRecord, ProjectRecord, WorkRecord } from './store.ts'
 import { PREPARED_MAX } from './works-feedback.ts'
 import {
@@ -330,7 +331,8 @@ export class ReviewDesk {
             cwd: rec.worktree,
             // 단위 브랜치의 리뷰어도 승인된 계약 전체를 받는다(V30). 리뷰는 조각의 hash에 붙는다
             contract: x.unit !== null && rt.contract ? rt.contract : contract,
-            request,
+            // 사람이 쓴 요청만(V30): relay가 붙인 절(관련 지식, 기록 안 된 나빠짐, 빚 목록)은 사람의 요청이 아니다
+            request: request === null ? null : humanRequest(request),
             diffStat,
             diff,
             evidenceSummary: [

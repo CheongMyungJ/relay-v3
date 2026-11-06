@@ -97,3 +97,38 @@ test('계약 tidy의 갚음, 깨진 id와 없는 id, 건드린 곳의 빚, 정�
 test('끄면 tidy는 null', async () => {
   expect((await run(false)).tidy).toBeNull()
 })
+
+test('anchor 파일을 옮기기만 하면 새 자리의 줄 수로 가른다(없어짐으로 갚지 않음)', async () => {
+  const moved = await makeRepo({
+    files: {
+      '.relay/quality.json': JSON.stringify(QUALITY),
+      'src/big.js': big(700),
+      ...Object.fromEntries([
+        debt('big', {
+          kind: 'accepted_regression',
+          anchor: { path: 'src/big.js', metric: 'file-size' },
+        }),
+      ]),
+    },
+  })
+  await moved.branch('feature')
+  const at = await moved.commit('옮김', {
+    'src/big.js': null,
+    'src/big2.js': big(700),
+    '.relay/debt/big.md': null,
+  })
+  const path = join(await makeTempDir('relay-contract-'), 'contract.json')
+  await writeFile(path, JSON.stringify({ ...CONTRACT, id: 'fix-clamp', tidy: ['big'] }))
+  const bundle = await check({
+    repo: moved.dir,
+    base: 'main',
+    head: at,
+    home: await makeTempDir('relay-home-'),
+    now: NOW,
+    contractPath: path,
+    tidy: true,
+  })
+  expect(bundle.tidy?.items.map((i) => [i.id, i.status, i.detail])).toEqual([
+    ['big', 'open', '700줄 > 600 (src/big2.js로 옮김, 항목 파일을 지움)'],
+  ])
+})

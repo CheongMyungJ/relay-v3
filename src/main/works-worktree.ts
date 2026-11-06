@@ -22,7 +22,7 @@ import {
 import { parseQuality } from '../core/quality.ts'
 import type { DebtItem, QualityConfig } from '../core/types.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
-import { unrecordedRegressions, unrecordedSection } from '../engine/debt-record.ts'
+import { debtAt, unrecordedRegressions, unrecordedSection } from '../engine/debt-record.ts'
 import { relatedKnowledge } from '../engine/knowledge.ts'
 import { m3Switches } from '../engine/m3.ts'
 import { repoDebtSection } from '../engine/tidy.ts'
@@ -387,4 +387,13 @@ export async function workDebt(rec: WorkRecord): Promise<DebtItem[]> {
     if (parsed?.ok) items.push(parsed.value)
   }
   return touching(items, changed)
+}
+
+/**
+ * [계약]의 곁들일 정리: 기준(base_ref와 Work 브랜치 끝의 공통 조상)의 빚 장부. 증거의 갚음 확인(engine/tidy.ts checkTidy)과
+ * 같은 기준이라, 사람이 계약 tidy의 id가 무엇을 말하는지(anchor, 종류, 까닭)와 장부에 없는 id를 승인 전에 본다
+ */
+export async function baseDebt(rec: WorkRecord): Promise<DebtItem[]> {
+  const head = await workHead(rec)
+  return (await debtAt(rec.worktree, await mergeBase(rec.worktree, rec.base_ref, head))).items
 }

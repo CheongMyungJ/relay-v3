@@ -31,6 +31,7 @@ import { REVIEW_SCHEMA, reviewPrompt } from '../src/core/review.ts'
 import type { EvidenceBundle, ReviewFinding } from '../src/core/types.ts'
 import { QUALITY_PATH } from '../src/engine/check.ts'
 import { draftFor, draftText } from '../src/engine/init.ts'
+import { humanRequest } from '../src/engine/judge.ts'
 import {
   B_BUNDLES,
   callsOf,
@@ -259,7 +260,8 @@ async function runBundle(b: Bundle, target: Target, repeats: number[], o: RunOpt
     if (!parsed.ok) throw new Error(`계약을 읽지 못함: ${parsed.errors.join('; ')}`)
     const contract = parsed.value
     const reqPath = path.join(work, 'request.md')
-    const request = existsSync(reqPath) ? readFileSync(reqPath, 'utf8') : null
+    // 앱의 리뷰처럼 사람이 쓴 몫만(relay가 붙인 절 앞까지)
+    const request = existsSync(reqPath) ? humanRequest(readFileSync(reqPath, 'utf8')) : null
     co = await makeCheckout(b, o.scenarios, ev)
     const facts = { ...co.facts, contract_same: ev.contract?.hash === contractHash(contract) }
     const input = { contract, request, diffStat: co.diffStat, diff: co.diff }

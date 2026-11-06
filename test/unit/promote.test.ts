@@ -5,7 +5,12 @@ import { describe, expect, test } from 'vitest'
 import { instructionsText } from '../../src/core/instructions.ts'
 import { parseQuality } from '../../src/core/quality.ts'
 import type { CommandEvidence, DebtItem, QualityConfig } from '../../src/core/types.ts'
-import { checkOf, isRule, type KnowledgeEntry } from '../../src/engine/knowledge-format.ts'
+import {
+  allowPaths,
+  checkOf,
+  isRule,
+  type KnowledgeEntry,
+} from '../../src/engine/knowledge-format.ts'
 import {
   fastOutcome,
   promoteIssues,
@@ -137,6 +142,81 @@ describe('promoteIssues', () => {
     const fresh = [rule('a.md', 'no-console', ['src/a.js', 'src/b.js'])]
     expect(promoteIssues(input({ head: fresh }))).toEqual([])
     expect(promoteIssues(input({ base: [rule('a.md', 'no-console', ['src/a.js'])] }))).toEqual([])
+  })
+})
+
+describe('허용 목록 (리뷰 지적)', () => {
+  /** 목록 줄을 그대로 적은 규칙 항목 */
+  const listed = (path: string, check: string | null, lines: string[]): KnowledgeEntry => {
+    const e = rule(path, check)
+    return {
+      path: e.path,
+      text: `${e.text}\n## 아직 규칙을 따르지 않는 곳\n\n${lines.join('\n')}\n`,
+    }
+  }
+
+  test('allowPaths: 폴더, 확장자 없는 파일, 코드 조각이 없는 줄의 첫 낱말, `./`와 끝의 `/`를 뗀다', () => {
+    const e = listed('a.md', 'no-console', [
+      '- `src/legacy/`: 옛 코드',
+      '- `bin/run`',
+      '- Makefile: 빌드',
+      '* `./src/a.ts`',
+      '- 결제 쪽 전체',
+    ])
+    expect(allowPaths(e.text).sort()).toEqual(['Makefile', 'bin/run', 'src/a.ts', 'src/legacy'])
+    expect(allowPaths(rule('b.md', 'no-console').text)).toEqual([])
+  })
+
+  test('늘어난 허용 목록: 폴더와 확장자 없는 파일도 보고, 기준 폴더 아래의 경로는 늚이 아니다', () => {
+    const base = [listed('a.md', 'no-console', ['- `src/a.ts`', '- `lib/`'])]
+    for (const more of ['- `src/legacy/`', '- `bin/run`', '- `Makefile`'])
+      expect(
+        promoteIssues(
+          input({ base, head: [listed('a.md', 'no-console', ['- `src/a.ts`', '- `lib/`', more])] }),
+        ).map((i) => i.kind),
+        more,
+      ).toEqual(['allow'])
+    const under = [listed('a.md', 'no-console', ['- `src/a.ts`', '- `lib/`', '- `lib/x.ts`'])]
+    expect(promoteIssues(input({ base, head: under }))).toEqual([])
+  })
+
+  test('늘어난 허용 목록은 검사마다 본다: 같은 검사의 새 항목, 옮김으로 보이지 않은 지우고 더함', () => {
+    const base = [rule('a.md', 'no-console', ['src/a.ts'])]
+    const added = [...base, rule('b.md', 'no-console', ['src/b.ts'])]
+    expect(promoteIssues(input({ base, head: added }))).toEqual([
+      {
+        path: 'docs/knowledge/b.md',
+        kind: 'allow',
+        detail:
+          '검사 `no-console`의 허용 목록(`## 아직 규칙을 따르지 않는 곳`)에 `src/b.ts`가 더해짐: 줄어들기만 한다',
+      },
+    ])
+    const readded = [rule('area/c.md', 'no-console', ['src/a.ts', 'src/c.ts'])]
+    expect(promoteIssues(input({ base, head: readded })).map((i) => [i.path, i.kind])).toEqual([
+      ['docs/knowledge/area/c.md', 'allow'],
+    ])
+    // 다른 항목으로 옮기기만 한 경로는 늚이 아니다
+    const split = [rule('a.md', 'no-console'), rule('b.md', 'no-console', ['src/a.ts'])]
+    expect(promoteIssues(input({ base, head: split }))).toEqual([])
+  })
+
+  test('ruleFacts: 허용 목록의 폴더 아래 경로도 아직 허용, anchor의 `./`는 뗀다', () => {
+    const head = [listed('a.md', 'no-console', ['- `src/legacy/`'])]
+    const violation = (path: string): DebtItem => ({
+      id: 'r1',
+      anchor: { path, metric: 'no-console' },
+      kind: 'rule_violation',
+      source: 'w0',
+      reason: '콘솔에 씀',
+      created: '2026-01-01',
+    })
+    expect(ruleFacts(violation('src/legacy/x.ts'), head, 'pass').allowed).toEqual([
+      'docs/knowledge/a.md',
+    ])
+    expect(ruleFacts(violation('./src/legacy'), head, 'pass').allowed).toEqual([
+      'docs/knowledge/a.md',
+    ])
+    expect(ruleFacts(violation('src/legacyx.ts'), head, 'pass').allowed).toEqual([])
   })
 })
 

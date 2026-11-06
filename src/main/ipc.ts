@@ -12,6 +12,7 @@ import {
 } from '../shared/api.ts'
 import type { SessionHost } from './sessions.ts'
 import { exportable } from './works-evidence.ts'
+import { baseDebt } from './works-worktree.ts'
 import type { Works } from './works.ts'
 
 type Handler = (...args: unknown[]) => unknown
@@ -141,6 +142,7 @@ export function registerIpc(o: {
     },
     [IPC.diff]: (id) => works.diff(str(id, 'id')),
     [IPC.debt]: (id) => works.debt(str(id, 'id')),
+    [IPC.baseDebt]: (id) => baseDebt(works.record(str(id, 'id'))),
     [IPC.draftQuality]: (id) => works.draftQuality(str(id, 'projectId')),
   }
   for (const [channel, fn] of Object.entries(handlers)) {

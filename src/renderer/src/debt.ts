@@ -2,7 +2,7 @@
 // [머지]와 [그래도 끝내기]는 Work 브랜치의 내보내기 증거(지금 HEAD의 것)에 나빠진 래칫이 있고 아직 빚으로 기록하지 않았으면
 // 한 번 묻는다: [빚으로 남기고 …] / [그냥 …]. 이 diff가 이미 둔 빚이 모두 덮은 래칫은 묻지 않는다. 장치(view.m3.debt)가 꺼졌거나 branch_per_unit(V22)이면 묻지 않는다.
 
-import type { DebtPayoff, EvidenceBundle } from '../../core/types.ts'
+import type { DebtItem, DebtPayoff, EvidenceBundle } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
 
 /** 물을 래칫(한 줄씩 'id (detail)'). 묻지 않으면 null */
@@ -80,4 +80,19 @@ export function tidyLinesText(t: Tidy): string | null {
   if (t.taken.length === 0) return null
   const head = `곁들일 정리 ${t.taken.length}개 · 정리 몫 ${t.lines}줄 (상한 ${t.max}줄`
   return t.lines > t.max ? `${head}을 넘음)` : `${head})`
+}
+
+/**
+ * [계약]의 곁들일 정리(M3c): 계약 tidy의 id마다 기준 장부의 항목과 까닭 첫 줄. 장부에 없는 id는 item null. 사람이 승인 전에
+ * id가 무엇을 말하는지 보게(까닭은 레포의 글이다)
+ */
+export function tidyRows(
+  ids: readonly string[],
+  items: readonly DebtItem[],
+): { id: string; item: DebtItem | null; reason: string }[] {
+  const byId = new Map(items.map((i) => [i.id, i]))
+  return ids.map((id) => {
+    const item = byId.get(id) ?? null
+    return { id, item, reason: item?.reason.trim().split(/\r?\n/)[0]?.trim() ?? '' }
+  })
 }

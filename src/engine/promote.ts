@@ -1,9 +1,10 @@
 // 규칙 승격 (M3d, docs/m3-design.md 5절, V42). 지식의 규칙 항목은 선택 머리글 `check: <명령이나 lint 규칙 이름>`으로 그
 // 규칙을 보는 검사를 적는다. 그 이름이 품질 기준(V9: base 먼저)의 `rules`에 있으면 승격된 규칙이다.
 // - 확인(증거, 묶음의 knowledge.issues): head의 규칙 항목 가운데 승격되지 않은 것은 spoken(말로만, 알림). 기준에서 승격된
-//   규칙의 `## 아직 규칙을 따르지 않는 곳`은 그 검사의 허용 목록이라 줄어들기만 한다: 늘었으면 allow(사람 머지 사실).
+//   검사를 적은 규칙들의 `## 아직 규칙을 따르지 않는 곳`(allowPaths: 폴더와 확장자 없는 파일도)을 합친 것이 그 검사의 허용
+//   목록이라 줄어들기만 한다: 검사마다 늘었으면 늘린 head 항목마다 allow(사람 머지 사실).
 // - 갚음(곁들일 정리 M3c의 rule_violation): anchor.metric이 승격된 검사이고, anchor 경로가 그 검사를 적은 head 규칙 항목의
-//   허용 목록에 없고, 빠른 명령이 모두 통과하면 갚음.
+//   허용 목록에 없고(목록의 폴더 아래도 아니고), 빠른 명령이 모두 통과하면 갚음.
 // 순수 함수(promoteIssues, ruleFacts, fastOutcome, rulePayoff)와 git 읽기(checkPromote)를 함께 둔다(src/core 상한).
 
 import { showFile } from '../adapters/git.ts'
@@ -17,9 +18,18 @@ import type {
   QualityConfig,
 } from '../core/types.ts'
 import { readEntries } from './knowledge.ts'
-import { NOT_YET, checkOf, isRule, notYetPaths, type KnowledgeEntry } from './knowledge-format.ts'
+import {
+  NOT_YET,
+  allowPath,
+  allowPaths,
+  checkOf,
+  isRule,
+  type KnowledgeEntry,
+} from './knowledge-format.ts'
 
 const code = (s: string) => `\`${s}\``
+/** path가 dir 자신이거나 그 아래인가(core debt.ts의 것과 같다) */
+const isUnder = (path: string, dir: string) => path === dir || path.startsWith(`${dir}/`)
 
 export interface PromoteInput {
   /** 기준(diff.base)의 지식 항목 */
@@ -38,23 +48,30 @@ export interface PromoteInput {
 export function promoteIssues(o: PromoteInput): KnowledgeIssue[] {
   const promoted = (check: string | null): check is string =>
     check !== null && (o.rules?.includes(check) ?? false)
-  const head = new Map(o.head.map((e) => [e.path, e]))
-  const allow: KnowledgeIssue[] = []
+  // 검사마다 견준다: 기준에서 승격된 검사를 적은 기준 항목들의 목록을 합친 것과, head에서 그 검사를 적은 항목과 그 기준 항목의
+  // head 자리(옮겼으면 새 자리, check를 지웠어도)의 목록. 새 항목이나 지우고 다시 더한 항목으로 목록을 늘려도 allow다. 기준
+  // 목록의 폴더 아래 경로는 늚이 아니다
+  const checks = new Map<string, { was: string[]; heads: Set<string> }>()
   for (const before of o.base) {
     const check = checkOf(before.text)
     if (!promoted(check)) continue
-    // 지운 항목은 diff가 보인다(사람이 PR에서 본다). 옮긴 항목은 새 자리와 견준다
-    const path = o.renamed.get(before.path) ?? before.path
-    const after = head.get(path)
-    if (after === undefined) continue
-    const was = new Set(notYetPaths(before.text))
-    const added = notYetPaths(after.text).filter((p) => !was.has(p))
-    if (added.length > 0)
-      allow.push({
-        path,
-        kind: 'allow',
-        detail: `검사 ${code(check)}의 허용 목록(${code(`## ${NOT_YET}`)})에 ${added.map(code).join(', ')}가 더해짐: 줄어들기만 한다`,
-      })
+    const c = checks.get(check) ?? { was: [], heads: new Set<string>() }
+    c.was.push(...allowPaths(before.text))
+    c.heads.add(o.renamed.get(before.path) ?? before.path)
+    checks.set(check, c)
+  }
+  const allow: KnowledgeIssue[] = []
+  for (const [check, c] of checks) {
+    for (const after of o.head) {
+      if (checkOf(after.text) !== check && !c.heads.has(after.path)) continue
+      const added = allowPaths(after.text).filter((p) => !c.was.some((w) => isUnder(p, w)))
+      if (added.length > 0)
+        allow.push({
+          path: after.path,
+          kind: 'allow',
+          detail: `검사 ${code(check)}의 허용 목록(${code(`## ${NOT_YET}`)})에 ${added.map(code).join(', ')}가 더해짐: 줄어들기만 한다`,
+        })
+    }
   }
   const spoken: KnowledgeIssue[] = []
   for (const e of o.head) {
@@ -123,7 +140,9 @@ export function ruleFacts(
   )
   return {
     entries: mine.map((e) => e.path),
-    allowed: mine.filter((e) => notYetPaths(e.text).includes(item.anchor.path)).map((e) => e.path),
+    allowed: mine
+      .filter((e) => allowPaths(e.text).some((p) => isUnder(allowPath(item.anchor.path), p)))
+      .map((e) => e.path),
     commands,
   }
 }

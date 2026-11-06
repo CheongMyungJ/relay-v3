@@ -2,7 +2,8 @@
 // 빚 넷(받아들인 나빠짐 src/big.js, 정리 src/calc.js, 규칙 어김 src/calc.js, 시험 빈틈 src/other.js)이 있고, 가짜 claude의 계약이
 // 앞의 둘을 tidy로 집어 big.js를 600줄 아래로 줄이고(정리 항목 파일은 지우지 않음) clamp를 고친다. [증거]의 '빚'에 정리 몫이
 // 상한(quality.json tidy_max_lines 20)을 넘었다는 알림, 갚은 빚(big), 못 갚은 빚(calc-names), 건드린 곳의 빚(calc-rule)이 보이고
-// 관문 사실이 아니다. 설정에 곁들일 정리 스위치가 켜져 있다. test-results/smoke-tidy-*.png(1400x900).
+// 관문 사실이 아니다. 승인 전 [계약]의 곁들일 정리에 id마다 기준 장부의 종류·경로·까닭이 보인다. 설정에 곁들일 정리 스위치가
+// 켜져 있다. test-results/smoke-tidy-*.png(1400x900).
 //   xvfb-run -a npm run test:smoke      (npm 스크립트가 먼저 빌드한다)
 import { writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -140,6 +141,14 @@ test('계약의 곁들일 정리 → [증거]의 빚: 상한 넘음, 갚은 빚,
   const approve = page.getByTestId('approve-box')
   await expect(approve).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('곁들일 정리(빚)')).toBeVisible()
+  // id마다 기준 장부의 종류·경로·까닭(사람이 무엇을 받는지 알고 승인)
+  const taken = page.getByTestId('contract-tidy')
+  await expect(taken).toContainText('big · 받아들인 나빠짐 · src/big.js: 래칫 file-size')
+  await expect(taken).toContainText(
+    'calc-names · 정리 · src/calc.js: clamp의 매개변수 이름이 한 글자',
+  )
+  await taken.scrollIntoViewIfNeeded()
+  await shot('contract')
   await approve.getByRole('button', { name: '승인', exact: true }).click()
 
   const evidence = page.getByTestId('evidence-panel')
