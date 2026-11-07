@@ -175,6 +175,86 @@ export async function hasWord(
   }
 }
 
+/** grepLines의 한 줄 */
+export interface GrepLine {
+  path: string
+  line: number
+  text: string
+}
+
+/**
+ * sha의 파일에서 needles 가운데 하나라도 든 줄(`git grep -n -I -i -F -z`, 글자 그대로·대소문자 무시, 바이너리는 뺀다). 맞는
+ * 줄이 없으면 빈 목록, 다른 실패는 던진다. 억누름 래칫(V55)이 무늬표로 다시 거른다
+ */
+export async function grepLines(
+  repo: string,
+  sha: string,
+  needles: readonly string[],
+): Promise<GrepLine[]> {
+  checkRef(sha)
+  const args = ['grep', '--no-color', '--no-column', '-n', '-I', '-i', '-F', '-z', '--full-name']
+  let out: string
+  try {
+    out = await git([...args, ...needles.flatMap((n) => ['-e', n]), sha, '--'], repo)
+  } catch (e) {
+    if (e instanceof GitError && e.exit === 1) return []
+    throw e
+  }
+  // `<sha>:<경로>\0<줄>\0<글>\n`. 경로에는 줄바꿈이 있을 수 있어 NUL로 자른다
+  const hits: GrepLine[] = []
+  let i = 0
+  while (i < out.length) {
+    const a = out.indexOf('\0', i)
+    const b = a < 0 ? -1 : out.indexOf('\0', a + 1)
+    if (b < 0) break
+    const end = out.indexOf('\n', b + 1)
+    const stop = end < 0 ? out.length : end
+    const name = out.slice(i, a)
+    const path = name.startsWith(`${sha}:`) ? name.slice(sha.length + 1) : name
+    hits.push({ path, line: Number(out.slice(a + 1, b)), text: out.slice(b + 1, stop) })
+    i = stop + 1
+  }
+  return hits
+}
+
+/**
+ * sha의 파일 글(UTF-8)을 `git cat-file --batch`로 한 번에 읽는다. 없는 파일, 파일이 아닌 것, maxBytes보다 큰 것, 바이너리,
+ * 줄바꿈이 든 경로는 넣지 않는다. 중복 래칫(V56)이 쓴다
+ */
+export async function readBlobs(
+  repo: string,
+  sha: string,
+  paths: readonly string[],
+  maxBytes: number,
+): Promise<Map<string, string>> {
+  checkRef(sha)
+  const out = new Map<string, string>()
+  const asked = [...new Set(paths)].filter((p) => p !== '' && !/[\n\r]/.test(p))
+  if (asked.length === 0) return out
+  const query = (ps: string[]) => ps.map((p) => `${sha}:${p}\n`).join('')
+  const check = (
+    await git(['cat-file', '--batch-check=%(objecttype) %(objectsize)'], repo, {
+      input: query(asked),
+    })
+  ).split('\n')
+  const small = asked.filter((_, k) => {
+    const [type, size] = (check[k] ?? '').split(' ')
+    return type === 'blob' && Number(size) <= maxBytes
+  })
+  if (small.length === 0) return out
+  const bytes = await gitBytes(['cat-file', '--batch'], repo, { input: query(small) })
+  let at = 0
+  for (const p of small) {
+    const nl = bytes.indexOf(0x0a, at)
+    if (nl < 0) break
+    const size = Number(bytes.subarray(at, nl).toString('utf8').split(' ')[2])
+    const body = bytes.subarray(nl + 1, nl + 1 + size)
+    at = nl + 1 + size + 1
+    if (!isBinary(body)) out.set(p, body.toString('utf8'))
+  }
+  return out
+}
+
 /** 파일 목록의 모든 조상 디렉터리. 루트('')는 넣지 않는다 */
 export function dirsOf(files: string[]): Set<string> {
   const dirs = new Set<string>()

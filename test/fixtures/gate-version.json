@@ -1,22 +1,28 @@
 {
-  "version": 1,
+  "version": 2,
   "files": {
     "src/core/gate.ts": "97fe1b2fdc672a00",
     "src/core/lines.ts": "239c99de48b4e6b6",
-    "src/core/quality.ts": "d12171ba3c626095",
-    "src/core/review.ts": "df6e18caa6731648",
+    "src/core/quality.ts": "502e77809ee60842",
+    "src/core/review.ts": "6f7ae08b3540bbed",
     "src/core/evidence.ts": "de4149670c199f23",
     "src/core/contract.ts": "c5a8b92921525cd0",
     "src/core/flaky.ts": "b55db5141d856133",
     "src/core/signals.ts": "244812e97c7bcaa7",
     "src/core/ratchet.ts": "c11e52d0c1c54b70",
-    "src/core/diff.ts": "4a51afd4f3c10203",
+    "src/core/diff.ts": "65a5cabae62fbbbe",
     "src/core/manifests.ts": "a4b84c9292f92029",
     "src/core/junit.ts": "76692d68e6f40995",
-    "src/engine/check.ts": "b536f3f350e401c2",
-    "src/engine/track.ts": "e8c03724bbc45492"
+    "src/engine/check.ts": "6d60a8b26769a832",
+    "src/engine/track.ts": "e8c03724bbc45492",
+    "src/engine/ratchets.ts": "89a8433fb5a4c4f1",
+    "src/engine/languages.ts": "8e1d2ac23376f198",
+    "src/engine/suppressions.ts": "f4b11293e2107aa7",
+    "src/engine/duplication.ts": "2eeae25ed241e4a9",
+    "src/engine/coverage.ts": "495c9d1162b00a74"
   },
   "replays": {
-    "1": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d"
+    "1": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
+    "2": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d"
   }
 }

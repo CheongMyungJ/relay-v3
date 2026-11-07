@@ -7,16 +7,9 @@ import { contractHash, parseContract } from '../core/contract.ts'
 import { buildDiffFacts } from '../core/diff.ts'
 import { judgeLines } from '../core/lines.ts'
 import { parseQuality, QUALITY_PATH, qualityHash } from '../core/quality.ts'
-import {
-  commandRatchet,
-  fileLinesRatchet,
-  testCountRatchet,
-  type FileLines,
-} from '../core/ratchet.ts'
 import { detectSignals, type ManifestPair, type SignalReport } from '../core/signals.ts'
 import type {
   CommandEvidence,
-  CommandRun,
   Contract,
   DiffFacts,
   EvidenceBundle,
@@ -31,7 +24,6 @@ import {
   defaultBase,
   diffRaw,
   dirsOf,
-  lineCounts,
   lsTree,
   mergeBase,
   repoRoot,
@@ -47,11 +39,12 @@ import {
   judgeContract,
   testsOf,
 } from './judge.ts'
+import { measureRatchets } from './ratchets.ts'
 import { coveredDebt } from './debt-record.ts'
 import { checkKnowledge, knowledgeChanged } from './knowledge.ts'
 import { checkPromote } from './promote.ts'
 import { checkTidy } from './tidy.ts'
-import { message, workspace, type Workspace } from './workspace.ts'
+import { message, workspace } from './workspace.ts'
 
 export { QUALITY_PATH }
 
@@ -146,6 +139,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
   try {
     // 4. 명령. 수용 시험도 명령으로 돈다(래칫 test_count가 있으면 base에서도)
     let acceptance: CommandEvidence | null = null
+    let acceptanceStarted: number | null = null
     if (q !== null) {
       for (const spec of q.commands.fast)
         commands.push(await guarded(ws.command(spec, false), spec.id, missing))
@@ -153,6 +147,7 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
       if (spec !== undefined) {
         const counted = q.ratchets.some((r) => r.kind === 'test_count')
         const files = examples === null ? [] : [examples]
+        acceptanceStarted = Date.now()
         acceptance = await guarded(ws.command(spec, counted, files), spec.id, missing)
         commands.push(acceptance)
         if (acceptance.head.length > 0 && testsOf(acceptance.head) === null)
@@ -163,7 +158,15 @@ export async function check(opts: CheckOptions): Promise<EvidenceBundle> {
 
     // 6. 래칫. base worktree에 시험을 얹기 전에 돈다
     if (q !== null) {
-      ratchets = await measureRatchets(q, ws, root, diff, acceptance, missing).catch((e) => {
+      ratchets = await measureRatchets({
+        q,
+        ws,
+        root,
+        diff,
+        acceptance,
+        acceptanceStarted,
+        missing,
+      }).catch((e) => {
         missing.push(`래칫: ${message(e)}`)
         return []
       })
@@ -453,86 +456,6 @@ async function loadRequest(path: string | undefined, missing: string[]): Promise
   const text = await readText(path)
   if (text === null) missing.push(`요청 글: 파일을 읽지 못함 (${path})`)
   return text
-}
-
-// ── 6. 래칫 ─────────────────────────────────────────────────────────────────
-
-async function measureRatchets(
-  q: QualityConfig,
-  ws: Workspace,
-  root: string,
-  diff: DiffFacts,
-  acceptance: CommandEvidence | null,
-  missing: string[],
-): Promise<RatchetResult[]> {
-  const out: RatchetResult[] = []
-  let files: FileLines[] | null | undefined
-  for (const spec of q.ratchets) {
-    if (spec.kind === 'file_lines') {
-      if (files === undefined) files = await changedFileLines(root, diff, missing)
-      out.push(
-        files === null
-          ? { id: spec.id, status: 'unknown', detail: '줄 수를 읽지 못함' }
-          : fileLinesRatchet(spec, files),
-      )
-    } else if (spec.kind === 'test_count') {
-      // base는 시험을 얹지 않은 base에서 돈 수용 시험
-      const head = acceptance === null ? null : testsOf(acceptance.head.slice(0, 1))
-      const base = acceptance?.base?.tests ?? null
-      out.push(testCountRatchet(spec, base, head))
-    } else {
-      const head = await ws.headRun(spec)
-      const base = await ws.baseRun(spec, `ratchet.${spec.id}`)
-      out.push(commandRatchet(spec, stdoutOf(base), stdoutOf(head)))
-    }
-  }
-  return out
-}
-
-/** 끝까지 돌아 0으로 끝난 실행의 표준 출력만 지표로 읽는다 */
-function stdoutOf(r: CommandRun | null): string | null {
-  return r !== null && r.exit === 0 && !r.timed_out ? r.stdout_tail : null
-}
-
-/** 바뀐 파일마다 base·head 줄 수. 바이너리는 뺀다. git이 실패하면 null */
-async function changedFileLines(
-  root: string,
-  diff: DiffFacts,
-  missing: string[],
-): Promise<FileLines[] | null> {
-  // 새로 생긴 자리(A, C)는 base가 없다. 옮긴 파일(R)은 옛 자리와 견준다
-  const basePath = (f: DiffFacts['files'][number]): string | null =>
-    f.status === 'A' || f.status === 'C' ? null : f.status === 'R' ? (f.old_path ?? null) : f.path
-  const files = diff.files.filter((f) => !f.binary)
-  try {
-    const [b, h] = await Promise.all([
-      lineCounts(
-        root,
-        diff.base,
-        files.flatMap((f) => basePath(f) ?? []),
-      ),
-      lineCounts(
-        root,
-        diff.head,
-        files.filter((f) => f.status !== 'D').map((f) => f.path),
-      ),
-    ])
-    const out: FileLines[] = []
-    for (const f of files) {
-      const bp = basePath(f)
-      if ((bp !== null && !b.has(bp)) || (f.status !== 'D' && !h.has(f.path))) continue
-      // 남아 있는데 줄 수를 못 읽은 파일(예: 서브모듈로 바뀜)은 지운 것이 아니라 셀 수 없음이다
-      out.push({
-        path: f.path,
-        base: bp === null ? null : (b.get(bp) ?? Number.NaN),
-        head: f.status === 'D' ? null : (h.get(f.path) ?? Number.NaN),
-      })
-    }
-    return out
-  } catch (e) {
-    missing.push(`줄 수: ${message(e)}`)
-    return null
-  }
 }
 
 function firstError(errors: string[]): string {

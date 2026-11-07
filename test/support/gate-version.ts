@@ -34,6 +34,12 @@ export const GATE_FILES = [
   'src/core/junit.ts',
   'src/engine/check.ts',
   'src/engine/track.ts',
+  // 판 2(V59): 앱이 직접 재는 래칫(V55~V57)과 check.ts에서 옮긴 래칫 재기
+  'src/engine/ratchets.ts',
+  'src/engine/languages.ts',
+  'src/engine/suppressions.ts',
+  'src/engine/duplication.ts',
+  'src/engine/coverage.ts',
 ] as const
 
 const sha = (text: string) => createHash('sha256').update(text).digest('hex')

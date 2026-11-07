@@ -17,6 +17,28 @@ describe('feedbackFacts (V24)', () => {
     ...over,
   })
 
+  test('나빠진 곳(where)이 있는 래칫(억누름 등, V55)은 파일마다의 수 대신 그 곳을 보인다', () => {
+    const e = evidence({
+      ratchets: [
+        {
+          id: 'suppressions',
+          status: 'worse',
+          base: 1,
+          head: 2,
+          detail: '',
+          offenders: [{ path: 'src/api.ts', base: 1, head: 2 }],
+          where: ['src/api.ts:41 @ts-ignore'],
+        },
+      ],
+    })
+    expect(feedbackFacts(e)).toEqual([
+      {
+        key: 'ratchet:suppressions:worse',
+        text: '**Ratchet `suppressions`: worse (base 1, head 2).**\n- src/api.ts:41 @ts-ignore',
+      },
+    ])
+  })
+
   test('깨끗한 묶음에는 세션 몫의 사실이 없다', () => {
     expect(feedbackFacts(evidence())).toEqual([])
   })

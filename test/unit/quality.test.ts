@@ -106,6 +106,19 @@ describe('parseQuality: 정상', () => {
     expect(valueOf(doc({ ratchets })).ratchets).toEqual(ratchets)
   })
 
+  test('앱이 재는 래칫 셋(V55~V57)과 선택 칸을 읽는다', () => {
+    const ratchets = [
+      { id: 'sup', kind: 'suppressions' },
+      { id: 'dup', kind: 'duplication', include: ['src/**'], exclude: ['src/gen/**'] },
+      { id: 'cov', kind: 'diff_coverage', report: 'coverage/lcov.info', format: 'lcov', min: 0.8 },
+      { id: 'cob', kind: 'diff_coverage', report: 'c.xml', format: 'cobertura', min: 1 },
+      { id: 'jac', kind: 'diff_coverage', report: 'j.xml', format: 'jacoco', min: 0.5 },
+    ]
+    const accept = { id: 'test', run: 'npm test', junit: 'junit.xml' }
+    const q = valueOf(doc({ commands: { fast: [], acceptance: accept }, ratchets }))
+    expect(q.ratchets).toEqual(ratchets)
+  })
+
   test('full.local 명령과 setup.timeout_sec을 읽는다', () => {
     const setup = { run: 'npm ci', inputs: [], keep: [], timeout_sec: 600 }
     const full = { local: [{ id: 'e2e', run: 'npm run e2e', timeout_sec: 1.5 }] }
@@ -299,9 +312,42 @@ describe('parseQuality: 잘못된 입력', () => {
       'ratchets[1].max: 0 이상의 정수여야 함',
       'ratchets[2].max: 필요함',
       "ratchets[3].better: 'lower', 'higher' 중 하나여야 함",
-      "ratchets[4].kind: 'file_lines', 'test_count', 'command' 중 하나여야 함",
+      "ratchets[4].kind: 'file_lines', 'test_count', 'command', 'suppressions', 'duplication', 'diff_coverage' 중 하나여야 함",
       'ratchets[5].kind: 필요함',
       'ratchets[6]: 객체여야 함',
+    )
+  })
+
+  test('앱이 재는 래칫 셋(V55~V57)의 칸을 검사한다', () => {
+    const ratchets = [
+      { id: 's', kind: 'suppressions', max: 3 },
+      { id: 'd', kind: 'duplication', include: 'src/**', exclude: ['/abs'] },
+      { id: 'c1', kind: 'diff_coverage', format: 'xml', min: 0 },
+      { id: 'c2', kind: 'diff_coverage', report: '../out/lcov.info', format: 'lcov', min: 1.5 },
+      { id: 'c3', kind: 'diff_coverage', report: 'lcov.info', format: 'lcov', min: '0.8' },
+    ]
+    fails(
+      { ...acceptance({ id: 't', run: 'x', junit: 'j.xml' }), ratchets },
+      'ratchets[0].max: 알 수 없는 키',
+      'ratchets[1].include: 배열이어야 함',
+      'ratchets[1].exclude[0]: 레포 루트 기준이라 /로 시작하지 않는다 (/abs)',
+      'ratchets[2].report: 필요함',
+      "ratchets[2].format: 'lcov', 'cobertura', 'jacoco' 중 하나여야 함",
+      'ratchets[2].min: 0보다 크고 1 이하인 수여야 함',
+      'ratchets[3].report: 레포 안의 상대 경로여야 함',
+      'ratchets[3].min: 0보다 크고 1 이하인 수여야 함',
+      'ratchets[4].min: 0보다 크고 1 이하인 수여야 함',
+    )
+  })
+
+  test('바뀐 줄 커버리지는 수용 시험이 있어야 한다(보고서를 쓰는 명령)', () => {
+    fails(
+      {
+        ratchets: [
+          { id: 'cov', kind: 'diff_coverage', report: 'l.info', format: 'lcov', min: 0.8 },
+        ],
+      },
+      'ratchets[0]: diff_coverage는 commands.acceptance가 쓴 보고서를 읽음: acceptance가 필요함',
     )
   })
 

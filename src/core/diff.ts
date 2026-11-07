@@ -19,6 +19,8 @@ export interface NumstatEntry {
 export interface PatchLines {
   added: string[]
   removed: string[]
+  /** 더한 줄의 head 줄 번호 */
+  added_at: number[]
 }
 
 const STATUSES: readonly string[] = ['A', 'M', 'D', 'R', 'C', 'T']
@@ -148,7 +150,7 @@ function headerPath(raw: string, prefix: string): string | null {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path
 }
 
-const HUNK = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/
+const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
 
 /**
  * `git diff -M --no-color --unified=0` 출력. 파일마다 더한 줄과 지운 줄(앞 글자 뺌).
@@ -161,11 +163,13 @@ export function parsePatch(out: string): Map<string, PatchLines> {
   let current: PatchLines | null = null
   let oldLeft = 0
   let newLeft = 0
+  let at = 0
   for (const line of out.split('\n')) {
     if (oldLeft > 0 || newLeft > 0) {
       const mark = line.charAt(0)
       if (mark === '+' && newLeft > 0) {
         current?.added.push(line.slice(1))
+        current?.added_at.push(at++)
         newLeft--
         continue
       }
@@ -178,6 +182,7 @@ export function parsePatch(out: string): Map<string, PatchLines> {
       if (mark === ' ' || line === '') {
         oldLeft = Math.max(0, oldLeft - 1)
         newLeft = Math.max(0, newLeft - 1)
+        at++
         continue
       }
       // 줄 수와 맞지 않는 머리가 나오면 덩어리를 닫고 머리로 읽는다
@@ -193,14 +198,15 @@ export function parsePatch(out: string): Map<string, PatchLines> {
       const key = headerPath(line.slice(4), 'b/') ?? minusPath
       current = null
       if (key !== null) {
-        current = files.get(key) ?? { added: [], removed: [] }
+        current = files.get(key) ?? { added: [], removed: [], added_at: [] }
         files.set(key, current)
       }
     } else if (line.startsWith('@@ ')) {
       const m = HUNK.exec(line)
       if (m) {
         oldLeft = m[1] === undefined ? 1 : Number(m[1])
-        newLeft = m[2] === undefined ? 1 : Number(m[2])
+        at = Number(m[2])
+        newLeft = m[3] === undefined ? 1 : Number(m[3])
       }
     }
   }
@@ -233,6 +239,8 @@ export function buildDiffFacts(
       added_lines,
       removed_lines,
     }
+    if (patchLines !== undefined && patchLines.added_at.length > 0)
+      file.added_at = patchLines.added_at
     if (entry.old_path !== undefined) file.old_path = entry.old_path
     files.push(file)
   }

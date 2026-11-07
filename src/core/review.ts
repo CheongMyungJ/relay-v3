@@ -328,7 +328,9 @@ function commandFact(c: CommandEvidence): FeedbackFact {
 function ratchetFact(r: RatchetResult): FeedbackFact {
   const nums = r.base === undefined ? '' : ` (base ${r.base}, head ${r.head})`
   const out = [`**Ratchet \`${r.id}\`: worse${nums}.**`]
-  for (const o of (r.offenders ?? []).slice(0, 10))
+  // 나빠진 곳(억누름, 중복, 바뀐 줄 커버리지)이 있으면 그것을, 없으면 파일마다의 수를
+  for (const w of r.where ?? []) out.push(`- ${w}`)
+  for (const o of r.where === undefined ? (r.offenders ?? []).slice(0, 10) : [])
     out.push(
       `- \`${o.path}\`: ${o.base === undefined ? `${o.head} (new)` : `${o.base} -> ${o.head}`}`,
     )

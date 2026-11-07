@@ -41,6 +41,32 @@ export type RatchetSpec =
       better: 'lower' | 'higher'
       timeout_sec?: number
     }
+  | {
+      id: string
+      /** 앱이 직접 센 억누름 표식 수(engine/suppressions.ts의 확장자별 무늬표). 늘면 나빠짐 */
+      kind: 'suppressions'
+      include?: string[]
+      exclude?: string[]
+    }
+  | {
+      id: string
+      /** 앱이 직접 잰 중복 줄의 몫(engine/duplication.ts). 0.1%p 넘게 늘면 나빠짐 */
+      kind: 'duplication'
+      include?: string[]
+      exclude?: string[]
+    }
+  | {
+      id: string
+      /** diff가 더한 소스 줄 가운데 수용 시험의 커버리지 보고서가 덮은 몫(head만). min 아래면 나빠짐 */
+      kind: 'diff_coverage'
+      /** 수용 시험이 쓰는 보고서의 경로(worktree 기준) */
+      report: string
+      format: 'lcov' | 'cobertura' | 'jacoco'
+      /** 바닥(0보다 크고 1 이하) */
+      min: number
+      include?: string[]
+      exclude?: string[]
+    }
 
 export interface AutoCondition {
   id: string
@@ -192,6 +218,8 @@ export interface FileChange {
   binary: boolean
   added_lines: string[]
   removed_lines: string[]
+  /** 더한 줄의 head 줄 번호(added_lines와 같은 차례). 바뀐 줄 커버리지(diff_coverage)와 새 중복에 쓴다 */
+  added_at?: number[]
 }
 
 export interface DiffFacts {
@@ -217,6 +245,8 @@ export interface RatchetResult {
   head?: number
   detail: string
   offenders?: { path: string; base?: number; head: number }[]
+  /** 나빠진 곳(언어와 상관없는 글, 몇 개까지): 'src/a.ts:41 @ts-ignore'. 되먹임(V24)이 offenders 대신 보인다 */
+  where?: string[]
 }
 
 export type LineStatus = 'met' | 'not_met' | 'missing_evidence' | 'human' | 'observe'

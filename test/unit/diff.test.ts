@@ -231,37 +231,46 @@ describe('parsePatch', () => {
   const files = parsePatch(PATCH)
 
   test('파일마다 더한 줄과 지운 줄을 모은다', () => {
-    expect(files.get('mod.txt')).toEqual({ added: ['y', 'z'], removed: ['x'] })
+    expect(files.get('mod.txt')).toEqual({ added: ['y', 'z'], removed: ['x'], added_at: [1, 2] })
   })
 
   test('공백 든 경로 뒤에 git이 붙인 탭을 뗀다', () => {
-    expect(files.get('added file.txt')).toEqual({ added: ['new'], removed: [] })
-    expect(files.get('dir with space/file one.txt')).toEqual({ added: ['c'], removed: [] })
+    expect(files.get('added file.txt')).toEqual({ added: ['new'], removed: [], added_at: [1] })
+    expect(files.get('dir with space/file one.txt')).toEqual({
+      added: ['c'],
+      removed: [],
+      added_at: [3],
+    })
   })
 
   test('지운 파일은 옛 경로로 모은다', () => {
-    expect(files.get('gone.txt')).toEqual({ added: [], removed: ['del1', 'del2'] })
+    expect(files.get('gone.txt')).toEqual({ added: [], removed: ['del1', 'del2'], added_at: [] })
   })
 
   test('이름 바뀜은 새 경로로 모은다', () => {
-    expect(files.get('src/new.ts')).toEqual({ added: ['line5 changed'], removed: ['line5'] })
+    expect(files.get('src/new.ts')).toEqual({
+      added: ['line5 changed'],
+      removed: ['line5'],
+      added_at: [5],
+    })
     expect(files.has('src/old.ts')).toBe(false)
   })
 
   test('따옴표로 감싼 탭·한글 경로를 푼다', () => {
-    expect(files.get('tab\tname.txt')).toEqual({ added: ['tab\there'], removed: [] })
-    expect(files.get('한글 파일.txt')).toEqual({ added: ['k'], removed: [] })
+    expect(files.get('tab\tname.txt')).toEqual({ added: ['tab\there'], removed: [], added_at: [1] })
+    expect(files.get('한글 파일.txt')).toEqual({ added: ['k'], removed: [], added_at: [1] })
   })
 
   test('머리처럼 생긴 내용 줄(---, +++)도 줄 수대로 읽는다', () => {
     expect(files.get('sql.txt')).toEqual({
       added: ['++new'],
       removed: ['-- sql comment', '++plus'],
+      added_at: [2],
     })
   })
 
   test('끝 줄바꿈 없음 표시는 줄로 세지 않는다', () => {
-    expect(files.get('nonl.txt')).toEqual({ added: ['nonl2'], removed: ['nonl'] })
+    expect(files.get('nonl.txt')).toEqual({ added: ['nonl2'], removed: ['nonl'], added_at: [1] })
   })
 
   test('바이너리와 내용이 같은 이름 바뀜은 줄이 없어 빠진다', () => {
@@ -275,6 +284,7 @@ describe('parsePatch', () => {
     expect(parsePatch(TYPECHANGE_PATCH).get('link')).toEqual({
       added: ['nowfile'],
       removed: ['mod.txt'],
+      added_at: [1],
     })
   })
 
@@ -296,8 +306,8 @@ describe('parsePatch', () => {
       '+2',
     ].join('\n')
     const map = parsePatch(patch)
-    expect(map.get('f.txt')).toEqual({ added: ['B'], removed: ['b'] })
-    expect(map.get('g.txt')).toEqual({ added: ['2'], removed: ['1'] })
+    expect(map.get('f.txt')).toEqual({ added: ['B'], removed: ['b'], added_at: [2] })
+    expect(map.get('g.txt')).toEqual({ added: ['2'], removed: ['1'], added_at: [1] })
   })
 
   test('따옴표와 역슬래시를 이스케이프한 경로를 푼다', () => {
@@ -320,12 +330,35 @@ describe('parsePatch', () => {
       '@@ -1 +0,0 @@',
       '-k',
     ].join('\n')
-    expect(parsePatch(patch).get('한글 파일.txt')).toEqual({ added: [], removed: ['k'] })
+    expect(parsePatch(patch).get('한글 파일.txt')).toEqual({
+      added: [],
+      removed: ['k'],
+      added_at: [],
+    })
   })
 
   test('빈 줄을 더하고 지운 것도 줄로 센다', () => {
     const patch = ['--- a/e.txt', '+++ b/e.txt', '@@ -1 +1,2 @@', '-', '+', '+x'].join('\n')
-    expect(parsePatch(patch).get('e.txt')).toEqual({ added: ['', 'x'], removed: [''] })
+    expect(parsePatch(patch).get('e.txt')).toEqual({
+      added: ['', 'x'],
+      removed: [''],
+      added_at: [1, 2],
+    })
+  })
+
+  test('더한 줄의 head 줄 번호: 덩어리 머리의 + 시작에서 세고 문맥 줄도 센다', () => {
+    const patch = [
+      '--- a/n.txt',
+      '+++ b/n.txt',
+      '@@ -2 +2,3 @@',
+      '-o',
+      '+a',
+      ' k',
+      '+b',
+      '@@ -9,0 +11 @@',
+      '+c',
+    ].join('\n')
+    expect(parsePatch(patch).get('n.txt')?.added_at).toEqual([2, 4, 11])
   })
 
   test('빈 출력은 빈 지도다', () => {
@@ -357,6 +390,7 @@ describe('buildDiffFacts', () => {
       binary: false,
       added_lines: ['line5 changed'],
       removed_lines: ['line5'],
+      added_at: [5],
     })
   })
 

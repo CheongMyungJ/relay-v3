@@ -204,7 +204,38 @@ const readCommands: Read<QualityConfig['commands']> = (v, p, e) => {
   })
 }
 
-const RATCHET_KINDS = ['file_lines', 'test_count', 'command'] as const
+const RATCHET_KINDS = [
+  'file_lines',
+  'test_count',
+  'command',
+  'suppressions',
+  'duplication',
+  'diff_coverage',
+] as const
+
+/** 바뀐 줄 커버리지의 바닥: 0보다 크고 1 이하 */
+const share: Read<number> = (v, p, e) => {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1) return v
+  e.push(`${p}: 0보다 크고 1 이하인 수여야 함`)
+  return 1
+}
+
+/** 앱이 직접 재는 래칫(억누름, 중복, 바뀐 줄 커버리지). 범위는 include·exclude glob */
+function readScanned(o: Obj, p: string, e: string[]): RatchetSpec {
+  const id = req(o, 'id', p, e, ident, '')
+  const cov =
+    o['kind'] === 'diff_coverage'
+      ? {
+          kind: 'diff_coverage' as const,
+          report: req(o, 'report', p, e, relPath, ''),
+          format: req(o, 'format', p, e, oneOf(['lcov', 'cobertura', 'jacoco'] as const), 'lcov'),
+          min: req(o, 'min', p, e, share, 1),
+        }
+      : null
+  const scope = { include: opt(o, 'include', p, e, globs), exclude: opt(o, 'exclude', p, e, globs) }
+  if (cov !== null) return prune({ id, ...cov, ...scope })
+  return prune({ id, kind: o['kind'] === 'duplication' ? 'duplication' : 'suppressions', ...scope })
+}
 
 const readRatchet: Read<RatchetSpec> = (v, p, e) => {
   const fallback: RatchetSpec = { id: '', kind: 'test_count' }
@@ -236,6 +267,10 @@ const readRatchet: Read<RatchetSpec> = (v, p, e) => {
       better: req(o, 'better', p, e, oneOf(['lower', 'higher'] as const), 'lower'),
       timeout_sec: opt(o, 'timeout_sec', p, e, seconds),
     })
+  }
+  if (kind === 'suppressions' || kind === 'duplication' || kind === 'diff_coverage') {
+    const extra = kind === 'diff_coverage' ? ['report', 'format', 'min'] : []
+    return readScanned(shape(v, p, e, ['id', 'kind', ...extra, 'include', 'exclude']) ?? {}, p, e)
   }
   if (Object.hasOwn(v, 'kind')) oneOf(RATCHET_KINDS)(kind, sub(p, 'kind'), e)
   else e.push(`${sub(p, 'kind')}: 필요함`)
@@ -344,6 +379,13 @@ export function parseQuality(text: string): Result<QualityConfig> {
     q.ratchets.map((r, i) => ({ id: r.id, path: `ratchets[${i}].id` })),
     e,
   )
+  // 바뀐 줄 커버리지는 수용 시험이 쓴 보고서를 읽는다
+  q.ratchets.forEach((r, i) => {
+    if (r.kind === 'diff_coverage' && cmds.acceptance === undefined)
+      e.push(
+        `ratchets[${i}]: diff_coverage는 commands.acceptance가 쓴 보고서를 읽음: acceptance가 필요함`,
+      )
+  })
   noDuplicateIds(
     q.auto.map((c, i) => ({ id: c.id, path: `auto[${i}].id` })),
     e,
