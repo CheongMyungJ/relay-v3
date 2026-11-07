@@ -18,9 +18,10 @@
 // - 계약은 관문이 쓰는 칸만 남긴다(타입이 요구하는 나머지는 빈 값). 묶음의 계약 해시가 원래 계약과 맞았으면 남긴 계약의
 //   해시로 바꾸고, 맞지 않았으면 그대로 둔다. 관문의 '증거를 만든 뒤 계약이 바뀜'은 어느 쪽이든 그대로 나온다. 통합 증거는
 //   앱처럼(main/works-evidence.ts whole) 계약 전체와 맞지 않으면 없는 것(null)으로 둔다.
-// - 모델 이름 같은 실행 설정(run.json options)은 넣지 않는다.
+// - 모델 이름 같은 실행 설정(run.json options)은 넣지 않는다. 증거에 든 모델 이름(review.model, M4a)도 뺀다(관문이 보지 않는다).
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { contractHash } from '../src/core/contract.ts'
 import { testCountRatchet } from '../src/core/ratchet.ts'
 import type {
@@ -114,9 +115,10 @@ function slimFinding(f: ReviewFinding): ReviewFinding {
   }
 }
 
-/** 지적 말고는 기록 그대로(status, prompt_version, 뒤 판의 칸. 예: V30의 request) */
+/** 지적과 모델 이름(model, 기록에 남기지 않는다) 말고는 기록 그대로(status, prompt_version, 뒤 판의 칸. 예: V30의 request) */
 function slimReview(r: NonNullable<EvidenceBundle['review']>): EvidenceBundle['review'] {
   const { findings, ...rest } = r
+  delete rest.model
   // raise가 없는 지적은 관문이 보지 않는다
   return { ...rest, findings: findings.filter((f) => f.raise !== undefined).map(slimFinding) }
 }
@@ -125,7 +127,7 @@ function slimRatchet(r: RatchetResult): RatchetResult {
   return { id: r.id, status: r.status, detail: clip(r.detail) }
 }
 
-function slimEvidence(
+export function slimEvidence(
   e: EvidenceBundle,
   ratchets: RatchetResult[],
   hash: string | undefined,
@@ -325,4 +327,6 @@ function main(args: string[]) {
   note(`${out}: ${all.length}개`)
 }
 
-main(process.argv.slice(2))
+const entry = process.argv[1]
+if (entry !== undefined && path.resolve(entry) === fileURLToPath(import.meta.url))
+  main(process.argv.slice(2))
