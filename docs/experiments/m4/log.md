@@ -98,3 +98,9 @@ docs/experiments/m4/replay/track/m4.jsonl: 35개
 - **커밋하지 말 것: `docs/experiments/m4/replay/gate/m4.jsonl`.** 35줄 모두에 모델 이름이 있다(10절). P1을 사람이 정할 때까지 이 경로를 커밋하지 않는다(`git add docs/` 하지 말 것). 어디에 둘지는 사람이 정한다.
 - **report.md**는 이 단계에서도 하네스가 파일 만들기를 막아 글로 넘겼다. 아직 디스크에 없다.
 - 이 단계의 커밋에는 `primary.md`, `result.md`, `log.md`, `replay/track/m4.jsonl`, `devices.md`의 메모를 넣었다. `replay/gate/m4.jsonl`과 `report.md`는 넣지 않았다. push하지 않았다.
+
+## 모델 이름 지우기 (설계자 결정, 2026-11-07, result.md P1의 (가))
+
+- `replay/gate/m4.jsonl`: 도구가 `evidence.review.model`을 그대로 옮겨 모델 이름이 35줄에 들었다. 원본(sha256 `f726b0d2e6d4843c37bdde86d5b10031443f2767ca5b008b623739375381660e`)은 `/home/user/m4-archive/replay-gate-original/`에 두고, 이 폴더에는 그 칸만 뺀 사본(sha256 `fde21ce0593d4eccb8617e0b620531456cf7ba0ec60288be4bd5fd6c5c4be958`)을 둔다. `track-replay.ts --report`의 출력은 원본과 사본에서 같다(셈에 쓰지 않는 칸).
+- `runs/*.report.md`, `runs/*.log`: 모델 이름을 `<모델>`로 바꾸는 커밋을 더했다(이력에는 남는다).
+- 남긴 것: `targets/targets.json`(고정 입력, sha256을 고정 때 적음)과 `runs/*.tar.gz`(도구 기록)의 설정 칸. M2.1·M3 `runs/`와 같은 예외다. 도구 고침(`gate-replay-fixture.ts`가 그 칸을 빼고, relay-v2 보고서·로그가 모델 이름을 쓰지 않게)은 다음 일이다.

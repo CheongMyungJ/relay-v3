@@ -3,7 +3,7 @@
 - 결과 폴더: `/home/user/relay-v2/app/eval/results/m4-gen-08-timezone`
 - 시작: 2026-11-07T00:39:01.600Z, 앱 커밋: cba165a, Claude Code: 2.1.319 (Claude Code)
 - 다른 빌드 커밋: relay3 e8a0df5
-- 에이전트: sonnet (effort medium), 사람 역할: sonnet, 판정: sonnet
+- 에이전트: <모델> (effort medium), 사람 역할: <모델>, 판정: <모델>
 - 맨 CLI 인자: `claude --dangerously-skip-permissions`, 스크린샷 보기: 켬
 - 판정 모델에 시나리오의 평가 목적: 주지 않음
 - 품질 기준 덧씌우기(.relay/quality.json): 켬 (08-timezone 082644e4)
