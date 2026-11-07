@@ -104,3 +104,8 @@ docs/experiments/m4/replay/track/m4.jsonl: 35개
 - `replay/gate/m4.jsonl`: 도구가 `evidence.review.model`을 그대로 옮겨 모델 이름이 35줄에 들었다. 원본(sha256 `f726b0d2e6d4843c37bdde86d5b10031443f2767ca5b008b623739375381660e`)은 `/home/user/m4-archive/replay-gate-original/`에 두고, 이 폴더에는 그 칸만 뺀 사본(sha256 `fde21ce0593d4eccb8617e0b620531456cf7ba0ec60288be4bd5fd6c5c4be958`)을 둔다. `track-replay.ts --report`의 출력은 원본과 사본에서 같다(셈에 쓰지 않는 칸).
 - `runs/*.report.md`, `runs/*.log`: 모델 이름을 `<모델>`로 바꾸는 커밋을 더했다(이력에는 남는다).
 - 남긴 것: `targets/targets.json`(고정 입력, sha256을 고정 때 적음)과 `runs/*.tar.gz`(도구 기록)의 설정 칸. M2.1·M3 `runs/`와 같은 예외다. 도구 고침(`gate-replay-fixture.ts`가 그 칸을 빼고, relay-v2 보고서·로그가 모델 이름을 쓰지 않게)은 다음 일이다.
+
+## 사용자 결정 (2026-11-07, ✅)
+
+- P4: 07을 처음부터 다시 돈 것과 정리를 mv로 한 것을 **둘 다 승인**한다. 지금의 07(다시 돈 5회)을 그대로 쓴다. 다음 규약에는 '배치 도중 컨테이너가 다시 켜짐'의 규칙을 미리 적는다.
+- 다음: **여기서 멈춘다.** M4는 '도구는 됨, 실제 실적은 자기 실행 뒤'로 닫는다. 자기 실행(Q10)은 사람이 머지할 수 있을 때 따로 시작한다. 그 전에 작은 도구 고침(기록에 모델 이름이 남는 것)만 한다.
