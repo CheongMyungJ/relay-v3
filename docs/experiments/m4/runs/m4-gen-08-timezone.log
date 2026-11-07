@@ -1,0 +1,216 @@
+결과 폴더: /home/user/relay-v2/app/eval/results/m4-gen-08-timezone
+작업 폴더: /tmp/relay-eval/m4-gen-08-timezone
+00:39:03 [08-timezone relay3#1] 준비 (/tmp/relay-eval/m4-gen-08-timezone/08-timezone-relay3-1/week)
+00:39:14 [08-timezone relay3#1] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+00:39:27 [08-timezone relay3#1] 차례 2 (0분 22초, 화면이 멈춤) friction=0 fill textarea "요청" "미국 지사 사용자들이 토요일 날짜가 주말로 안 잡힌다고 합니다. 예: i
+…(78자 생략)", click button "버그 고침", click button "만들기"
+00:39:29 [08-timezone relay3#1] 첫 실행 창 수락: folder_trust
+00:39:31 [08-timezone relay3#1] 첫 실행 창 수락: bypass_permissions_warning
+00:39:52 [08-timezone relay3#1] 차례 3 (0분 48초, 화면이 멈춤) friction=0 key
+00:40:01 [08-timezone relay3#1] 첫 코드 변경 (0분 58초)
+00:40:11 [08-timezone relay3#1] 차례 4 (1분 8초, 화면이 멈춤) friction=0 click button "승인"
+00:40:32 [08-timezone relay3#1] 차례 5 (1분 30초, 화면이 멈춤) friction=0 inspect_diff
+00:40:37 [08-timezone relay3#1] 차례 6 (1분 33초, 직전 행동의 결과) friction=0 click button "끝내기"
+00:40:47 [08-timezone relay3#1] 차례 7 (1분 44초, 화면이 멈춤) friction=0 done
+00:40:52 [08-timezone relay3#1] 끝: done (1분 49초)
+00:40:52 [08-timezone relay3#1] 결과: 성공 (로스앤젤레스 O, 서울 O, UTC O), 차례 7, 사람 비용 $0.74
+== 진행 1/5
+00:40:52 [08-timezone relay3#2] 준비 (/tmp/relay-eval/m4-gen-08-timezone/08-timezone-relay3-2/week)
+00:41:03 [08-timezone relay3#2] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+00:41:14 [08-timezone relay3#2] 차례 2 (0분 20초, 화면이 멈춤) friction=0 fill textarea "요청" "미국 지사 사용자들이 토요일 날짜가 주말로 안 잡힌다고 합니다. 예: i
+…(77자 생략)", click button "버그 고침", click button "만들기"
+00:41:16 [08-timezone relay3#2] 첫 실행 창 수락: folder_trust
+00:41:19 [08-timezone relay3#2] 첫 실행 창 수락: bypass_permissions_warning
+00:41:37 [08-timezone relay3#2] 차례 3 (0분 44초, 화면이 멈춤) friction=0 key
+00:41:43 [08-timezone relay3#2] 첫 코드 변경 (0분 50초)
+00:41:56 [08-timezone relay3#2] 차례 4 (1분 3초, 화면이 멈춤) friction=0 click button "승인"
+00:42:28 [08-timezone relay3#2] 차례 5 (1분 35초, 화면이 멈춤) friction=0 inspect_diff
+00:42:35 [08-timezone relay3#2] 차례 6 (1분 42초, 직전 행동의 결과) friction=1 type "리뷰에서 지적이 하나 올라왔어요. getUTCDay()로 바꾸니 '202
+…(148자 생략)"
+00:42:57 [08-timezone relay3#2] 차례 7 (2분 4초, 화면이 멈춤) friction=1 click button "받아들이기"
+00:43:26 [08-timezone relay3#2] 차례 8 (2분 33초, 화면이 멈춤) friction=0 click button "끝내기"
+00:43:36 [08-timezone relay3#2] 차례 9 (2분 44초, 화면이 멈춤) friction=0 done
+00:43:43 [08-timezone relay3#2] 끝: done (2분 51초)
+00:43:44 [08-timezone relay3#2] 결과: 성공 (로스앤젤레스 O, 서울 O, UTC O), 차례 9, 사람 비용 $0.92
+== 진행 2/5
+00:43:44 [08-timezone relay3#3] 준비 (/tmp/relay-eval/m4-gen-08-timezone/08-timezone-relay3-3/week)
+00:43:55 [08-timezone relay3#3] 차례 1 (0분 10초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+00:44:06 [08-timezone relay3#3] 차례 2 (0분 19초, 화면이 멈춤) friction=0 fill textarea "요청" "미국 지사 사용자들이 토요일 날짜가 주말로 안 잡힌다고 합니다. 예: i
+…(78자 생략)", click button "버그 고침", click button "만들기"
+00:44:08 [08-timezone relay3#3] 첫 실행 창 수락: folder_trust
+00:44:10 [08-timezone relay3#3] 첫 실행 창 수락: bypass_permissions_warning
+00:44:29 [08-timezone relay3#3] 차례 3 (0분 44초, 화면이 멈춤) friction=0 key
+00:44:35 [08-timezone relay3#3] 첫 코드 변경 (0분 51초)
+00:44:49 [08-timezone relay3#3] 차례 4 (1분 4초, 화면이 멈춤) friction=0 click button "승인"
+00:45:13 [08-timezone relay3#3] 차례 5 (1분 29초, 화면이 멈춤) friction=1 inspect_diff
+00:45:18 [08-timezone relay3#3] 차례 6 (1분 33초, 직전 행동의 결과) friction=1 click button "끝내기"
+00:45:26 [08-timezone relay3#3] 차례 7 (1분 42초, 화면이 멈춤) friction=0 wait
+00:45:36 [08-timezone relay3#3] 차례 8 (1분 51초, 화면이 멈춤) friction=0 click summary "리뷰 지적 1"
+00:45:47 [08-timezone relay3#3] 차례 9 (2분 2초, 화면이 멈춤) friction=1 scroll
+00:45:57 [08-timezone relay3#3] 차례 10 (2분 12초, 화면이 멈춤) friction=1 scroll tab "증거"
+00:47:02 [08-timezone relay3#3] 차례 11 (3분 17초, 기다림이 끝남) friction=1 click button "끝내기"
+00:48:07 [08-timezone relay3#3] 차례 12 (4분 22초, 기다림이 끝남) friction=2 click button "그래도 끝내기"
+00:48:17 [08-timezone relay3#3] 차례 13 (4분 32초, 화면이 멈춤) friction=1 done
+00:48:24 [08-timezone relay3#3] 끝: done (4분 39초)
+00:48:24 [08-timezone relay3#3] 결과: 성공 (로스앤젤레스 O, 서울 O, UTC O), 차례 13, 사람 비용 $1.71
+== 진행 3/5
+00:48:25 [08-timezone relay3#4] 준비 (/tmp/relay-eval/m4-gen-08-timezone/08-timezone-relay3-4/week)
+00:48:35 [08-timezone relay3#4] 차례 1 (0분 9초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+00:48:46 [08-timezone relay3#4] 차례 2 (0분 19초, 화면이 멈춤) friction=0 fill textarea "요청" "미국 지사 사용자들이 토요일 날짜가 주말로 안 잡힌다고 합니다. 예: i
+…(78자 생략)", click button "버그 고침", click button "만들기"
+00:48:48 [08-timezone relay3#4] 첫 실행 창 수락: folder_trust
+00:48:50 [08-timezone relay3#4] 첫 실행 창 수락: bypass_permissions_warning
+00:49:10 [08-timezone relay3#4] 차례 3 (0분 45초, 화면이 멈춤) friction=0 key
+00:49:16 [08-timezone relay3#4] 첫 코드 변경 (0분 52초)
+00:49:30 [08-timezone relay3#4] 차례 4 (1분 5초, 화면이 멈춤) friction=0 click button "승인"
+00:49:56 [08-timezone relay3#4] 차례 5 (1분 31초, 화면이 멈춤) friction=1 inspect_diff
+00:50:00 [08-timezone relay3#4] 차례 6 (1분 35초, 직전 행동의 결과) friction=1 click button "끝내기"
+00:50:09 [08-timezone relay3#4] 차례 7 (1분 45초, 화면이 멈춤) friction=0 wait
+00:50:20 [08-timezone relay3#4] 차례 8 (1분 54초, 화면이 멈춤) friction=0 click summary "리뷰 지적 2", scroll
+00:50:31 [08-timezone relay3#4] 차례 9 (2분 5초, 화면이 멈춤) friction=1 scroll
+00:50:41 [08-timezone relay3#4] 차례 10 (2분 16초, 화면이 멈춤) friction=1 click button "그래도 끝내기"
+00:50:51 [08-timezone relay3#4] 차례 11 (2분 26초, 화면이 멈춤) friction=1 done
+00:50:57 [08-timezone relay3#4] 끝: done (2분 32초)
+00:50:58 [08-timezone relay3#4] 결과: 성공 (로스앤젤레스 O, 서울 O, UTC O), 차례 11, 사람 비용 $1.27
+== 진행 4/5
+00:50:58 [08-timezone relay3#5] 준비 (/tmp/relay-eval/m4-gen-08-timezone/08-timezone-relay3-5/week)
+00:51:08 [08-timezone relay3#5] 차례 1 (0분 9초, 화면이 멈춤) friction=0 click button "+ 새 Work"
+00:51:20 [08-timezone relay3#5] 차례 2 (0분 19초, 화면이 멈춤) friction=0 fill textarea "요청" "미국 지사 사용자들이 토요일 날짜가 주말로 안 잡힌다고 합니다. 예: i
+…(78자 생략)", click button "버그 고침", click button "만들기"
+00:51:21 [08-timezone relay3#5] 첫 실행 창 수락: folder_trust
+00:51:24 [08-timezone relay3#5] 첫 실행 창 수락: bypass_permissions_warning
+00:51:36 [08-timezone relay3#5] 첫 코드 변경 (0분 38초)
+00:51:45 [08-timezone relay3#5] 차례 3 (0분 46초, 화면이 멈춤) friction=0 click button "승인"
+00:52:09 [08-timezone relay3#5] 차례 4 (1분 11초, 화면이 멈춤) friction=1 inspect_diff
+00:52:14 [08-timezone relay3#5] 차례 5 (1분 16초, 직전 행동의 결과) friction=1 click button "끝내기"
+00:52:23 [08-timezone relay3#5] 차례 6 (1분 25초, 화면이 멈춤) friction=0 wait
+00:52:36 [08-timezone relay3#5] 차례 7 (1분 38초, 화면이 멈춤) friction=1 click button "세션에 넘기기"
+00:52:58 [08-timezone relay3#5] 차례 8 (1분 59초, 화면이 멈춤) friction=1 click button "받아들이기"
+00:53:23 [08-timezone relay3#5] 차례 9 (2분 24초, 화면이 멈춤) friction=0 click button "끝내기"
+00:53:33 [08-timezone relay3#5] 차례 10 (2분 35초, 화면이 멈춤) friction=0 done
+00:53:41 [08-timezone relay3#5] 끝: done (2분 43초)
+00:53:41 [08-timezone relay3#5] 결과: 성공 (로스앤젤레스 O, 서울 O, UTC O), 차례 10, 사람 비용 $1.13
+== 진행 5/5
+
+# relay 대 맨 CLI 사용성 평가
+
+- 결과 폴더: `/home/user/relay-v2/app/eval/results/m4-gen-08-timezone`
+- 시작: 2026-11-07T00:39:01.600Z, 앱 커밋: cba165a, Claude Code: 2.1.319 (Claude Code)
+- 다른 빌드 커밋: relay3 e8a0df5
+- 에이전트: sonnet (effort medium), 사람 역할: sonnet, 판정: sonnet
+- 맨 CLI 인자: `claude --dangerously-skip-permissions`, 스크린샷 보기: 켬
+- 판정 모델에 시나리오의 평가 목적: 주지 않음
+- 품질 기준 덧씌우기(.relay/quality.json): 켬 (08-timezone 082644e4)
+- 실행 5개, 짝 판정 0개
+
+읽는 법: 수치는 평균 ± 표준편차다. 사람 역할과 판정은 AI이므로 경향을 보는 자료로 쓴다. 회차가 적으면 편차가 크다.
+걸린 시간에는 도구의 준비(앱 띄우기·프로젝트 등록, claude 띄우기)와 사람 역할(AI)이 답을 만드는 동안 기다린 시간이 들어 있다. 쪽끼리 대기를 견줄 때는 그 둘을 뺀 줄을 본다.
+에이전트 토큰에는 앱이 따로 부른 claude -p(relay-v3 독립 리뷰, relay 독립 리뷰·지식 검토)가 들어 있다. 사람은 Claude Code 화면에서 시계만 도는 것(스피너의 경과 시간)으로는 화면이 바뀐 것으로 보지 않는다.
+
+## 08-timezone: 내 환경에서는 재현되지 않는 버그
+
+목적: 재현에 사람만 아는 정보(사용자의 시간대)가 필요할 때, 에이전트가 필요한 것을 묻고 사람이 답하기 쉬운지, 환경에 따라 달라지는 버그를 제대로 고치는지 본다.
+
+| 지표 | relay-v3 |
+|---|---|
+| 숨긴 시험 모두 통과 | 100% (5/5) |
+| 레포 시험 통과 | 100% (5/5) |
+| 커밋까지 됨 | 100% (5/5) |
+| 사람이 끝냄(done) | 100% (5/5) |
+| 걸린 시간(분) | 2.9 ± 1.1 |
+| 도구 준비 시간(분, 아래 줄에서 뺌) | 0.0 ± 0.0 |
+| 사람 역할 응답 시간(분) | 0.6 ± 0.1 |
+| 걸린 시간 − 준비 − 사람 역할 응답(분) | 2.3 ± 1.0 |
+| 사람 차례 수 | 10.0 ± 2.2 |
+| 기다리기만 한 차례 | 0.6 ± 0.5 |
+| 스크린샷을 붙인 차례 | 8.2 ± 1.3 |
+| 번호 표시가 빠진 스크린샷 | 0.0 ± 0.0 |
+| 사람 행동 수(기다림 제외) | 10.6 ± 1.9 |
+| 입력한 글자 수 | 155.4 ± 83.6 |
+| 코드 직접 확인(inspect_diff) | 1.0 ± 0.0 |
+| hands-off 규칙 어김(결과를 본 행동) | - |
+| 헛동작(없는 요소, 실패) | 0.0 ± 0.0 |
+| friction 평균 (0~3) | 0.3 ± 0.2 |
+| friction 2 이상 차례 | 0.2 ± 0.4 |
+| 설문 수고 (1~7, 낮을수록 좋음) | 2.0 ± 0.0 |
+| 설문 명확함 | 5.4 ± 0.5 |
+| 설문 통제감 | 5.4 ± 0.5 |
+| 설문 결과 확신 | 6.0 ± 0.0 |
+| 설문 신뢰 | 5.0 ± 0.0 |
+| 설문 복구 | 5.5 ± 0.7 |
+| 설문 다시 쓰고 싶음 | 6.0 ± 0.0 |
+| 바뀐 줄 수 | 69.4 ± 17.6 |
+| 기대 밖 파일 수 | 0.0 ± 0.0 |
+| main이 움직임(앱 쪽, 판정에 안 넣음) | 0% (0/5) |
+| 지식 파일 수(판정에서 뺌) | 0.0 ± 0.0 |
+| 에이전트 출력 토큰(천) | 4.9 ± 1.5 |
+| 에이전트 입력 토큰(천, 캐시 포함, 앱이 부른 claude -p 포함) | 363.9 ± 94.2 |
+| 그 가운데 앱이 부른 claude -p 입력 토큰(천) | 15.7 ± 5.7 |
+| 에이전트 세션 수 | 1.0 ± 0.0 |
+| 사람 역할 비용($) | 1.2 ± 0.4 |
+
+### relay-v3 단계별 에이전트
+
+단계 task 하나의 평균이다. 입력은 캐시 읽기와 쓰기를 더한 값이고, 대화 기록을 찾지 못한 세션은 빼고 센다.
+
+| 단계 | task 수 | 입력 토큰(천) | 캐시 쓰기(천) | 출력 토큰(천) | context.md 글자 | 넣은 지식 글자 |
+|---|---|---|---|---|---|---|
+| session | 5 | 348.2 ± 91.8 | 19.7 ± 2.5 | 4.0 ± 1.3 | - | - |
+
+### relay-v3 계약·관문·리뷰
+
+| 지표 | relay-v3 |
+|---|---|
+| 계약 승인됨 | 100% (5/5) |
+| Work 끝남([끝 확정]·머지, 확정 없이 리뷰 본 커밋 그대로) | 100% (5/5) |
+| 끝의 종류(Work마다) | [끝 확정] 5 |
+| 끝낸 방식(V25: 한 번·걸림·상자, Work마다) | 한 번 3, 상자에서 [그래도 끝내기] 2 |
+| 관문 결론(Work마다 마지막) | 사람 머지(내보내기) 5 |
+| 내보내기 결론이 있음(G1·G2의 분모, 없으면 뺌) | 100% (5/5) |
+| 자동 조건을 채움(그림자·자동 후보) | 60% (3/5) |
+| G1 그 가운데 숨긴 시험 모두 통과 | 100% (3/3) |
+| G2 숨긴 시험 모두 통과 가운데 자동 조건을 채움 | 60% (3/5) |
+| 독립 리뷰 호출 수(돈 것) | 1.4 ± 0.5 |
+| 리뷰 건너뜀(리뷰 끈 쪽) | 0.0 ± 0.0 |
+| 미리 리뷰(돈 것 가운데) | 0.8 ± 0.8 |
+| 다시 쓴 리뷰(호출 아님) | 0.6 ± 0.5 |
+| 멈춘 리뷰(호출·토큰에서 뺌) | 0.2 ± 0.4 |
+| 리뷰 실패 | 0.0 ± 0.0 |
+| 토큰을 모르는 리뷰(P5에서 빠짐) | 0.0 ± 0.0 |
+| 리뷰 뒤 세션이 더 일한 Work | 40% (2/5) |
+| 리뷰 입력 토큰(천, 캐시 포함, 에이전트 입력에 들어 있음) | 15.7 ± 5.7 |
+
+### 회차별
+
+| 쪽#회차 | 끝 | 시험 | 분 | 차례 | friction | 에이전트 세션 | 비고 |
+|---|---|---|---|---|---|---|---|
+| relay3#1 | done | OOO | 1.8 | 7 | 0.00 | 1 | isWeekend가 getDay() 대신 getUTCDay()를 쓰도록 고쳐 시간대와 무관하게 판정한다. 시간대별 시험을 추가했고 작업 브랜치에
+…(20자 생략) |
+| relay3#2 | done | OOO | 2.8 | 9 | 0.22 | 1 | isWeekend를 'YYYY-MM-DD'일 때만 getUTCDay()로 판정하게 고쳤다. 이러면 어느 시간대에서도 결과가 같다. 다른 형식은 
+…(113자 생략) |
+| relay3#3 | done | OOO | 4.7 | 13 | 0.62 | 1 | getDay()를 getUTCDay()로 바꿔 시간대와 무관하게 주말을 판정하도록 고쳤고, 시간대별 시험을 추가해 브랜치에 커밋했다. Work는
+…(8자 생략) |
+| relay3#4 | done | OOO | 2.5 | 11 | 0.45 | 1 | isWeekend가 getDay() 대신 getUTCDay()를 쓰도록 고쳐 시간대와 무관하게 토요일이 true가 되게 했다. TZ별 시험을 추
+…(31자 생략) |
+| relay3#5 | done | OOO | 2.7 | 10 | 0.40 | 1 | isWeekend가 getDay() 대신 getUTCDay()를 쓰게 고쳐서, 미국 서부 같은 UTC보다 늦은 시간대에서도 토요일이 주말로 잡힌
+…(91자 생략) |
+
+### 사람 역할의 말
+
+- [relay3#1 좋음] 계약에 원인, 시간대별 예시, 비목표가 정리되어 있었다. 승인 전에 무엇이 바뀌는지 알 수 있었고 확신이 생겼다.
+- [relay3#1 불편] 끝내기를 눌렀을 때 리뷰가 아직 도는 중이었는데 바로 끝났다. 리뷰 지적 2개는 내가 확인하지 못했다. '머지 없이 끝남' 같은 증거 화면 문구도 낯설었다.
+- [relay3#2 좋음] 원인과 계약(시간대별 예시 입력과 출력)을 먼저 보여 줘서 승인 전에 방향을 확인할 수 있었다. 리뷰가 계약 밖 변경을 잡아 준 점도 좋았다.
+- [relay3#2 불편] 리뷰 지적이 세션에 자동으로 가지 않아 내가 터미널에 직접 말해야 했다. 끝내기 때 '머지 없이 끝남'과 증거의 '사람에게 보낸 까닭' 3개가 무슨 뜻인지 알기 어려웠다. 에이전트가 relay_check를 안 돌렸다고 한 점도 아쉬웠다.
+- [relay3#3 좋음] 세션이 원인을 정확히 짚고 짧은 질문 하나만 한 뒤, 예시 입력과 출력이 있는 계약을 내서 승인하기 쉬웠다.
+- [relay3#3 불편] 증거 탭에 C2 못 미침이라는 판정이 떴는데 무슨 뜻인지 바로 알기 어려웠다. 그리고 패널을 내리면 [그래도 끝내기] 단추가 화면 밖으로 사라져서 찾느라 시간을 썼다.
+- [relay3#4 좋음] 세션이 원인을 먼저 설명하고 잘못된 입력 처리 같은 결정 하나만 물어봤다. 계약에 시간대별 예시(LA, UTC, 서울)가 있어 내가 원한 '어느 시간대에서나 같은 결과'가 그대로 확인됐다.
+- [relay3#4 불편] 증거 탭에 'C2 못 미침: 지킬 동작이 아니라 바뀐 동작을 시험함'이 떴는데, 시험은 통과했다는 말과 맞지 않아 무슨 뜻인지 이해하는 데 시간이 걸렸다. 열린 것이 있는 상태에서 끝내기를 눌러야 해서 흐름도 약간 헷갈렸다.
+- [relay3#5 좋음] 계약에 원인(UTC 파싱과 로컬 getDay의 불일치)과 시간대별 예시가 처음부터 정리돼 있어서, 코드를 보기 전에 방향이 맞는지 판단할 수 있었다. 독립 리뷰가 잘못된 C2 예시를 잡아냈고, 그 지적을 세션에 넘기니 계약 변경 제안으로 이어져 고쳐졌다.
+- [relay3#5 불편] 증거 탭에서 'C2 못 미침', 리뷰 올림, 계약 밖 변경이 한꺼번에 뜨니 무엇이 코드 문제이고 무엇이 계약 문제인지 가리기 번거로웠다. 계약 다시 화면에서는 받아들이기 버튼이 화면 밖에 있어 스크롤해야 했다. 마지막 결론이 '머지 없이 끝남'이고 자동 머지가 꺼져 있다는 문구가 떠서 조금 헷갈렸다.
+
+#### friction이 높았던 차례
+
+- relay3#3 차례 12 (friction 2): 스크롤이 잘 안 되어 단추가 화면 밖에 있음
+
+
+보고서: /home/user/relay-v2/app/eval/results/m4-gen-08-timezone/report.md
