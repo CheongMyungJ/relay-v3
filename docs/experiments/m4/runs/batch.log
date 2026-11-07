@@ -2,3 +2,4 @@
 2026-11-07T00:18:44+00:00 끊긴 결과 폴더를 옮김: /home/user/relay-v2/app/eval/results/m4-gen-07-two-bugs → /home/user/relay-v2/app/eval/results/m4-aborted/m4-gen-07-two-bugs-20261107T001844
 2026-11-07T00:18:44+00:00 시작: m4-gen-07-two-bugs
 2026-11-07T00:38:59+00:00 끝: m4-gen-07-two-bugs (exit 0)
+2026-11-07T00:39:01+00:00 시작: m4-gen-08-timezone
