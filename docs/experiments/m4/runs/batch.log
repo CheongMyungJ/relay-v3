@@ -6,3 +6,4 @@
 2026-11-07T00:53:41+00:00 끝: m4-gen-08-timezone (exit 0)
 2026-11-07T00:53:43+00:00 시작: m4-gen-10-invoice-rounding
 2026-11-07T01:07:43+00:00 끝: m4-gen-10-invoice-rounding (exit 0)
+2026-11-07T01:07:45+00:00 시작: m4-gen-14-double-notify
