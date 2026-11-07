@@ -16,7 +16,8 @@ import { nextState, type WorkEvent } from '../core/work.ts'
 import {
   EVENTS,
   type ChangeAnswer,
-  type DraftQualityResult,
+  type DraftAnswersInput,
+  type DraftPreview,
   type EndInput,
   type HandInput,
   type MergeResult,
@@ -278,10 +279,9 @@ export class Works implements WorkCtx {
     return this.projects.refresh()
   }
 
-  /** [초안 만들기](V20): 품질 기준 초안을 프로젝트의 작업 트리에 쓴다. 이미 있으면 덮지 않는다. 커밋은 사람이 한다 */
-  draftQuality(projectId: string): Promise<DraftQualityResult> {
-    return this.projects.draft(projectId)
-  }
+  /** [초안 만들기](V20, V60~V62): 짜서 한 번 돌려 본다. [초안 쓰기]가 답을 넣어 작업 트리에 쓴다(커밋은 사람) */
+  draftQuality = (id: string): Promise<DraftPreview> => this.projects.draft(id)
+  writeQualityDraft = (id: string, a: DraftAnswersInput) => this.projects.writeDraft(id, a)
 
   // ── Work 만들기와 세션 ─────────────────────────────────────────────────────
 

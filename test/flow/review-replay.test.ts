@@ -12,7 +12,7 @@ import { git } from '../../src/adapters/exec.ts'
 import { contractHash } from '../../src/core/contract.ts'
 import { REVIEW_PROMPT_VERSION } from '../../src/core/review.ts'
 import type { Contract } from '../../src/core/types.ts'
-import { draftFor, draftText } from '../../src/engine/init.ts'
+import { draftText, jsDraftFor } from '../../src/engine/init.ts'
 import { calc, TESTS_BASE } from '../support/calc.ts'
 import { FAKE_CLAUDE } from '../support/fakes.ts'
 import { cleanupAll, makeTempDir } from '../support/repo.ts'
@@ -87,7 +87,7 @@ async function overlayText(scenario: string): Promise<string> {
   const dir = await makeTempDir('relay-replay-overlay-')
   cpSync(join(scenarios, scenario, 'repo'), dir, { recursive: true })
   await git(['init', '-q', '-b', 'main'], dir)
-  return draftText(await draftFor(dir))
+  return draftText(await jsDraftFor(dir))
 }
 
 interface WorkSpec {

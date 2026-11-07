@@ -213,3 +213,95 @@ textarea.field {
   gap: 10px;
   font-size: 12.5px;
 }
+
+/* ── 품질 기준 초안 (DraftDialog.tsx, V60~V62) ─────────────────────────── */
+
+.dialog.wide:has(.draft) {
+  width: min(760px, 100%);
+}
+
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  line-height: 1.5;
+}
+
+.draft-head {
+  font-size: 13px;
+  font-weight: 650;
+  margin: 0 0 6px;
+}
+
+.draft-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+}
+
+.draft-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.draft-id {
+  font-weight: 600;
+}
+
+.draft-run {
+  flex-basis: 100%;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.draft-reason {
+  display: block;
+  flex-basis: 100%;
+  color: var(--bad);
+  overflow-wrap: anywhere;
+}
+
+.draft-fixes {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bad-soft);
+}
+
+.draft-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.draft-question legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.draft-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.draft-text {
+  max-height: 260px;
+  overflow: auto;
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}

@@ -30,7 +30,7 @@ import { evidenceFacts, parseReview, raises, REVIEW_PROMPT_VERSION } from '../sr
 import { REVIEW_SCHEMA, reviewPrompt } from '../src/core/review.ts'
 import type { EvidenceBundle, ReviewFinding } from '../src/core/types.ts'
 import { QUALITY_PATH } from '../src/engine/check.ts'
-import { draftFor, draftText } from '../src/engine/init.ts'
+import { draftText, jsDraftFor } from '../src/engine/init.ts'
 import { humanRequest } from '../src/engine/judge.ts'
 import {
   B_BUNDLES,
@@ -172,7 +172,8 @@ export async function makeCheckout(b: Bundle, scenarios: string, ev: EvidenceBun
     const filter = (src: string) => !SKIP.has(path.basename(src))
     cpSync(path.join(scenarios, b.scenario, 'repo'), dir, { recursive: true, filter })
     await git(['init', '-q', '-b', 'main'], dir)
-    const text = draftText(await draftFor(dir))
+    // 평가가 기록한 덧씌우기는 여러 언어 초안(V60) 앞의 JS 초안이다. 그때와 같게 다시 만든다
+    const text = draftText(await jsDraftFor(dir))
     mkdirSync(path.dirname(path.join(dir, QUALITY_PATH)), { recursive: true })
     writeFileSync(path.join(dir, QUALITY_PATH), text)
     const want = b.options.qualityOverlay?.sha256

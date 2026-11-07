@@ -406,13 +406,13 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   const notice = second.getByTestId('quality-notice')
   await expect(notice).toContainText('이 레포에는 품질 기준(.relay/quality.json)이 없습니다')
   await notice.getByRole('button', { name: '초안 만들기' }).click()
+  // 초안 화면(V60~V62, 자세한 것은 draft.spec.ts)의 [초안 쓰기]가 쓴다
+  await page.getByRole('button', { name: '초안 쓰기' }).click({ timeout: 30_000 })
   await expect(notice.getByTestId('quality-drafted')).toHaveText(
     /^초안을 썼습니다\. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다/,
   )
-  expect(JSON.parse(await readFile(bare.path('.relay/quality.json'), 'utf8'))).toMatchObject({
-    version: 1,
-    auto: [{ id: 'small', max_changed_lines: 100 }],
-  })
+  const draft: unknown = JSON.parse(await readFile(bare.path('.relay/quality.json'), 'utf8'))
+  expect(draft).toMatchObject({ version: 1, auto: [{ id: 'small', max_changed_lines: 100 }] })
   // 커밋하지 않았으니 기준은 아직 없다(V9: base에서 읽음)
   await expect(notice).toBeVisible()
   await shot('quality-notice')

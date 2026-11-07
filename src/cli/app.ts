@@ -21,7 +21,8 @@ import type {
 import { repoRoot, revParse, showFile } from '../adapters/git.ts'
 import { evidencePath, readJson, relayHome, repoKey } from '../adapters/store.ts'
 import { check, CheckInputError, QUALITY_PATH } from '../engine/check.ts'
-import { draftFor, draftText, writeDraft } from '../engine/init.ts'
+import { applyAnswers, type DraftAnswers } from '../engine/draft.ts'
+import { draftFor, draftText, summaryLines, tryDraft, writeDraft } from '../engine/init.ts'
 import { m3Switches } from '../engine/m3.ts'
 import { recordCommand } from './record.ts'
 
@@ -35,8 +36,10 @@ export interface Io {
 
 export const USAGE = `쓰는 법: relay <명령> [옵션]
 
-  relay init [--write]
-      quality.json 초안을 찍는다. --write면 .relay/quality.json이 없을 때만 쓴다.
+  relay init [--try | --write [--no-try]] [--human-path <glob>]... [--boundary <앞:뒤>]... [--ci-check <이름>]...
+      quality.json 초안(언어별 레시피)을 찍는다. --try는 지금 커밋에서 한 번 돌려 보고 요약을 찍는다(쓰지 않음).
+      --write는 돌려 본 뒤 안 된 명령을 빼고 .relay/quality.json이 없을 때만 쓴다(커밋은 사람이 한다).
+      --human-path·--boundary·--ci-check는 묻는 것의 답이다(human_paths, 경계 래칫, ci_checks).
   relay check [--base <ref>] [--head <ref>] [--contract <파일>] [--request <파일>] [--rerun] [--json]
       head를 base와 견줘 증거 묶음을 만든다. --rerun은 base 캐시를 쓰지 않는다.
   relay gate [--evidence <파일>] [--contract <파일>] [--head <ref>] [--auto-merge] [--json]
@@ -116,15 +119,56 @@ async function rootOf(cwd: string): Promise<string> {
 // ── init ────────────────────────────────────────────────────────────────────
 
 async function initCommand(io: Io, args: string[]): Promise<number> {
-  const { values } = parseArgs({ args, options: { write: { type: 'boolean' } }, strict: true })
+  const { values } = parseArgs({
+    args,
+    options: {
+      write: { type: 'boolean' },
+      try: { type: 'boolean' },
+      'no-try': { type: 'boolean' },
+      'human-path': { type: 'string', multiple: true },
+      boundary: { type: 'string', multiple: true },
+      'ci-check': { type: 'string', multiple: true },
+    },
+    strict: true,
+  })
   const root = await rootOf(io.cwd)
-  if (values.write !== true) {
-    io.out(draftText(await draftFor(root)).trimEnd())
+  const answers: DraftAnswers = {
+    human_paths: values['human-path'] ?? [],
+    boundaries: values.boundary ?? [],
+    ci_checks: values['ci-check'] ?? [],
+  }
+  const answer = (q: Parameters<typeof applyAnswers>[0]) => {
+    try {
+      return applyAnswers(q, answers)
+    } catch (e) {
+      throw new UsageError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  if (values['no-try'] === true && values.write !== true)
+    throw new UsageError('--no-try는 --write와 함께 쓴다')
+  if (values.write !== true && values.try !== true) {
+    // 돌려 보지 않은 초안의 JSON만(평가 도구가 읽는다)
+    io.out(draftText(answer(await draftFor(root))).trimEnd())
     return 0
   }
-  if (!(await writeDraft(root)).written)
+  if (values.write === true && values.try === true)
+    throw new UsageError('--try와 --write는 함께 쓰지 않는다(--write도 먼저 돌려 본다)')
+  const report = await tryDraft(root, relayHome(io.env), { run: values['no-try'] !== true })
+  const config = answer(report.config)
+  for (const line of summaryLines(report)) io.out(line)
+  if (values.write !== true) {
+    io.out(
+      report.exists
+        ? `이미 있음: ${QUALITY_PATH}(--write는 덮지 않는다)`
+        : `쓰려면: relay init --write`,
+    )
+    return 0
+  }
+  if (!(await writeDraft(root, config)).written)
     throw new UsageError(`이미 있음: ${QUALITY_PATH}. 고치려면 직접 고친다`)
-  io.out(`씀: ${QUALITY_PATH}`)
+  io.out(
+    `씀: ${QUALITY_PATH}. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰인다(앱은 커밋하지 않는다)`,
+  )
   return 0
 }
 

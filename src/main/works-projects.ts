@@ -1,7 +1,8 @@
 // 프로젝트(레포)의 기록·설정과 품질 기준 상태 (docs/m2-modules.md 3절 works.ts의 addProject·updateSettings·draftQuality,
 // V20). works.ts가 600줄을 넘지 않게 나눴다. Electron을 모른다.
 // 품질 기준 상태는 기본 브랜치(origin/<기본>이 있으면 그것)의 .relay/quality.json으로 정한다: 관문은 base의 기준으로
-// 재므로(V9) 작업 트리에만 있는 파일은 쓰이지 않는다. [초안 만들기]는 작업 트리에 쓰고, 커밋은 사람이 한다.
+// 재므로(V9) 작업 트리에만 있는 파일은 쓰이지 않는다. [초안 만들기]는 짜서 한 번 돌려 보고(V60~V62) [초안 쓰기]가 작업 트리에 쓴다.
+// 커밋은 사람이 한다.
 
 import { access } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -11,11 +12,13 @@ import { repoKey } from '../adapters/store.ts'
 import { acceptedUnrecorded } from '../engine/ledger.ts'
 import { parseQuality } from '../core/quality.ts'
 import { QUALITY_PATH } from '../engine/check.ts'
-import { writeDraft } from '../engine/init.ts'
+import { draftText, tryDraft, writeDraft, type DraftReport } from '../engine/init.ts'
 import { m3Settings } from '../engine/m3.ts'
 import {
   DEFAULT_SETTINGS,
   EVENTS,
+  type DraftAnswersInput,
+  type DraftPreview,
   type DraftQualityResult,
   type ProjectSettings,
   type SettingsInput,
@@ -78,6 +81,7 @@ export class ProjectDesk {
   private readonly deps: WorksDeps
   private readonly records = new Map<string, ProjectRecord>()
   private readonly quality = new Map<string, Quality>()
+  private readonly drafts = new Map<string, DraftReport>()
   /** 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b, 실적 장부) */
   private readonly unrecorded = new Map<string, number>()
 
@@ -194,12 +198,42 @@ export class ProjectDesk {
     if (changed) this.emit()
   }
 
-  /** [초안 만들기]: core draftQuality의 초안을 프로젝트의 작업 트리에 쓴다. 이미 있으면 덮지 않는다 */
-  async draft(projectId: string): Promise<DraftQualityResult> {
+  /**
+   * [초안 만들기](V60~V62): 언어별 레시피로 짜고 지금 커밋에서 한 번 돌려 본다(engine tryDraft). 쓰지 않는다. 결과는
+   * [초안 쓰기]까지 프로젝트마다 하나 둔다
+   */
+  async draft(projectId: string): Promise<DraftPreview> {
     const p = this.records.get(projectId)
     if (!p) throw new Error(`프로젝트가 없음: ${projectId}`)
-    const r = await writeDraft(p.path)
+    const r = await tryDraft(p.path, this.deps.store.home)
+    this.drafts.set(projectId, r)
+    return previewOf(r)
+  }
+
+  /** [초안 쓰기]: 마지막 [초안 만들기]의 초안(안 된 명령을 뺀 것)에 답을 넣어 작업 트리에 쓴다. 이미 있으면 덮지 않는다 */
+  async writeDraft(projectId: string, answers: DraftAnswersInput): Promise<DraftQualityResult> {
+    const p = this.records.get(projectId)
+    if (!p) throw new Error(`프로젝트가 없음: ${projectId}`)
+    const r = this.drafts.get(projectId)
+    if (!r) throw new Error('먼저 [초안 만들기]로 초안을 돌려 봐야 함')
+    const out = await writeDraft(p.path, r.config, answers)
+    this.drafts.delete(projectId)
     await this.refresh(projectId)
-    return r
+    return out
+  }
+}
+
+/** 화면에 보낼 모양(shared DraftPreview) */
+function previewOf(r: DraftReport): DraftPreview {
+  return {
+    units: r.plan.units,
+    head: r.dry?.head ?? null,
+    commands: r.dry?.commands ?? [],
+    values: (r.dry?.values ?? []).map((v) => ({ id: v.id, text: v.text })),
+    fixes: r.dry?.fixes ?? [],
+    questions: r.plan.questions,
+    suggestions: r.plan.suggestions,
+    exists: r.exists,
+    text: draftText(r.config),
   }
 }

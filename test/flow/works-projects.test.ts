@@ -1,4 +1,4 @@
-// [흐름] 프로젝트의 품질 기준 상태와 [초안 만들기](V20, src/main/works-projects.ts): 기본 브랜치(origin이 있으면 origin)의
+// [흐름] 프로젝트의 품질 기준 상태와 [초안 만들기]·[초안 쓰기](V20, src/main/works-projects.ts): 기본 브랜치(origin이 있으면 origin)의
 // 기준을 읽고, 초안은 작업 트리에만 쓰며 덮지 않고, 커밋하면 present, 깨지면 invalid. 바탕은 test/support/works-flow.ts.
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -15,7 +15,6 @@ test('품질 기준 상태(V20): 기본 브랜치에 없으면 missing, [초안 
   const repo = await makeRepo({
     files: {
       'package.json': JSON.stringify({ name: 'x', scripts: { test: 'node --test' } }),
-      'package-lock.json': '{}\n',
       'src/a.js': 'export const a = 1\n',
     },
   })
@@ -32,14 +31,18 @@ test('품질 기준 상태(V20): 기본 브랜치에 없으면 missing, [초안 
   expect(works.list().projects.find((p) => p.id === project.id)?.quality).toBe('missing')
 
   const target = join(repo.dir, '.relay', 'quality.json')
-  expect(await works.draftQuality(project.id)).toEqual({ written: true, path: target })
+  // [초안 만들기]는 돌려 보기만 하고 쓰지 않는다. [초안 쓰기]가 쓴다(자세한 것은 works-draft.test.ts)
+  await expect(works.writeQualityDraft(project.id, {})).rejects.toThrow(/먼저 \[초안 만들기\]/)
+  expect(await works.draftQuality(project.id)).toMatchObject({ exists: false, fixes: [] })
+  expect(await works.writeQualityDraft(project.id, {})).toEqual({ written: true, path: target })
   const parsed = parseQuality(await readFile(target, 'utf8'))
   if (!parsed.ok) throw new Error(parsed.errors.join('; '))
   expect(parsed.value.commands.acceptance?.run).toMatch(/^node --test --test-reporter=junit/)
   expect(parsed.value.auto.map((c) => c.id)).toEqual(['small'])
   // 이미 있으면 덮지 않는다
   await writeFile(target, '{ "사람이": "고침" }\n')
-  expect(await works.draftQuality(project.id)).toEqual({ written: false, path: target })
+  expect(await works.draftQuality(project.id)).toMatchObject({ exists: true })
+  expect(await works.writeQualityDraft(project.id, {})).toEqual({ written: false, path: target })
   expect(await readFile(target, 'utf8')).toBe('{ "사람이": "고침" }\n')
   // 작업 트리에만 있는 기준은 쓰이지 않는다(V9: 기준은 base에서 읽음). 화면은 초안이 있다고 알린다
   await works.refreshProjects()

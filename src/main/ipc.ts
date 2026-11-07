@@ -6,6 +6,7 @@ import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import {
   EVENTS,
   IPC,
+  type DraftAnswersInput,
   type HandPick,
   type IpcResult,
   type NewWorkInput,
@@ -22,6 +23,20 @@ type Handler = (...args: unknown[]) => unknown
 const str = (v: unknown, what: string): string => {
   if (typeof v !== 'string') throw new Error(`${what}가 글이 아님`)
   return v
+}
+
+/** 초안의 답: 묻는 것의 id마다 글 목록 */
+function draftAnswers(v: unknown): DraftAnswersInput {
+  const o = obj(v, '답')
+  const out: DraftAnswersInput = {}
+  for (const k of ['human_paths', 'boundaries', 'ci_checks'] as const) {
+    const list = o[k]
+    if (list === undefined) continue
+    if (!Array.isArray(list) || list.some((x) => typeof x !== 'string'))
+      throw new Error(`답 ${k}가 글 목록이 아님`)
+    out[k] = list as string[]
+  }
+  return out
 }
 
 const obj = (v: unknown, what: string): Record<string, unknown> => {
@@ -147,6 +162,8 @@ export function registerIpc(o: {
     [IPC.debt]: (id) => works.debt(str(id, 'id')),
     [IPC.baseDebt]: (id) => baseDebt(works.record(str(id, 'id'))),
     [IPC.draftQuality]: (id) => works.draftQuality(str(id, 'projectId')),
+    [IPC.writeQualityDraft]: (id, answers) =>
+      works.writeQualityDraft(str(id, 'projectId'), draftAnswers(answers)),
     // 실적(M4c·M4d): 장부를 읽어 셈한다
     [IPC.record]: (id, all) => o.record.record(str(id, 'projectId'), all === true),
     [IPC.shadowEnds]: (id) => o.record.shadowEnds(str(id, 'id')),

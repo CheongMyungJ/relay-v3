@@ -4,7 +4,12 @@ import type { NewWorkInput, ProjectSettings, ProjectView, WorkView } from '../..
 import { RecordTable } from './RecordTable.tsx'
 import { ErrorLine, useAction } from './ui.tsx'
 
-function Modal(p: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function Modal(p: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  wide?: boolean
+}) {
   const { onClose } = p
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -44,6 +44,7 @@ const api: RelayApi = {
   debt: (id) => call(IPC.debt, id),
   baseDebt: (id) => call(IPC.baseDebt, id),
   draftQuality: (projectId) => call(IPC.draftQuality, projectId),
+  writeQualityDraft: (projectId, answers) => call(IPC.writeQualityDraft, projectId, answers),
   record: (projectId, allEpochs) => call(IPC.record, projectId, allEpochs),
   shadowEnds: (id) => call(IPC.shadowEnds, id),
   dispute: (projectId, mergeCommit, event) => call(IPC.dispute, projectId, mergeCommit, event),

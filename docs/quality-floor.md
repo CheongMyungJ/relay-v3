@@ -1,6 +1,6 @@
 # 품질 바닥 넓히기: 래칫 셋과 여러 언어 초안
 
-- 상태: **설계**(2026-11-07). A(①의 래칫 셋: 억누름, 중복, 바뀐 줄 커버리지)는 **만듦**(2026-11-07, [design.md](design.md) V55~V59). 나머지(여러 언어 초안, 드라이런, 묻는 화면, 실제 레포 시범, 장기 평가)는 만들기 전이다. 만든 절에는 '만든 것'과 '설계와 다른 것'을 더한다.
+- 상태: **설계**(2026-11-07). A(①의 래칫 셋: 억누름, 중복, 바뀐 줄 커버리지)는 **만듦**(2026-11-07, [design.md](design.md) V55~V59). B(5절: 여러 언어 초안, 드라이런, 묻는 화면)도 **만듦**(2026-11-07, V60~V63). 나머지(6절의 [설정] 안내, 실제 레포 시범, 장기 평가)는 만들기 전이다. 만든 절에는 '만든 것'과 '설계와 다른 것'을 더한다.
 - 근거: [philosophy.md](philosophy.md) 원칙 3(품질의 바닥은 레포에 산다), [v2-evidence.md](v2-evidence.md)(v2에는 품질 래칫, 커버리지, 복잡도, 아키텍처 규칙을 기계로 보는 층이 없었다), [design.md](design.md) V9·V19·V20(품질 기준, 초안), M3 장기 평가([experiments/m3/report.md](experiments/m3/report.md): 구조 지표가 바닥·천장에 붙어 차이가 보이지 않음).
 - 이 글은 relay에 품질 장치가 하나도 없다고 놓고 처음부터 적는다. 지금 relay-v3에 있는 것과 새로 만들 것을 표시한다.
 
@@ -31,6 +31,8 @@ Work마다 사람이나 리뷰어가 diff를 보는 것으로는 둘 다 잘 못
 
 **설계와 다른 것.** '설정 없이 받는 몫'은 아직 아니다: 레포가 quality.json에 그 래칫을 적어야 켜진다. 초안(V19)에 넣는 것은 5절의 여러 언어 초안과 함께 정한다(V58).
 
+**만든 것 (B).** 초안(`relay init`, [초안 만들기])이 `suppressions`·`duplication`을 늘 넣고 `diff_coverage`는 수용 시험이 앱이 읽을 보고서를 쓸 때만 넣는다(V63, V60). 그래도 켜는 곳은 레포의 quality.json이다: 사람이 초안을 커밋해야 쓰이고 지울 수 있다.
+
 ## 3. 앱에 어떻게 넣나 (부품)
 
 ```
@@ -51,6 +53,8 @@ Work마다 사람이나 리뷰어가 diff를 보는 것으로는 둘 다 잘 못
    - 장치 등록부에 장치마다 가정과 끄는 조건.
 
 **만든 것 (A).** 4의 첫째(래칫 종류 셋)와 넷째(장치 등록부의 세 줄)를 만들었다. 부품: 셈은 engine의 순수 함수(`languages.ts` 언어 표와 범위, `suppressions.ts` 무늬표, `duplication.ts` 토큰 창, `coverage.ts` 보고서 읽기와 교집합. src/core 상한 때문에 engine), 재기는 `engine/ratchets.ts`(check.ts에서 옮김), git 읽기는 adapters `grepLines`·`readBlobs`, 더한 줄의 줄 번호는 core diff의 `added_at`. 관문은 바꾸지 않았다: 나빠짐은 '래칫 나빠짐', 잴 수 없음은 '래칫을 재지 못함'으로 늘 그랬듯 사람 머지다. 관문 판은 2로 올렸고 재생 결론이 같아 실적을 이어 센다(V59).
+
+**만든 것 (B).** 4의 둘째·셋째(여러 언어 초안, 드라이런과 묻는 화면)를 만들었다(V60~V62). 부품: 레시피는 engine `recipes.ts`(언어 단위와 단위마다의 설치·빠른 검사·수용 시험·커버리지·명령 래칫·제안. JS는 core `draftQuality` 그대로), 합치기·묻는 것·답은 `draft.ts`, 드라이런은 `dry-run.ts`(확인 실행기의 `prepareCheckout`·`runIn`·worktree 잠금을 그대로), 훑기·쓰기·요약은 `init.ts`. 셋 모두 순수 셈은 engine이다(src/core 4,932줄 그대로). 앱은 `draftQuality`(짜서 돌려 봄) → 초안 화면(`DraftDialog.tsx`) → `writeQualityDraft`(답을 넣어 씀), CLI는 `relay init --try`·`--write`. 관문 파일은 바꾸지 않아 관문 판은 2 그대로다.
 
 ## 4. 어떻게 실행되나 (Work 하나)
 
@@ -91,6 +95,24 @@ Work마다 사람이나 리뷰어가 diff를 보는 것으로는 둘 다 잘 못
 | Rust | `cargo fetch` | `cargo clippy` | `cargo nextest`(JUnit) | cargo-llvm-cov → lcov | 취약점(cargo-audit) | `#[allow(`, `#[ignore]` |
 
 여러 언어가 섞인 레포는 언어마다 명령을 그 폴더에서 돌리게 적는다. ①은 레포 전체에 한 번 센다.
+
+**만든 것 (B).** 5.1의 2~7과 5.2의 표를 만들었다([design.md](design.md) V60~V63).
+
+- 훑기(2): `git ls-files`(무시하지 않는 새 파일 포함)와 매니페스트(깊이 둘까지의 폴더), 잠금 파일, 도구 설정(`.golangci.*`, `rustfmt.toml`, `clippy.toml`, `.config/nextest.toml`, pom·Gradle 플러그인), `.github/workflows/*.yml`(작업 이름, clippy를 쓰는지)을 읽는다.
+- 레시피(3): 위 표에서 레포의 매니페스트·설정에 있는 도구만 고른다. 빠진 도구는 제안 글(예: 'radon을 dev 의존성에 더하면 복잡도 래칫을 쓸 수 있습니다')로만 낸다. 여러 언어는 `cd <폴더> && …`, setup은 이어 붙이고 명령 id에 단위 이름을 붙인다. 수용 시험은 하나라 소스가 가장 많은 단위가 맡고 나머지 단위의 시험은 빠른 검사다.
+- 드라이런(4): 지금 커밋에서 setup과 명령을 확인 실행기의 head check worktree에서 한 번씩 돌리고 명령마다 됨·안 됨과 까닭, 래칫마다 지금 값을 낸다. 안 된 명령은 초안에서 빼고 결과의 '고칠 것'에 둔다(quality.json은 모르는 칸을 받지 않아 파일에 주석으로 남길 수 없다).
+- 묻기(5): 셋까지. 늘 볼 경로(늘), 경계(위층·아래층 폴더가 함께 있을 때), CI 필수 검사(워크플로가 있을 때). 기본으로 고른 답은 없다.
+- 쓰기(6): 작업 트리에만 쓰고 커밋하지 않는다(V20 그대로). 이미 있으면 덮지 않는다.
+- 이 레포에서 `relay init --try`: JS, setup·typecheck·lint·수용 시험 모두 됨, 시험 1848, 600줄 넘는 파일 6(기록·문서), 억누름 5, 중복 4.7%, 묻는 것 둘(늘 볼 경로, CI 검사 `check`), 제안 하나(`@vitest/coverage-v8`).
+
+**설계와 다른 것.**
+
+- 경계(5)는 `rules`가 아니라 command 래칫이다(`boundary-<앞>-<뒤>`: 앞 폴더에서 뒤 폴더 이름을 가져오는 줄 수, `git grep … | wc -l`, 낮을수록 좋음). `rules`는 승격된 검사의 이름(V42)이라 경계를 잴 수 없고, 래칫이면 지금 넘는 곳을 먼저 고치라고 하지 않는다. 5.3의 `"rules": [{ "id": "layers", "run": "uv run lint-imports" }]`는 지금 모양이 아니어서 import-linter가 있으면 빠른 검사 `imports`로 넣는다.
+- ②의 명령 래칫 후보 가운데 만든 것은 Python의 radon 복잡도(`radon cc -n C -i .venv . | awk …`로 C 이상 블록 수)뿐이다. 순환 의존(madge), 취약점(npm audit, pip-audit, govulncheck, cargo-audit), ArchUnit은 넣지 않았다(govulncheck만 제안 글).
+- 커버리지: Go의 `-coverprofile`은 앱이 읽는 형식이 아니라 넣지 않는다. Rust의 cargo-llvm-cov는 매니페스트에 적히지 않는 도구라 제안만. JS는 vitest에 커버리지 제공자가 있을 때만(node:test의 커버리지는 실험 플래그라 넣지 않음). Maven은 여러 모듈이면, Gradle은 XML 보고서가 꺼져 있으면 넣지 않는다.
+- Java·Kotlin의 시험 결과는 클래스마다 파일이라 수용 시험 명령 끝에 셸 조각으로 하나의 JUnit(`.relay-out/junit.xml`)에 묶는다(앱의 JUnit 읽기는 파일 하나). Maven·Gradle에는 setup을 두지 않는다(의존성은 컴파일 명령이 받는다).
+- 빠른 검사의 엄격함: Rust는 엄격한 clippy 표시가 있을 때만 `-D warnings`, 아니면 `cargo check`(경고만으로 빠진 초안을 줄이려고).
+- 5.3의 예와 다른 칸: mypy 대상은 `src/`가 있으면 `src`, 아니면 `.`. pytest-cov가 있으면 수용 시험이 `--cov=. --cov-report=xml:.relay-out/coverage.xml`을 쓰고 `diff_coverage`(Cobertura, min 0.8)를 넣는다.
 
 ### 5.3 Python 초안의 예
 
@@ -137,6 +159,10 @@ CLAUDE.md의 층대로, 한 동작은 가장 낮은 층에서 한 번만 자세�
 
 **설계와 다른 것.** [스모크]의 '[증거]의 새 래칫 줄' 그림은 찍지 않았다: 렌더러 코드를 바꾸지 않았고 래칫 줄은 종류와 상관없이 상태·id·detail로 그려진다(V58). 실제 레포 시범과 장기 평가는 하지 않았다.
 
+**만든 것 (B).** [단위] `draft-recipes.test.ts`(매니페스트 묶음마다의 초안: JS는 core 초안 그대로에 래칫 둘(칸 차례까지), vitest 커버리지, bun / Python uv·poetry·pip·PEP 621, 의존성 이름 찾기 / Go(tool 지시문) / Java Maven·Gradle, Kotlin(ktlint, jacoco XML), JUnit 묶기 / Rust(clippy 표시, nextest profile) / 섞인 레포(폴더마다 cd, setup 잇기, 수용 시험 고르기, 단위 폴더 고르기) / 묻는 것의 후보, 워크플로 작업 이름, 답 넣기와 깨진 답, 경계 무늬). [어댑터] `draft-dry-run.test.ts`: 이 기계에서 실제 go(1.24)·python3(3.13, venv와 pip로 PyPI에서 pytest·pytest-cov)·cargo로 작은 레포마다 드라이런을 돌렸다(Go: setup·`go test` 됨, `go vet`은 unreachable code로 고칠 것, 억누름 `//nolint` 1 / Python: JUnit과 coverage.py의 Cobertura를 앱이 읽음 / Rust: `cargo check`·`cargo test` 됨 / 커밋 없는 레포). 도구가 없거나 PyPI에 닿지 못하면 그 시험은 까닭을 이름에 적고 건너뛴다. Java(Maven·Gradle)는 의존성을 받아야 해서 [어댑터]에 넣지 않았다. [흐름] `works-draft.test.ts`(Python(uv) 레포: [초안 만들기] → 요약(됨·안 됨, 지금 값, 고칠 것 lint, 묻는 것 셋) → [초안 쓰기](답이 들어가고 lint가 빠짐, 작업 트리에만), 가짜 uv `test/support/fake-uv`), `cli.test.ts`(`relay init --try`·`--write`·`--no-try`·답). [스모크] `draft.spec.ts`(초안 화면: `smoke-draft-01-dialog.png`, `-02-answers.png`, `-03-written.png`를 열어 봄), `app.spec.ts`(둘째 프로젝트는 초안 화면을 거쳐 쓴다). 관문 파일은 바꾸지 않았다(`gate-version.test.ts`, `npm run test:replay` 그대로).
+
+**설계와 다른 것 (B).** [흐름]의 Go 레포 고정 자료는 따로 두지 않았다: Go 레시피는 [단위]가, Go 드라이런은 [어댑터]가 실제 go로 보고, [흐름]은 이어지는 것(앱의 두 단계와 작업 트리)을 Python 하나로 본다.
+
 ## 8. 끄는 조건 (devices.md에 올릴 것, 안)
 
 | 장치 | 가정 | 끄는 조건(안) | 최소 n |
@@ -147,3 +173,5 @@ CLAUDE.md의 층대로, 한 동작은 가장 낮은 층에서 한 번만 자세�
 | 여러 언어 초안 | 레포를 훑어 고른 명령이 대개 바로 돈다 | 드라이런에서 고친 것 없이 도는 초안이 절반 아래면 그 언어의 레시피를 '제안만'으로 내린다 | 언어마다 레포 5 |
 
 **만든 것 (A).** 위 셋을 [devices.md](devices.md)에 올렸다(억누름 래칫, 중복 래칫, 바뀐 줄 커버리지). 지표에 '거짓 양성(사람이 틀린 셈으로 표시)'을 두었지만 표시할 자리(화면의 [틀린 셈])는 아직 없어 손으로 센다. 바뀐 줄 커버리지에는 '보고서에 없어 세지 않은 파일 수'를 지표로 더했다(V57의 낙관 쪽 선택을 지켜보려고).
+
+**만든 것 (B).** '여러 언어 초안'을 [devices.md](devices.md)에 올렸다(끄는 조건은 위 표 그대로에 '사람이 쓴 뒤 같은 칸을 절반 넘게 고치면 그 칸의 레시피를 고친다'를 더함). 초안 결과는 장부에 남기지 않아 지표는 지금 손으로 센다. 억누름·중복 래칫의 상태 칸에 '초안이 늘 넣는다(V63)'를 더했다.

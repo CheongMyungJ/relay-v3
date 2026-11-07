@@ -22,9 +22,13 @@ export const FAKE_CLAUDE = isWindows
 /** 가짜 gh 실행 파일 */
 export const FAKE_GH = isWindows ? join(here, 'fake-gh', 'gh.cmd') : FAKE_GH_MJS
 
+/** 가짜 uv가 든 폴더(sh 스크립트 `uv`, Windows 없음). PATH 앞에 넣는다: 여러 언어 초안(V60)의 Python(uv) 드라이런 */
+export const FAKE_UV_DIR = join(here, 'fake-uv')
+
 // 체크아웃이 실행 비트를 잃었어도 돈다(.mjs는 #!/usr/bin/env node)
 if (!isWindows) {
-  for (const f of [FAKE_CLAUDE_MJS, FAKE_GH_MJS]) if (existsSync(f)) chmodSync(f, 0o755)
+  for (const f of [FAKE_CLAUDE_MJS, FAKE_GH_MJS, join(FAKE_UV_DIR, 'uv')])
+    if (existsSync(f)) chmodSync(f, 0o755)
 }
 
 /** 이 환경에서 PATH의 이름(Windows는 보통 Path) */

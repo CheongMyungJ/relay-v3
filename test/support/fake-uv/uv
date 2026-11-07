@@ -1,0 +1,40 @@
+#!/bin/sh
+# 가짜 uv ([흐름] test/flow/works-draft.test.ts, [스모크]). 여러 언어 초안(V60)의 Python(uv) 레시피가 부르는 꼴만 흉내 낸다:
+#   uv sync                      .venv를 만들고 성공
+#   uv run ruff check .          린트 오류 하나로 실패(고칠 것)
+#   uv run pytest --junitxml=J --cov-report=xml:C …   J에 시험 둘, C에 Cobertura(app/calc.py)
+#   uv run radon cc …            복잡도 C 하나
+# 받은 인자는 FAKE_UV_LOG가 있으면 한 줄씩 적는다.
+[ -n "$FAKE_UV_LOG" ] && echo "$*" >> "$FAKE_UV_LOG"
+case "$1" in
+  sync) mkdir -p .venv && echo "Installed 4 packages"; exit 0 ;;
+  run) shift ;;
+  *) echo "fake uv: 모르는 명령 $1" >&2; exit 2 ;;
+esac
+tool="$1"
+shift
+case "$tool" in
+  ruff)
+    echo 'app/calc.py:1:8: F401 [*] `os` imported but unused'
+    echo 'Found 1 error.'
+    exit 1 ;;
+  pytest)
+    for a in "$@"; do
+      case "$a" in
+        --junitxml=*)
+          j="${a#--junitxml=}"
+          mkdir -p "$(dirname "$j")"
+          echo '<testsuites><testsuite name="pytest" tests="2"><testcase classname="tests.test_calc" name="test_add"/><testcase classname="tests.test_calc" name="test_clamp"/></testsuite></testsuites>' > "$j" ;;
+        --cov-report=xml:*)
+          c="${a#--cov-report=xml:}"
+          mkdir -p "$(dirname "$c")"
+          echo '<?xml version="1.0" ?><coverage><sources><source>.</source></sources><packages><package name="app"><classes><class name="calc.py" filename="app/calc.py"><lines><line number="1" hits="1"/><line number="3" hits="0"/></lines></class></classes></package></packages></coverage>' > "$c" ;;
+      esac
+    done
+    echo '2 passed'
+    exit 0 ;;
+  radon)
+    printf 'app/calc.py\n    F 3:0 clamp - C (11)\n'
+    exit 0 ;;
+  *) echo "fake uv: 모르는 도구 $tool" >&2; exit 127 ;;
+esac

@@ -11,8 +11,10 @@ import type {
   M3Switches,
   ReviewFinding,
 } from '../core/types.ts'
+import type { DraftAnswersInput, DraftPreview, DraftQualityResult } from './draft.ts'
 
 export type { SessionState, WorkState }
+export type * from './draft.ts'
 
 // ── 프로젝트 ─────────────────────────────────────────────────────────────────
 
@@ -81,12 +83,6 @@ export interface ProjectView {
   qualityRef: string | null
   /** 실적 장부에서 사람이 나빠진 래칫을 받아들였지만 빚으로 기록하지 않은 내보내기의 수(M3b, engine acceptedUnrecorded) */
   unrecordedDebt: number
-}
-
-/** [초안 만들기]의 답(V20). 이미 파일이 있으면 덮지 않고 written false. path는 작업 트리의 .relay/quality.json */
-export interface DraftQualityResult {
-  written: boolean
-  path: string
 }
 
 // ── PR (adapters/gh.ts의 PrInfo와 같은 모양. shared는 adapters를 가져오지 않는다) ─────────
@@ -552,8 +548,10 @@ export interface RelayApi {
   debt(id: string): Promise<DebtItem[]>
   /** [계약]의 곁들일 정리(M3c): 기준(Work 브랜치와 기준 브랜치의 공통 조상)의 빚 장부 */
   baseDebt(id: string): Promise<DebtItem[]>
-  /** [초안 만들기](V20): 품질 기준 초안을 프로젝트의 작업 트리에 쓴다. 커밋은 사람이 한다 */
-  draftQuality(projectId: string): Promise<DraftQualityResult>
+  /** [초안 만들기](V20, V60~V62): 언어별 초안을 짜고 지금 커밋에서 한 번 돌려 본다. 쓰지 않는다 */
+  draftQuality(projectId: string): Promise<DraftPreview>
+  /** [초안 쓰기]: 마지막 [초안 만들기]의 초안에 답을 넣어 작업 트리에 쓴다(덮지 않음). 커밋은 사람이 한다 */
+  writeQualityDraft(projectId: string, answers: DraftAnswersInput): Promise<DraftQualityResult>
   /** 설정 대화상자의 [실적](M4c): 이 프로젝트의 조건별 실적. allEpochs면 모든 판 */
   record(projectId: string, allEpochs: boolean): Promise<RecordStats>
   /** 이 Work의 내보내기마다 그림자 표본의 끝(Q6). 끝이 정해지지 않은 내보내기는 없다 */
@@ -588,6 +586,7 @@ export const IPC = {
   debt: 'relay:debt',
   baseDebt: 'relay:base-debt',
   draftQuality: 'relay:draft-quality',
+  writeQualityDraft: 'relay:write-quality-draft',
   record: 'relay:record',
   shadowEnds: 'relay:shadow-ends',
   dispute: 'relay:dispute',

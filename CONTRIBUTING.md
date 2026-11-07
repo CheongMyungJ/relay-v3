@@ -6,7 +6,7 @@
 |---|---|
 | `src/core` | 순수 로직: 품질 기준·계약·JUnit·diff 파싱, 신호, 래칫, 줄 판정, 관문 |
 | `src/adapters` | git, 프로세스 실행, check worktree, 저장소 |
-| `src/engine` | 조립: `check` 흐름 |
+| `src/engine` | 조립: `check` 흐름, 품질 기준 초안(언어별 레시피, 드라이런) |
 | `src/cli` | 명령줄 `relay` |
 | `docs/` | 철학(`philosophy.md`), 설계(`design.md`), 장치 등록부(`devices.md`), 모듈 약속(`m1-modules.md`), v2 사실 지도(`v2-evidence.md`) |
 
@@ -17,6 +17,7 @@ Node.js 22.18 이상과 git이 필요합니다. 빌드는 없습니다. Node의 
 ```bash
 npm ci
 npm run relay -- check     # 지금 레포에서 relay check
+npm run relay -- init --try   # 품질 기준 초안을 짜서 지금 커밋에서 한 번 돌려 본다(쓰지 않음)
 ```
 
 ## 확인

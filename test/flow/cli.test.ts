@@ -104,9 +104,11 @@ describe('relay init', () => {
     expect(draft.value.commands.fast.map((c) => c.id)).toEqual(['lint'])
     expect(draft.value.commands.acceptance?.junit).toBe('.relay-out/junit.xml')
 
+    // 돌려 보지 않고 쓰면 찍은 초안 그대로다
     const wrote = io(repo.dir)
-    expect(await main(['init', '--write'], wrote)).toBe(0)
-    expect(wrote.stdout).toEqual(['씀: .relay/quality.json'])
+    expect(await main(['init', '--write', '--no-try'], wrote)).toBe(0)
+    expect(wrote.stdout.at(-1)).toMatch(/^씀: \.relay\/quality\.json\. /)
+    expect(wrote.stdout).toContain('돌려 보지 않음(--no-try): 명령이 되는지 모른다')
     const text = await readFile(repo.path('.relay/quality.json'), 'utf8')
     expect(JSON.parse(text)).toEqual(JSON.parse(shown.stdout.join('\n')))
 
@@ -115,6 +117,47 @@ describe('relay init', () => {
     expect(await main(['init', '--write'], again)).toBe(1)
     expect(again.stderr[0]).toContain('이미 있음')
     expect(await readFile(repo.path('.relay/quality.json'), 'utf8')).toBe('{"사람이":"고침"}\n')
+    expect(await main(['init', '--no-try'], io(repo.dir))).toBe(1)
+  })
+
+  test('--try는 돌려 보고 요약만, --write는 안 된 명령을 빼고 답을 넣어 쓴다(V61·V62)', async () => {
+    const fail = `node -e "console.error('타입 오류 1개'); process.exit(2)"`
+    const pkg = { name: 'x', type: 'module', scripts: { typecheck: fail, test: 'node --test' } }
+    const repo = await makeRepo({
+      files: {
+        'package.json': JSON.stringify(pkg),
+        'test/a.test.js': "import test from 'node:test'\ntest('a', () => {})\n",
+        'src/auth/a.js': '// eslint-disable-next-line\nexport const a = 1\n',
+      },
+    })
+    const home = await makeTempDir('relay-home-')
+    const tried = io(repo.dir, home)
+    expect(await main(['init', '--try'], tried)).toBe(0)
+    expect(tried.stdout).toContainEqual(
+      expect.stringMatching(
+        /^ {2}안 됨 typecheck: npm run typecheck \(\d+\.\d초\) — 종료 코드 2: 타입 오류 1개$/,
+      ),
+    )
+    expect(tried.stdout).toContain('  tests: 시험 1')
+    expect(tried.stdout).toContain('  suppressions: 억누름 1 (eslint-disable 1)')
+    expect(tried.stdout).toContain(
+      '  1. 늘 사람이 볼 경로(이 경로를 건드린 Work는 늘 사람 머지). 후보: src/auth/**',
+    )
+    expect(tried.stdout.at(-1)).toBe('쓰려면: relay init --write')
+    expect(existsSync(repo.path('.relay/quality.json'))).toBe(false)
+
+    const wrote = io(repo.dir, home)
+    expect(await main(['init', '--write', '--human-path', 'src/auth/**'], wrote)).toBe(0)
+    const q = parseQuality(await readFile(repo.path('.relay/quality.json'), 'utf8'))
+    if (!q.ok) throw new Error(q.errors.join('; '))
+    expect(q.value.commands.fast).toEqual([])
+    expect(q.value.commands.acceptance?.id).toBe('test')
+    expect(q.value.human_paths).toEqual(['src/auth/**'])
+    expect(wrote.stdout).toContain('고칠 것(초안에서 뺌):')
+    // 깨진 답은 사용 오류
+    const bad = io(repo.dir, home)
+    expect(await main(['init', '--boundary', 'src/ui'], bad)).toBe(1)
+    expect(bad.stderr[0]).toContain('앞 폴더:뒤 폴더')
   })
 })
 
