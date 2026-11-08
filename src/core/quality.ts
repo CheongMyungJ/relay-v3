@@ -162,13 +162,17 @@ const paths = list(relPath)
 // ── quality.json 읽기 ───────────────────────────────────────────────────────
 
 const readCommand: Read<CommandSpec> = (v, p, e) => {
-  const o = shape(v, p, e, ['id', 'run', 'timeout_sec', 'junit'])
+  const o = shape(v, p, e, ['id', 'run', 'timeout_sec', 'junit', 'test_format'])
   if (o === null) return { id: '', run: '' }
+  const format = opt(o, 'test_format', p, e, oneOf(['junit', 'go-test-json'] as const))
+  if (format !== undefined && o['junit'] === undefined)
+    e.push(`${sub(p, 'test_format')}: junit이 있어야 함`)
   return prune({
     id: req(o, 'id', p, e, ident, ''),
     run: req(o, 'run', p, e, str, ''),
     timeout_sec: opt(o, 'timeout_sec', p, e, seconds),
     junit: opt(o, 'junit', p, e, relPath),
+    test_format: format,
   })
 }
 

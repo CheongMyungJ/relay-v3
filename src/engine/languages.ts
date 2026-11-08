@@ -22,6 +22,9 @@ const EXT: Readonly<Record<string, Lang>> = {
   rs: 'rs',
 }
 
+/** 표의 확장자(소스 파일). 초안의 file_lines 범위가 쓴다(V66) */
+export const SOURCE_EXTENSIONS: readonly string[] = Object.keys(EXT)
+
 /** 확장자로 가른 언어. 표에 없으면 null(세지 않는다) */
 export function langOf(path: string): Lang | null {
   const name = path.slice(path.lastIndexOf('/') + 1)

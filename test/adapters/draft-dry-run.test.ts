@@ -40,7 +40,7 @@ const why = (ok: boolean, text: string) => (ok ? '' : ` (건너뜀: ${text})`)
 
 describe('드라이런', () => {
   test.skipIf(!GO)(
-    `Go: go mod download·go test는 되고 go vet은 까닭과 함께 빠진다${why(GO, 'go가 없음')}`,
+    `Go: go mod download·go test -json(앱이 시험 수를 읽음)은 되고 go vet은 까닭과 함께 빠진다${why(GO, 'go가 없음')}`,
     async () => {
       const repo = await makeRepo({
         files: {
@@ -48,22 +48,30 @@ describe('드라이런', () => {
           'calc/calc.go':
             'package calc\n\n// Add adds.\nfunc Add(a, b int) int { return a + b } //nolint:revive\n\n// One is one.\nfunc One() int {\n\treturn 1\n\tpanic("x")\n}\n',
           'calc/calc_test.go':
-            'package calc\n\nimport "testing"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal("bad")\n\t}\n}\n',
+            'package calc\n\nimport "testing"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal("bad")\n\t}\n}\n\nfunc TestSub(t *testing.T) {\n\tt.Run("zero", func(t *testing.T) {})\n}\n',
         },
       })
       const home = await makeTempDir('relay-home-')
       const r = await tryDraft(repo.dir, home)
       const dry = r.dry
       if (dry === null) throw new Error('돌려 보지 않음')
-      expect(dry.commands.map((c) => [c.id, c.ok])).toEqual([
-        ['setup', true],
-        ['vet', false],
-        ['test', true],
+      expect(dry.commands.map((c) => [c.id, c.kind, c.ok])).toEqual([
+        ['setup', 'setup', true],
+        ['vet', 'fast', false],
+        ['test', 'acceptance', true],
       ])
       // go test가 함께 도는 vet 일부(printf 등)에 없는 검사(unreachable)라 시험은 된다
       expect(dry.commands[1]?.reason).toMatch(/^종료 코드 1: .*unreachable code/)
       expect(dry.fixes.map((f) => f.id)).toEqual(['vet'])
-      expect(r.config.commands.fast).toEqual([{ id: 'test', run: 'go test ./...' }])
+      expect(r.config.commands.fast).toEqual([])
+      expect(r.config.commands.acceptance).toEqual({
+        id: 'test',
+        run: 'go test -json ./... > .relay-out/go-test.json',
+        junit: '.relay-out/go-test.json',
+        test_format: 'go-test-json',
+      })
+      // gotestsum 없이 시험 수 래칫: TestAdd, TestSub, TestSub/zero
+      expect(dry.values.find((v) => v.id === 'tests')?.text).toBe('시험 3')
       expect(dry.values.find((v) => v.id === 'suppressions')?.text).toBe('억누름 1 (//nolint 1)')
       // 명령은 확인 실행기의 head check worktree에서 돌았다. 사람의 작업 트리는 그대로다
       expect(

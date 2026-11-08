@@ -1,6 +1,6 @@
 # 품질 바닥 넓히기: 래칫 셋과 여러 언어 초안
 
-- 상태: **설계**(2026-11-07). A(①의 래칫 셋: 억누름, 중복, 바뀐 줄 커버리지)는 **만듦**(2026-11-07, [design.md](design.md) V55~V59). B(5절: 여러 언어 초안, 드라이런, 묻는 화면)도 **만듦**(2026-11-07, V60~V63). 나머지(6절의 [설정] 안내, 실제 레포 시범, 장기 평가)는 만들기 전이다. 만든 절에는 '만든 것'과 '설계와 다른 것'을 더한다.
+- 상태: **설계**(2026-11-07). A(①의 래칫 셋: 억누름, 중복, 바뀐 줄 커버리지)는 **만듦**(2026-11-07, [design.md](design.md) V55~V59). B(5절: 여러 언어 초안, 드라이런, 묻는 화면)도 **만듦**(2026-11-07, V60~V63). 실제 레포 시범(정적·드라이런, [experiments/quality-floor-pilot/report.md](experiments/quality-floor-pilot/report.md))은 했고 그 찾은 문제 1·2·3·6을 고쳤다(2026-11-08, V64~V68). 나머지(6절의 [설정] 안내, 장기 평가)는 만들기 전이다. 만든 절에는 '만든 것'과 '설계와 다른 것'을 더한다.
 - 근거: [philosophy.md](philosophy.md) 원칙 3(품질의 바닥은 레포에 산다), [v2-evidence.md](v2-evidence.md)(v2에는 품질 래칫, 커버리지, 복잡도, 아키텍처 규칙을 기계로 보는 층이 없었다), [design.md](design.md) V9·V19·V20(품질 기준, 초안), M3 장기 평가([experiments/m3/report.md](experiments/m3/report.md): 구조 지표가 바닥·천장에 붙어 차이가 보이지 않음).
 - 이 글은 relay에 품질 장치가 하나도 없다고 놓고 처음부터 적는다. 지금 relay-v3에 있는 것과 새로 만들 것을 표시한다.
 
@@ -114,6 +114,14 @@ Work마다 사람이나 리뷰어가 diff를 보는 것으로는 둘 다 잘 못
 - 빠른 검사의 엄격함: Rust는 엄격한 clippy 표시가 있을 때만 `-D warnings`, 아니면 `cargo check`(경고만으로 빠진 초안을 줄이려고).
 - 5.3의 예와 다른 칸: mypy 대상은 `src/`가 있으면 `src`, 아니면 `.`. pytest-cov가 있으면 수용 시험이 `--cov=. --cov-report=xml:.relay-out/coverage.xml`을 쓰고 `diff_coverage`(Cobertura, min 0.8)를 넣는다.
 
+**만든 것 (시범 뒤 고침, V64~V67).** 시범(9개 레포)의 찾은 문제를 고쳤다.
+
+- JS의 이어 붙인 test 스크립트(문제 1, V64): `pnpm lint && vitest run --typecheck`처럼 `&&`로 이은 스크립트는 러너 마디 하나만 JUnit 출력으로 수용 시험에 쓰고(`pnpm vitest run --typecheck --reporter=junit …`. 스크립트가 쓴 패키지 관리자 꼴 그대로, 맨 러너는 레포의 꼴), 이미 빠른 검사인 마디(lint)는 빼고, 나머지는 빠른 검사, 러너 앞의 build류는 수용 시험 앞에 잇는다. core 초안(`draftQuality`)은 바꾸지 않고 engine recipes.ts가 한다.
+- Go(문제 2, V65): gotestsum이 없어도 수용 시험 `go test -json ./... > .relay-out/go-test.json`을 넣고 앱이 그 출력을 직접 읽는다(engine `test-report.ts`). quality.json의 명령에 선택 칸 `test_format: "go-test-json"`을 더했다(없으면 JUnit, 옛 파일은 그대로). 위 5.2 표의 Go '시험' 칸은 이제 'gotestsum이 tool이면 JUnit, 아니면 go test -json'이다.
+- 초안의 줄 수 래칫(문제 6, V66): 소스 파일(언어 표의 확장자와 css·vue 같은 화면 소스)만 본다. CHANGELOG, 시험 자료 JSON, 잠금 파일은 빠진다. 래칫의 기본은 그대로라 옛 quality.json은 같다.
+- 중복(문제 3, V67)은 2절 아래 '만든 것'이 아니라 [design.md](design.md) V67: 한 파일 안의 표 같은 반복을 세지 않는다. Rust의 `fuzz/`(문제 5)는 늘 빼는 곳에 더하지 않았다(그 쌍이 모두 표 같은 반복이었다).
+- 문제 4(기계에 없는 golangci-lint)는 고치지 않았다: 드라이런이 빼는 설계 그대로이고 시범 기계에는 있었다.
+
 ### 5.3 Python 초안의 예
 
 ```json
@@ -160,6 +168,8 @@ CLAUDE.md의 층대로, 한 동작은 가장 낮은 층에서 한 번만 자세�
 **설계와 다른 것.** [스모크]의 '[증거]의 새 래칫 줄' 그림은 찍지 않았다: 렌더러 코드를 바꾸지 않았고 래칫 줄은 종류와 상관없이 상태·id·detail로 그려진다(V58). 실제 레포 시범과 장기 평가는 하지 않았다.
 
 **만든 것 (B).** [단위] `draft-recipes.test.ts`(매니페스트 묶음마다의 초안: JS는 core 초안 그대로에 래칫 둘(칸 차례까지), vitest 커버리지, bun / Python uv·poetry·pip·PEP 621, 의존성 이름 찾기 / Go(tool 지시문) / Java Maven·Gradle, Kotlin(ktlint, jacoco XML), JUnit 묶기 / Rust(clippy 표시, nextest profile) / 섞인 레포(폴더마다 cd, setup 잇기, 수용 시험 고르기, 단위 폴더 고르기) / 묻는 것의 후보, 워크플로 작업 이름, 답 넣기와 깨진 답, 경계 무늬). [어댑터] `draft-dry-run.test.ts`: 이 기계에서 실제 go(1.24)·python3(3.13, venv와 pip로 PyPI에서 pytest·pytest-cov)·cargo로 작은 레포마다 드라이런을 돌렸다(Go: setup·`go test` 됨, `go vet`은 unreachable code로 고칠 것, 억누름 `//nolint` 1 / Python: JUnit과 coverage.py의 Cobertura를 앱이 읽음 / Rust: `cargo check`·`cargo test` 됨 / 커밋 없는 레포). 도구가 없거나 PyPI에 닿지 못하면 그 시험은 까닭을 이름에 적고 건너뛴다. Java(Maven·Gradle)는 의존성을 받아야 해서 [어댑터]에 넣지 않았다. [흐름] `works-draft.test.ts`(Python(uv) 레포: [초안 만들기] → 요약(됨·안 됨, 지금 값, 고칠 것 lint, 묻는 것 셋) → [초안 쓰기](답이 들어가고 lint가 빠짐, 작업 트리에만), 가짜 uv `test/support/fake-uv`), `cli.test.ts`(`relay init --try`·`--write`·`--no-try`·답). [스모크] `draft.spec.ts`(초안 화면: `smoke-draft-01-dialog.png`, `-02-answers.png`, `-03-written.png`를 열어 봄), `app.spec.ts`(둘째 프로젝트는 초안 화면을 거쳐 쓴다). 관문 파일은 바꾸지 않았다(`gate-version.test.ts`, `npm run test:replay` 그대로).
+
+**만든 것 (시범 뒤 고침).** [단위] `draft-js-split.test.ts`(defu·ufo의 package.json 모양 그대로, 나누기와 나누지 않음, 주 단위가 아닐 때), `draft-recipes.test.ts`(Go: pflag·uuid 모양에 go test -json 수용 시험, 줄 수 래칫의 소스 범위), `test-report.test.ts`(이 기계의 go 1.24가 낸 `go test -json` 출력 두 벌: 통과·실패·건너뜀·하위 시험·시험 없는 패키지·빌드 실패, 시간 초과), `quality.test.ts`(`test_format`), `duplication.test.ts`(itoa `fuzz_itoa.rs`의 match 팔 12줄, markupsafe의 split·rsplit·splitlines와 번갈아 이어진 위임 메서드는 쌍이 아님, 표를 다른 파일에 복사하면 한 쌍, 바로 아래 복사와 셋이 이어진 함수는 셈). [어댑터] `draft-dry-run.test.ts`의 Go: 실제 go로 `go test -json` 수용 시험이 되고 시험 3을 읽는다. 관문 판 3(V68, 재생 digest 같음, epoch 1을 이음).
 
 **설계와 다른 것 (B).** [흐름]의 Go 레포 고정 자료는 따로 두지 않았다: Go 레시피는 [단위]가, Go 드라이런은 [어댑터]가 실제 go로 보고, [흐름]은 이어지는 것(앱의 두 단계와 작업 트리)을 Python 하나로 본다.
 

@@ -40,6 +40,8 @@ export const GATE_FILES = [
   'src/engine/suppressions.ts',
   'src/engine/duplication.ts',
   'src/engine/coverage.ts',
+  // 판 3(V68): go test -json 읽기(수용 시험의 시험 결과를 만든다)
+  'src/engine/test-report.ts',
 ] as const
 
 const sha = (text: string) => createHash('sha256').update(text).digest('hex')

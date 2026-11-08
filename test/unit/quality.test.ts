@@ -267,6 +267,23 @@ describe('parseQuality: 잘못된 입력', () => {
     fails(acceptance({ id: 't', run: 'x' }), 'commands.acceptance.junit: 필요함')
   })
 
+  test('시험 결과의 꼴(test_format, V65): junit | go-test-json, junit 칸과 함께만', () => {
+    const go = { id: 't', run: 'go test -json ./... > o.json', junit: 'o.json' }
+    expect(
+      valueOf(doc(acceptance({ ...go, test_format: 'go-test-json' }))).commands.acceptance,
+    ).toEqual({ ...go, test_format: 'go-test-json' })
+    // 칸이 없는 옛 명령은 읽은 값에도 칸이 없다
+    expect(valueOf(doc(acceptance(go))).commands.acceptance).toEqual(go)
+    fails(
+      acceptance({ ...go, test_format: 'tap' }),
+      "commands.acceptance.test_format: 'junit', 'go-test-json' 중 하나여야 함",
+    )
+    fails(
+      { commands: { fast: [{ id: 'a', run: 'x', test_format: 'junit' }] } },
+      'commands.fast[0].test_format: junit이 있어야 함',
+    )
+  })
+
   test.each(['/tmp/j.xml', '../j.xml', 'out/../../j.xml', 'C:\\j.xml', '\\\\srv\\j.xml'])(
     'junit 경로가 레포 밖이면 오류 (%s)',
     (junit) => {

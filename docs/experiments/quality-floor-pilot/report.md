@@ -64,12 +64,12 @@ pflag의 64.6%는 타입마다 거의 같은 파일(`bool_slice.go`, `int_slice.
 
 ## 찾은 문제 (재현 방법)
 
-1. **JS: 합친 test 스크립트면 수용 시험이 빠진다.** defu `"test": "pnpm lint && pnpm test:types && pnpm vitest run"`, ufo `"test": "pnpm lint && vitest run --typecheck"`. 초안은 JUnit을 붙이지 못해 `test`를 빠른 검사로 넣고 시험 수 래칫을 빼며, lint가 두 번 돈다. 재현: 두 레포에 `relay init`. 고칠 길: 스크립트를 `&&`로 나눠 vitest·jest 마디만 JUnit 출력으로 수용 시험에 쓴다.
-2. **Go: gotestsum이 없으면 시험 수 래칫이 없다.** 고칠 길: 앱이 `go test -json` 출력을 직접 읽는다(도구를 더하지 않아도 됨).
-3. **중복: 표처럼 반복되는 코드와 겹친 자기 쌍.** 재현: itoa `fuzz/fuzz_targets/fuzz_itoa.rs` 38~49줄, markupsafe `src/markupsafe/__init__.py` 173~186줄. 고칠 길: 같은 파일에서 겹치거나 맞닿아 밀린 쌍을 빼고, 한 구역 안의 반복(같은 모양 줄이 n줄 넘게 이어짐)은 한 번만 센다.
+1. **JS: 합친 test 스크립트면 수용 시험이 빠진다.** defu `"test": "pnpm lint && pnpm test:types && pnpm vitest run"`, ufo `"test": "pnpm lint && vitest run --typecheck"`. 초안은 JUnit을 붙이지 못해 `test`를 빠른 검사로 넣고 시험 수 래칫을 빼며, lint가 두 번 돈다. 재현: 두 레포에 `relay init`. 고칠 길: 스크립트를 `&&`로 나눠 vitest·jest 마디만 JUnit 출력으로 수용 시험에 쓴다. **고침(2026-11-08, [design.md](../../design.md) V64)**: 러너 마디 하나를 JUnit 출력으로 수용 시험에 쓰고 이미 빠른 검사인 마디는 뺀다. 정적으로 본 초안: defu 빠른 검사 `pnpm run lint`·`pnpm run test:types`, 수용 시험 `pnpm vitest run --reporter=junit --outputFile=.relay-out/junit.xml`(+ lcov), ufo 빠른 검사 `pnpm run lint`, 수용 시험 `pnpm vitest run --typecheck --reporter=junit …`(+ lcov). 둘 다 시험 수 래칫과 바뀐 줄 커버리지가 든다. jest는 아직 알아보지 않는다. 드라이런은 다시 돌려 봐야 한다.
+2. **Go: gotestsum이 없으면 시험 수 래칫이 없다.** 고칠 길: 앱이 `go test -json` 출력을 직접 읽는다(도구를 더하지 않아도 됨). **고침(V65)**: 수용 시험 `go test -json ./... > .relay-out/go-test.json`과 quality.json의 `test_format: "go-test-json"`. pflag·uuid 초안에 수용 시험과 시험 수 래칫이 든다(정적). 드라이런은 다시 돌려 봐야 한다.
+3. **중복: 표처럼 반복되는 코드와 겹친 자기 쌍.** 재현: itoa `fuzz/fuzz_targets/fuzz_itoa.rs` 38~49줄, markupsafe `src/markupsafe/__init__.py` 173~186줄. 고칠 길: 같은 파일에서 겹치거나 맞닿아 밀린 쌍을 빼고, 한 구역 안의 반복(같은 모양 줄이 n줄 넘게 이어짐)은 한 번만 센다. **고침(V67)**: 한 파일 안에서 이어진 덩어리를 되풀이하는 단위가 다섯 코드 줄 아래면 쌍이 아니고, 이어진 덩어리는 한 쌍이다. 중복 몫(정적, 같은 커밋): itoa 21.5% → 18.0%, markupsafe 16.0% → 8.2%, pflag 64.6% → 64.2%(타입별 파일 그대로), jsoup 16.1% → 15.5%, kotlinpoet 15.4% → 12.5%, 나머지 그대로. 재현 자리 둘(itoa 38~49줄, markupsafe 173~186줄)의 쌍은 없다.
 4. **초안이 기계에 없는 도구를 고른다.** pflag는 `.golangci` 설정이 있어 `golangci-lint run`을 넣었다. 이 기계에는 없다. 드라이런이 빼 줄 것이지만(설계) 확인하지 못했다.
-6. **파일 줄 수 래칫이 코드가 아닌 파일도 센다.** ufo에서 600줄 넘는 파일 셋 가운데 둘이 `test/fixture/urltestdata.json`(7,433줄)과 `CHANGELOG.md`(853줄)다. 래칫은 늘어날 때만 알리지만, CHANGELOG는 Work마다 자라므로 거의 늘 '나빠짐'이 된다. 고칠 길: 초안의 file-size 래칫을 소스 파일(언어표에 있는 확장자)로만 좁히거나, 문서·자료 파일을 빼는 기본값.
-5. **Rust의 `fuzz/`가 소스로 들어간다.** itoa의 중복 쌍 10개가 모두 `fuzz/` 안이다. 빼는 경로 기본값에 `fuzz/`를 더할지 정할 거리다.
+6. **파일 줄 수 래칫이 코드가 아닌 파일도 센다.** ufo에서 600줄 넘는 파일 셋 가운데 둘이 `test/fixture/urltestdata.json`(7,433줄)과 `CHANGELOG.md`(853줄)다. 래칫은 늘어날 때만 알리지만, CHANGELOG는 Work마다 자라므로 거의 늘 '나빠짐'이 된다. 고칠 길: 초안의 file-size 래칫을 소스 파일(언어표에 있는 확장자)로만 좁히거나, 문서·자료 파일을 빼는 기본값. **고침(V66)**: 초안의 file-size는 언어 표의 확장자와 화면 소스(css, vue 등)만 본다(래칫의 기본은 그대로). ufo 600줄 넘는 파일 3 → 1(`src/utils.ts`), jsoup 32 → 29, kotlinpoet 19 → 17.
+5. **Rust의 `fuzz/`가 소스로 들어간다.** itoa의 중복 쌍 10개가 모두 `fuzz/` 안이다. 빼는 경로 기본값에 `fuzz/`를 더할지 정할 거리다. **정함(V67)**: 더하지 않는다. 쌍 10개가 모두 3의 고침으로 사라졌고 fuzz 대상은 사람이 쓰는 코드다(빼려면 레포가 exclude에 적는다).
 
 ## 끄는 조건에 주는 뜻
 
@@ -79,5 +79,5 @@ pflag의 64.6%는 타입마다 거의 같은 파일(`bool_slice.go`, `int_slice.
 
 ## 다음
 
-1. 1·2·3·6을 고친다(작은 고침, 단위 시험으로 덮을 수 있음).
+1. ~~1·2·3·6을 고친다~~ 고쳤다(2026-11-08, V64~V68). 같은 레포로 드라이런을 다시 돌려 이번 값(위 '고침')을 확인한다.
 2. 언어마다 레포를 다섯까지 늘려 여러 언어 초안의 끄는 조건을 잰다(이번에 길이 열림: 외부 코드 실행 허용).

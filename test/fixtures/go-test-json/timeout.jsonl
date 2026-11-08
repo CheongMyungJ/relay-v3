@@ -1,0 +1,42 @@
+{"Time":"2026-11-08T00:32:45.446967507Z","Action":"start","Package":"example.com/calc/slow"}
+{"Time":"2026-11-08T00:32:45.449054966Z","Action":"run","Package":"example.com/calc/slow","Test":"TestFast"}
+{"Time":"2026-11-08T00:32:45.449093526Z","Action":"output","Package":"example.com/calc/slow","Test":"TestFast","Output":"=== RUN   TestFast\n"}
+{"Time":"2026-11-08T00:32:45.449139269Z","Action":"output","Package":"example.com/calc/slow","Test":"TestFast","Output":"--- PASS: TestFast (0.00s)\n"}
+{"Time":"2026-11-08T00:32:45.449143736Z","Action":"pass","Package":"example.com/calc/slow","Test":"TestFast","Elapsed":0}
+{"Time":"2026-11-08T00:32:45.449149445Z","Action":"run","Package":"example.com/calc/slow","Test":"TestHang"}
+{"Time":"2026-11-08T00:32:45.449151899Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"=== RUN   TestHang\n"}
+{"Time":"2026-11-08T00:32:46.451455286Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"panic: test timed out after 1s\n"}
+{"Time":"2026-11-08T00:32:46.451495342Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\trunning tests:\n"}
+{"Time":"2026-11-08T00:32:46.451499029Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t\tTestHang (1s)\n"}
+{"Time":"2026-11-08T00:32:46.451500811Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\n"}
+{"Time":"2026-11-08T00:32:46.451503979Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"goroutine 17 [running]:\n"}
+{"Time":"2026-11-08T00:32:46.451506264Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.(*M).startAlarm.func1()\n"}
+{"Time":"2026-11-08T00:32:46.451519596Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:2484 +0x394\n"}
+{"Time":"2026-11-08T00:32:46.451521719Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"created by time.goFunc\n"}
+{"Time":"2026-11-08T00:32:46.451523175Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/time/sleep.go:215 +0x2d\n"}
+{"Time":"2026-11-08T00:32:46.451526405Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\n"}
+{"Time":"2026-11-08T00:32:46.451527955Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"goroutine 1 [chan receive]:\n"}
+{"Time":"2026-11-08T00:32:46.451529397Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.(*T).Run(0xc0000036c0, {0x5778d7?, 0xc000104b30?}, 0x584388)\n"}
+{"Time":"2026-11-08T00:32:46.451530928Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:1859 +0x431\n"}
+{"Time":"2026-11-08T00:32:46.451532466Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.runTests.func1(0xc0000036c0)\n"}
+{"Time":"2026-11-08T00:32:46.451534095Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:2279 +0x37\n"}
+{"Time":"2026-11-08T00:32:46.451535216Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.tRunner(0xc0000036c0, 0xc000104c70)\n"}
+{"Time":"2026-11-08T00:32:46.451536433Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:1792 +0xf4\n"}
+{"Time":"2026-11-08T00:32:46.451537539Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.runTests(0xc00000e180, {0x6a2080, 0x2, 0x2}, {0x6abea0?, 0x7?, 0x6aad20?})\n"}
+{"Time":"2026-11-08T00:32:46.451538645Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:2277 +0x4b4\n"}
+{"Time":"2026-11-08T00:32:46.451539732Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.(*M).Run(0xc0001085a0)\n"}
+{"Time":"2026-11-08T00:32:46.451575792Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:2142 +0x64a\n"}
+{"Time":"2026-11-08T00:32:46.451577987Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"main.main()\n"}
+{"Time":"2026-11-08T00:32:46.451594715Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t_testmain.go:47 +0x9b\n"}
+{"Time":"2026-11-08T00:32:46.451596395Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\n"}
+{"Time":"2026-11-08T00:32:46.451597772Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"goroutine 7 [sleep]:\n"}
+{"Time":"2026-11-08T00:32:46.45159904Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"time.Sleep(0x12a05f200)\n"}
+{"Time":"2026-11-08T00:32:46.451600149Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/runtime/time.go:338 +0x165\n"}
+{"Time":"2026-11-08T00:32:46.451601304Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"example.com/calc/slow.TestHang(0xc000003c00?)\n"}
+{"Time":"2026-11-08T00:32:46.451602569Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/work/calc/slow/slow_test.go:10 +0x1d\n"}
+{"Time":"2026-11-08T00:32:46.451605213Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"testing.tRunner(0xc000003c00, 0x584388)\n"}
+{"Time":"2026-11-08T00:32:46.451606435Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:1792 +0xf4\n"}
+{"Time":"2026-11-08T00:32:46.451607692Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"created by testing.(*T).Run in goroutine 1\n"}
+{"Time":"2026-11-08T00:32:46.451609205Z","Action":"output","Package":"example.com/calc/slow","Test":"TestHang","Output":"\t/usr/local/go1.24.7/src/testing/testing.go:1851 +0x413\n"}
+{"Time":"2026-11-08T00:32:46.452243412Z","Action":"output","Package":"example.com/calc/slow","Output":"FAIL\texample.com/calc/slow\t1.005s\n"}
+{"Time":"2026-11-08T00:32:46.452299873Z","Action":"fail","Package":"example.com/calc/slow","Elapsed":1.005}

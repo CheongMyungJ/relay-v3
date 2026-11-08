@@ -160,6 +160,99 @@ describe('중복 재기', () => {
   })
 })
 
+// 시범(docs/experiments/quality-floor-pilot/report.md 찾은 문제 3)의 모양 그대로: itoa fuzz/fuzz_targets/fuzz_itoa.rs 36~51줄
+const ARMS = [
+  'I8',
+  'U8',
+  'I16',
+  'U16',
+  'I32',
+  'U32',
+  'I64',
+  'U64',
+  'I128',
+  'U128',
+  'Isize',
+  'Usize',
+]
+const ITOA_MATCH = `fuzz_target!(|input: IntegerInput| {
+    match input {
+${ARMS.map((a) => `        IntegerInput::${a}(val) => test_itoa!(val),`).join('\n')}
+    }
+});
+`
+// markupsafe src/markupsafe/__init__.py 167~186줄(join, split, rsplit, splitlines)
+const MARKUPSAFE = `class Markup(str):
+    def __repr__(self, /) -> str:
+        return f"{self.__class__.__name__}({super().__repr__()})"
+
+    def join(self, iterable: cabc.Iterable[str | _HasHTML], /) -> te.Self:
+        return self.__class__(super().join(map(self.escape, iterable)))
+
+    def split(  # type: ignore[override]
+        self, /, sep: str | None = None, maxsplit: t.SupportsIndex = -1
+    ) -> list[te.Self]:
+        return [self.__class__(v) for v in super().split(sep, maxsplit)]
+
+    def rsplit(  # type: ignore[override]
+        self, /, sep: str | None = None, maxsplit: t.SupportsIndex = -1
+    ) -> list[te.Self]:
+        return [self.__class__(v) for v in super().rsplit(sep, maxsplit)]
+
+    def splitlines(  # type: ignore[override]
+        self, /, keepends: bool = False
+    ) -> list[te.Self]:
+        return [self.__class__(v) for v in super().splitlines(keepends)]
+`
+// markupsafe 298~308줄: 모양이 조금씩 다른 위임 메서드가 번갈아 이어짐(인자 없음·있음)
+const ALTERNATING = `class Markup(str):
+    def swapcase(self, /) -> te.Self:
+        return self.__class__(super().swapcase())
+
+    def zfill(self, width: t.SupportsIndex, /) -> te.Self:
+        return self.__class__(super().zfill(width))
+
+    def casefold(self, /) -> te.Self:
+        return self.__class__(super().casefold())
+
+    def removeprefix(self, prefix: str, /) -> te.Self:
+        return self.__class__(super().removeprefix(prefix))
+
+    def removesuffix(self, suffix: str) -> te.Self:
+        return self.__class__(super().removesuffix(suffix))
+`
+
+describe('표 같은 반복(V67)', () => {
+  test('모양이 같은 match 팔 12줄(itoa)은 한 파일 안의 쌍이 아니다', () => {
+    expect(duplication(files({ 'fuzz/fuzz_targets/fuzz_itoa.rs': ITOA_MATCH }))).toMatchObject({
+      dup: 0,
+      pairs: [],
+    })
+  })
+
+  test('모양이 같은 짧은 위임 메서드가 이어지면(markupsafe split·rsplit) 쌍이 아니다', () => {
+    expect(duplication(files({ 'src/markupsafe/__init__.py': MARKUPSAFE }))).toMatchObject({
+      dup: 0,
+      pairs: [],
+    })
+    // 모양이 번갈아 조금씩 다른 이음(두 자리의 줄이 맞닿음)도 같다
+    expect(duplication(files({ 'src/m.py': ALTERNATING })).pairs).toEqual([])
+  })
+
+  test('표 덩어리를 다른 파일에 복사하면 한 쌍으로 센다(덩어리는 한 번)', () => {
+    const r = duplication(files({ 'src/a.rs': ITOA_MATCH, 'src/b.rs': ITOA_MATCH }))
+    expect(r.pairs).toEqual([
+      { a: { path: 'src/b.rs', from: 1, to: 14 }, b: { path: 'src/a.rs', from: 1, to: 14 } },
+    ])
+  })
+
+  test('단위가 다섯 코드 줄 이상이면 바로 아래의 복사도, 셋이 이어져도 센다', () => {
+    const three = duplication(files({ 'src/a.js': `${ORIGINAL}${ORIGINAL}\n${ORIGINAL}` }))
+    expect(three.perFile.get('src/a.js')).toBe(27)
+    expect(three.dup).toBe(three.code)
+  })
+})
+
 describe('기준과 견줌', () => {
   const base = duplication(files({ 'src/a.js': ORIGINAL, 'src/c.js': OTHER }))
 

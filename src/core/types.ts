@@ -6,8 +6,10 @@ export interface CommandSpec {
   id: string
   run: string
   timeout_sec?: number
-  /** 이 명령이 JUnit XML을 쓰는 경로(worktree 기준). 있으면 시험 결과를 읽는다 */
+  /** 이 명령이 시험 결과를 쓰는 경로(worktree 기준). 있으면 시험 결과를 읽는다. 꼴은 test_format */
   junit?: string
+  /** junit 파일의 꼴. 없으면 JUnit XML, 'go-test-json'은 `go test -json`의 출력(V65) */
+  test_format?: 'junit' | 'go-test-json'
 }
 
 export interface SetupSpec {

@@ -4,7 +4,7 @@
 // JS는 core draftQuality(V19)를 그대로 쓴다(bun 잠금 파일만 여기서 더 본다).
 
 import { matchAny } from '../core/glob.ts'
-import { draftQuality } from '../core/quality.ts'
+import { acceptanceRun, draftQuality } from '../core/quality.ts'
 import type { CommandSpec, RatchetSpec, SetupSpec } from '../core/types.ts'
 import { langOf, SCAN_EXCLUDE, type Lang } from './languages.ts'
 
@@ -39,6 +39,8 @@ export interface Unit {
 }
 
 export const JUNIT = '.relay-out/junit.xml'
+/** go test -json의 출력(V65). 앱이 JUnit처럼 읽는다 */
+export const GO_TEST_JSON = '.relay-out/go-test.json'
 
 /** 매니페스트 이름 → 언어. requirements*.txt는 따로 본다 */
 const MANIFEST: Readonly<Record<string, UnitLang>> = {
@@ -153,7 +155,93 @@ const unit = (lang: UnitLang, dir: string, label: string): Unit => ({
   suggestions: [],
 })
 
-// ── JS/TS: core draftQuality(V19) 그대로. bun 잠금 파일은 여기서 ─────────────
+// ── JS/TS: core draftQuality(V19) 그대로. bun 잠금 파일과 이어 붙인 test 스크립트는 여기서 ──────
+
+type Pm = 'npm' | 'pnpm' | 'yarn' | 'bun'
+
+/** 다른 스크립트를 부르는 마디(`pnpm lint`, `npm run test:types`) */
+const SCRIPT_REF = /^(?:npm run|pnpm(?: run)?|yarn(?: run)?|bun run)\s+(\S+)$/
+/** 패키지 관리자로 러너를 부르는 앞머리(`pnpm vitest`, `npx vitest`) */
+const RUNNER_EXEC = /^(npx|pnpm(?: exec)?|yarn(?: exec)?|bunx)\s+(?=vitest\b)/
+/** 러너 앞에 있으면 수용 시험 명령 앞에 이어 둘 스크립트(시험이 그 결과물을 읽을 수 있다) */
+const PREPARE = /^(?:pre)?(?:build|prepare|generate|codegen|compile)\b/
+
+const execOf = (pm: Pm): string => (pm === 'npm' ? 'npx' : pm === 'bun' ? 'bunx' : pm)
+
+/** 마디 하나가 러너면 JUnit 출력을 단 명령(core acceptanceRun). 맨 러너(`vitest run`)는 패키지 관리자 꼴로 부른다 */
+function runnerRun(seg: string, scripts: Record<string, string>, pm: Pm): string | null {
+  const ref = SCRIPT_REF.exec(seg)?.[1]
+  const body = ref === undefined ? undefined : scripts[ref]
+  if (body !== undefined) return body.includes('&&') ? null : runnerRun(body, {}, pm)
+  const exec = RUNNER_EXEC.exec(seg)
+  const run = acceptanceRun(exec === null ? seg : seg.slice(exec[0].length))
+  return run?.replace(/(^|\s)npx vitest\b/, `$1${exec?.[1] ?? execOf(pm)} vitest`) ?? null
+}
+
+export interface SplitTest {
+  /** 수용 시험 명령: 러너 앞의 준비 스크립트와 JUnit 출력을 단 러너 */
+  acceptance: string
+  /** 빠른 검사에 더할 나머지 마디(이미 빠른 검사인 것은 뺀다) */
+  fast: CommandSpec[]
+}
+
+/**
+ * `a && b && c`로 이어 붙인 test 스크립트(V64). 러너(vitest, node --test. 다른 스크립트를 부르면 그 스크립트) 마디가 꼭 하나일
+ * 때만 나눈다. 나머지 마디: 이미 빠른 검사인 것(typecheck·lint 스크립트나 그 글)은 빼고(두 번 돌지 않게), 러너 앞의 준비
+ * 스크립트(build 등)는 수용 시험 앞에 잇고, 나머지는 빠른 검사로 둔다(다른 스크립트는 `<pm> run <이름>`, 맨 명령은 레포의
+ * node_modules/.bin을 PATH 앞에 둔다: npm 스크립트 밖이라). 따옴표·셸 글자가 든 스크립트는 모른다고 보고 null
+ */
+export function splitTestScript(
+  script: string,
+  scripts: Record<string, string>,
+  pm: Pm,
+  fastIds: readonly string[],
+): SplitTest | null {
+  const segs = script.split('&&').map((x) => x.trim())
+  if (segs.length < 2 || segs.some((x) => x === '' || /[;&|<>`$"'\\()]/.test(x))) return null
+  const runs = segs.map((x) => runnerRun(x, scripts, pm))
+  const at = runs.findIndex((r) => r !== null)
+  if (at < 0 || runs.some((r, k) => r !== null && k !== at)) return null
+  const same = (a: string, b: string | undefined) =>
+    a.replace(/\s+/g, ' ') === b?.trim().replace(/\s+/g, ' ')
+  const before: string[] = []
+  const fast: CommandSpec[] = []
+  const ids = new Set([...fastIds, 'test'])
+  segs.forEach((seg, k) => {
+    if (k === at) return
+    const ref = SCRIPT_REF.exec(seg)?.[1]
+    const name = ref !== undefined && scripts[ref] !== undefined ? ref : undefined
+    if (fastIds.some((id) => name === id || same(seg, scripts[id]))) return
+    if (name !== undefined && k < at && PREPARE.test(name)) {
+      before.push(`${pm} run ${name}`)
+      return
+    }
+    const base =
+      (name ?? seg.split(/\s+/)[0] ?? '')
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/^[^A-Za-z0-9]+/, '') || 'step'
+    let id = base
+    for (let n = 2; ids.has(id); n++) id = `${base}${n}`
+    ids.add(id)
+    fast.push({
+      id,
+      run: name !== undefined ? `${pm} run ${name}` : `PATH="$PWD/node_modules/.bin:$PATH" ${seg}`,
+    })
+  })
+  return { acceptance: [...before, runs[at] as string].join(' && '), fast }
+}
+
+function scriptsOf(packageJson: string | undefined): Record<string, string> {
+  try {
+    const s: unknown = JSON.parse(packageJson ?? '{}')?.scripts
+    if (typeof s !== 'object' || s === null) return {}
+    return Object.fromEntries(
+      Object.entries(s).filter((e): e is [string, string] => typeof e[1] === 'string'),
+    )
+  } catch {
+    return {}
+  }
+}
 
 function jsUnit(scan: RepoScan, dir: string): Unit {
   const packageJson = scan.texts.get(at(dir, 'package.json'))
@@ -162,7 +250,7 @@ function jsUnit(scan: RepoScan, dir: string): Unit {
   const u = unit('js', dir, LABEL.js)
   const names = namesIn(scan.files, dir)
   const bun = q.setup === undefined && (names.has('bun.lock') || names.has('bun.lockb'))
-  const pm = bun ? 'bun' : (/^(pnpm|yarn)\b/.exec(q.setup?.run ?? '')?.[1] ?? 'npm')
+  const pm: Pm = bun ? 'bun' : ((/^(pnpm|yarn)\b/.exec(q.setup?.run ?? '')?.[1] as Pm) ?? 'npm')
   const fix = (c: CommandSpec): CommandSpec =>
     bun ? { ...c, run: c.run.replace(/^npm run /, 'bun run ').replace(/^npx /, 'bunx ') } : c
   if (q.setup !== undefined) u.setup = q.setup
@@ -174,7 +262,21 @@ function jsUnit(scan: RepoScan, dir: string): Unit {
     if (c.id === 'test') u.test = fix(c)
     else u.fast.push(fix(c))
   }
-  const acc = q.commands.acceptance
+  let acc = q.commands.acceptance
+  const scripts = scriptsOf(packageJson)
+  const split =
+    acc === undefined && scripts['test'] !== undefined
+      ? splitTestScript(
+          scripts['test'],
+          scripts,
+          pm,
+          u.fast.map((c) => c.id),
+        )
+      : null
+  if (split !== null) {
+    acc = { id: 'test', run: split.acceptance, junit: JUNIT }
+    u.fast.push(...split.fast)
+  }
   if (acc !== undefined) {
     u.acceptance = fix(acc)
     u.test = { id: 'test', run: `${pm} run test` }
@@ -291,16 +393,15 @@ function goUnit(scan: RepoScan, dir: string): Unit {
   else if ([...names].some((n) => /^\.golangci\.(ya?ml|toml|json)$/.test(n)))
     u.fast.push({ id: 'lint', run: 'golangci-lint run' })
   u.test = { id: 'test', run: 'go test ./...' }
-  if (tool('gotestsum'))
-    u.acceptance = {
-      id: 'test',
-      run: `go tool gotestsum --junitfile ${JUNIT} -- ./...`,
-      junit: JUNIT,
-    }
-  else
-    u.suggestions.push(
-      'gotestsum을 go.mod의 tool로 더하면(go get -tool gotest.tools/gotestsum) 수용 시험(JUnit)과 시험 수 래칫을 쓸 수 있습니다',
-    )
+  // gotestsum이 tool이면 JUnit, 아니면 앱이 go test -json을 직접 읽는다(V65: 도구를 더하지 않아도 시험 수 래칫)
+  u.acceptance = tool('gotestsum')
+    ? { id: 'test', run: `go tool gotestsum --junitfile ${JUNIT} -- ./...`, junit: JUNIT }
+    : {
+        id: 'test',
+        run: `go test -json ./... > ${GO_TEST_JSON}`,
+        junit: GO_TEST_JSON,
+        test_format: 'go-test-json',
+      }
   // go의 -coverprofile은 앱이 읽는 형식(lcov, Cobertura, JaCoCo)이 아니다
   if (!tool('govulncheck'))
     u.suggestions.push('govulncheck를 go.mod의 tool로 더하면 취약점 수 래칫을 쓸 수 있습니다')

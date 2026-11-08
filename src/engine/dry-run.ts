@@ -171,8 +171,10 @@ async function runOne(
     return { ...done, ok: true }
   }
   if (c.kind !== 'acceptance') return { ...done, ok: true }
-  if ('junit' in spec && spec.junit !== undefined && r.tests === undefined)
-    return { ...done, ok: false, reason: `JUnit을 읽지 못함 (${spec.junit})` }
+  if ('junit' in spec && spec.junit !== undefined && r.tests === undefined) {
+    const what = spec.test_format === 'go-test-json' ? 'go test -json 출력' : 'JUnit'
+    return { ...done, ok: false, reason: `${what}을 읽지 못함 (${spec.junit})` }
+  }
   const tests = r.tests ?? []
   for (const t of q.ratchets) {
     if (t.kind === 'test_count')

@@ -156,11 +156,18 @@ export function duplication(files: ReadonlyMap<string, string>): DupReport {
         .join(' ')
       const at = seen.get(key)
       if (at === undefined) seen.set(key, [f, i])
+      const r = run as { g: number; i: number; j: number; len: number } | null
+      // 이어 가는 쌍은 그 자리의 다음 창이 같으면 잇는다: 앞서 본 첫 자리가 덩어리 안의 다른 곳이어도(되풀이되는 표를 복사함)
+      // 덩어리 하나가 한 쌍이다(V67)
+      const next = r === null ? -1 : r.j + r.len + W - 1
+      if (r !== null && r.i + r.len === i && (toks[r.g] as Token[])[next]?.t === ts[i + W - 1]?.t) {
+        r.len++
+        continue
+      }
       if (at === undefined || (at[0] === f && i - at[1] < W)) {
         close()
         continue
       }
-      const r = run as { g: number; i: number; j: number; len: number } | null
       if (r !== null && r.g === at[0] && r.i + r.len === i && r.j + r.len === at[1]) r.len++
       else {
         close()
@@ -171,6 +178,8 @@ export function duplication(files: ReadonlyMap<string, string>): DupReport {
   }
 
   function keep(g: number, j: number, f: number, i: number, len: number): void {
+    // 한 파일 안에서 한 덩어리가 짧은 단위로 되풀이되는 것(표 같은 코드)은 쌍이 아니다(V67)
+    if (g === f && tableRepeat(toks[f] as Token[], j, i, len + W - 1)) return
     const lines = (file: number, from: number) =>
       [
         ...new Set(
@@ -203,6 +212,40 @@ export function duplication(files: ReadonlyMap<string, string>): DupReport {
     if (d > 0) perFile.set(p, d)
   })
   return { code, dup, share: code === 0 ? 0 : dup / code, perFile, pairs }
+}
+
+/** 토큰 [from, to)의 코드 줄 수(before가 있으면 그 줄 앞만) */
+const codeLines = (ts: readonly Token[], from: number, to: number, before = Infinity): number =>
+  new Set(
+    ts
+      .slice(from, to)
+      .filter((t) => isCode(t.t) && t.line < before)
+      .map((t) => t.line),
+  ).size
+
+/**
+ * 한 파일 안의 쌍(뒤 자리 i, 앞 자리 j, 양쪽 n토큰)이 표 같은 반복인가(V67). 두 자리가 한 덩어리로 이어지고(겹치거나 맞닿음)
+ * 그 덩어리를 되풀이하는 단위가 코드 줄 MIN_LINES보다 짧으면 그렇다. 예: 모양이 같은 match 팔 12줄, 모양이 같은 짧은 위임
+ * 메서드가 이어짐. 단위가 MIN_LINES 이상이면(함수를 바로 아래에 복사) 진짜 반복이라 센다: 다른 파일로 복사했어도 셌을 크기다.
+ * 1. [j, i + n)이 거리(i - j)를 나누는 단위 p로 빈틈없이 되풀이되면(단위 둘 이상) 가장 짧은 p가 단위다. 단위의 코드 줄은
+ *    덩어리의 코드 줄을 단위 수로 나눈 것(단위가 줄 가운데서 시작해도 한 줄을 더 세지 않게).
+ * 2. 아니어도 앞 자리의 끝 줄이 뒤 자리의 첫 줄에 닿으면(모양이 조금 다른 줄이 섞인 반복) 두 자리의 첫 줄 사이가 단위다.
+ */
+export function tableRepeat(ts: readonly Token[], j: number, i: number, n: number): boolean {
+  const d = i - j
+  const end = i + n
+  const divisors = new Set<number>()
+  for (let k = 1; k * k <= d; k++) if (d % k === 0) divisors.add(k).add(d / k)
+  for (const p of [...divisors].sort((x, y) => x - y)) {
+    if (end - j < 2 * p) break
+    let periodic = true
+    for (let x = j + p; x < end && periodic; x++)
+      periodic = (ts[x] as Token).t === (ts[x - p] as Token).t
+    if (periodic) return (codeLines(ts, j, end) * p) / (end - j) < MIN_LINES
+  }
+  const first = (ts[i] as Token).line
+  if ((ts[j + n - 1] as Token).line < first) return false
+  return codeLines(ts, j, i, first) < MIN_LINES
 }
 
 /** 범위 안의 파일만 남긴다(spec과 늘 빼는 곳, more는 시험 파일 glob) */

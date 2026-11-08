@@ -1,5 +1,7 @@
 // [단위] 여러 언어 초안(docs/quality-floor.md 5.2, V60~V62): 매니페스트 묶음(파일 목록과 글)마다 기대한 quality.json, 묻는 것의
-// 후보, 답 넣기. JS 하나뿐인 레포는 core draftQuality(V19) 그대로이고 래칫 둘(억누름, 중복)만 끝에 더한다.
+// 후보, 답 넣기. JS 하나뿐인 레포는 core draftQuality(V19) 그대로이고 줄 수 래칫의 범위(소스 파일, V66)와 래칫 둘(억누름, 중복)만
+// 다르다. Go의 go test -json(V65)은 시범(docs/experiments/quality-floor-pilot)의 레포 모양 그대로. 이어 붙인 test 스크립트(V64)는
+// draft-js-split.test.ts.
 import { describe, expect, test } from 'vitest'
 import { draftQuality, parseQuality } from '../../src/core/quality.ts'
 import type { QualityConfig, RatchetSpec } from '../../src/core/types.ts'
@@ -7,6 +9,7 @@ import {
   applyAnswers,
   boundaryRatchet,
   planDraft,
+  SOURCE_GLOB,
   workflowJobs,
   type DraftPlan,
 } from '../../src/engine/draft.ts'
@@ -28,8 +31,15 @@ const APP_RATCHETS: RatchetSpec[] = [
   { id: 'duplication', kind: 'duplication' },
 ]
 const ids = (q: QualityConfig) => q.ratchets.map((r) => r.id)
+/** 초안의 줄 수 래칫: 소스 파일만(V66) */
+const FILE_SIZE: RatchetSpec = {
+  id: 'file-size',
+  kind: 'file_lines',
+  max: 600,
+  include: [SOURCE_GLOB],
+}
 
-describe('JS: core 초안 그대로, 래칫 둘만 더함', () => {
+describe('JS: core 초안 그대로, 줄 수 래칫의 범위와 래칫 둘만 다름', () => {
   const cases: [string, Record<string, string | null>][] = [
     [
       'npm, vitest, CI',
@@ -65,7 +75,8 @@ describe('JS: core 초안 그대로, 래칫 둘만 더함', () => {
         : { packageJson: pkg, files: Object.keys(files) },
     )
     const q = plan(files).config
-    expect(q).toEqual({ ...legacy, ratchets: [...legacy.ratchets, ...APP_RATCHETS] })
+    const ratchets = legacy.ratchets.map((r) => (r.kind === 'file_lines' ? FILE_SIZE : r))
+    expect(q).toEqual({ ...legacy, ratchets: [...ratchets, ...APP_RATCHETS] })
     // JSON의 칸 차례도 같다(래칫 끝만 다르다)
     expect(JSON.stringify({ ...q, ratchets: [] })).toBe(JSON.stringify({ ...legacy, ratchets: [] }))
   })
@@ -108,12 +119,7 @@ describe('JS: core 초안 그대로, 래칫 둘만 더함', () => {
       { id: 'lint', run: 'bun run lint' },
       { id: 'test', run: 'bun run test' },
     ])
-    expect(q.ratchets[0]).toEqual({
-      id: 'file-size',
-      kind: 'file_lines',
-      max: 600,
-      exclude: ['**/bun.lock'],
-    })
+    expect(q.ratchets[0]).toEqual(FILE_SIZE)
   })
 })
 
@@ -147,7 +153,7 @@ describe('Python', () => {
     })
     expect(p.config.ratchets).toEqual([
       { id: 'tests', kind: 'test_count' },
-      { id: 'file-size', kind: 'file_lines', max: 600, exclude: ['**/uv.lock'] },
+      FILE_SIZE,
       ...APP_RATCHETS,
       {
         id: 'diff-coverage',
@@ -230,12 +236,14 @@ describe('Python', () => {
 })
 
 describe('Go', () => {
-  test('go mod download, go vet, gotestsum이 tool이면 JUnit, 없으면 go test는 빠른 검사와 제안', () => {
+  test('go mod download, go vet, gotestsum이 tool이면 JUnit, 없으면 앱이 go test -json을 읽는다(V65)', () => {
+    // 시범의 pflag 모양: tool 지시문 없음, .golangci 설정
     const files = {
-      'go.mod': 'module x\n\ngo 1.24\n',
+      'go.mod': 'module github.com/spf13/pflag\n\ngo 1.12\n',
       'go.sum': null,
-      'main.go': null,
-      '.golangci.yml': null,
+      'flag.go': null,
+      'flag_test.go': null,
+      '.golangci.yaml': null,
     }
     const q = plan(files).config
     expect(q.setup).toEqual({ run: 'go mod download', inputs: ['go.mod', 'go.sum'], keep: [] })
@@ -243,10 +251,22 @@ describe('Go', () => {
       fast: [
         { id: 'vet', run: 'go vet ./...' },
         { id: 'lint', run: 'golangci-lint run' },
-        { id: 'test', run: 'go test ./...' },
       ],
+      acceptance: {
+        id: 'test',
+        run: 'go test -json ./... > .relay-out/go-test.json',
+        junit: '.relay-out/go-test.json',
+        test_format: 'go-test-json',
+      },
     })
-    expect(ids(q)).toEqual(['file-size', 'suppressions', 'duplication'])
+    expect(ids(q)).toEqual(['tests', 'file-size', 'suppressions', 'duplication'])
+    // uuid 모양(설정 파일도 없음)도 같은 수용 시험이고 gotestsum 제안은 없다
+    const uuid = plan({ 'go.mod': 'module github.com/google/uuid\n', 'uuid.go': null })
+    expect(uuid.config.commands.fast).toEqual([{ id: 'vet', run: 'go vet ./...' }])
+    expect(uuid.config.commands.acceptance?.test_format).toBe('go-test-json')
+    expect(uuid.suggestions).toEqual([
+      'govulncheck를 go.mod의 tool로 더하면 취약점 수 래칫을 쓸 수 있습니다',
+    ])
     const withTool = plan({
       ...files,
       'go.mod':
@@ -349,12 +369,7 @@ describe('Rust', () => {
       { id: 'format', run: 'cargo fmt --check' },
       { id: 'test', run: 'cargo test' },
     ])
-    expect(q.ratchets[0]).toEqual({
-      id: 'file-size',
-      kind: 'file_lines',
-      max: 600,
-      exclude: ['**/Cargo.lock'],
-    })
+    expect(q.ratchets[0]).toEqual(FILE_SIZE)
   })
 
   test('[lints.clippy]면 clippy -D warnings, nextest의 JUnit profile이면 수용 시험', () => {
@@ -416,12 +431,7 @@ describe('여러 언어가 섞인 레포', () => {
         junit: 'api/.relay-out/junit.xml',
       },
     })
-    expect(p.config.ratchets[1]).toEqual({
-      id: 'file-size',
-      kind: 'file_lines',
-      max: 600,
-      exclude: ['**/package-lock.json', '**/uv.lock'],
-    })
+    expect(p.config.ratchets[1]).toEqual(FILE_SIZE)
     expect(p.suggestions[0]).toMatch(/^JS\/TS\(web\): /)
   })
 
@@ -442,7 +452,12 @@ describe('여러 언어가 섞인 레포', () => {
       'svc/a.go': null,
     }).config
     expect(q.setup?.run).toBe('{ npm ci; } && (cd svc && go mod download)')
-    expect(q.commands.fast.map((c) => c.id)).toEqual(['js-lint', 'svc-vet', 'svc-test'])
+    expect(q.commands.fast.map((c) => c.id)).toEqual(['js-lint', 'svc-vet'])
+    expect(q.commands.acceptance).toMatchObject({
+      run: 'cd svc && go test -json ./... > .relay-out/go-test.json',
+      junit: 'svc/.relay-out/go-test.json',
+      test_format: 'go-test-json',
+    })
   })
 })
 

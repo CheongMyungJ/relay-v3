@@ -6,9 +6,8 @@
 import { mkdir, readFile, realpath, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { classify, needsBase, needsRerun } from '../core/flaky.ts'
-import { parseJUnit } from '../core/junit.ts'
 import { qualityHash } from '../core/quality.ts'
-import type { CommandEvidence, CommandRun, SetupSpec } from '../core/types.ts'
+import type { CommandEvidence, CommandRun, CommandSpec, SetupSpec } from '../core/types.ts'
 import { run, scrubbedEnv } from '../adapters/exec.ts'
 import { baseCache } from '../adapters/store.ts'
 import {
@@ -18,6 +17,7 @@ import {
   writeInside,
   type Slot,
 } from '../adapters/worktrees.ts'
+import { parseTestReport } from './test-report.ts'
 
 /** 명령의 시간 제한이 없을 때(초) */
 export const DEFAULT_COMMAND_TIMEOUT_SEC = 600
@@ -37,6 +37,7 @@ export interface RunSpec {
   run: string
   timeout_sec?: number
   junit?: string
+  test_format?: CommandSpec['test_format']
 }
 
 export interface WorkspaceOptions {
@@ -206,7 +207,14 @@ async function prepare(o: WorkspaceOptions, slot: Slot, sha: string): Promise<st
 /** base 캐시의 열쇠: 결과를 바꿀 수 있는 명령 글, 시간 제한, JUnit 경로, setup */
 function runHash(spec: RunSpec, setup: SetupSpec | undefined): string {
   return qualityHash(
-    JSON.stringify([spec.run, spec.timeout_sec ?? null, spec.junit ?? null, setup ?? null]),
+    // test_format은 있을 때만 붙인다(없는 옛 명령의 열쇠는 그대로)
+    JSON.stringify([
+      spec.run,
+      spec.timeout_sec ?? null,
+      spec.junit ?? null,
+      setup ?? null,
+      ...(spec.test_format === undefined ? [] : [spec.test_format]),
+    ]),
   )
 }
 
@@ -242,8 +250,8 @@ export async function runIn(dir: string, sha: string, spec: RunSpec): Promise<Co
     stderr_tail: tail(out.stderr),
   }
   if (junit !== null) {
-    const xml = await readFile(junit, 'utf8').catch(() => null)
-    const parsed = xml === null ? null : parseJUnit(xml)
+    const report = await readFile(junit, 'utf8').catch(() => null)
+    const parsed = report === null ? null : parseTestReport(report, spec.test_format)
     if (parsed?.ok === true) r.tests = parsed.value
   }
   return r

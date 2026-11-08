@@ -12,6 +12,7 @@ import {
   type RepoScan,
   type Unit,
 } from './recipes.ts'
+import { SOURCE_EXTENSIONS } from './languages.ts'
 
 /** 초안의 바뀐 줄 커버리지 바닥. 사람이 고친다(V57: min은 사람이 정한다) */
 export const DRAFT_COVERAGE_MIN = 0.8
@@ -38,11 +39,12 @@ export interface DraftPlan {
   suggestions: string[]
 }
 
-/** 잠금 파일: 사람이 쓴 코드가 아니라 줄 수 래칫에서 뺀다. 앞의 넷은 core draftQuality와 같은 차례 */
-const LOCKS = [
-  ...['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock'],
-  ...['uv.lock', 'poetry.lock', 'go.sum', 'Cargo.lock'],
-]
+/**
+ * 초안의 줄 수 래칫이 보는 파일(V66): 언어 표의 확장자와 화면 소스(스타일·컴포넌트 파일. 표에 없지만 JS 레포의 코드다). 문서·
+ * 자료·잠금 파일은 Work마다 자라거나(CHANGELOG) 사람이 쓴 코드가 아니다(시험 자료 JSON, 잠금 파일)
+ */
+const VIEW_EXTENSIONS = ['css', 'scss', 'sass', 'less', 'vue', 'svelte', 'astro']
+export const SOURCE_GLOB = `**/*.{${[...SOURCE_EXTENSIONS, ...VIEW_EXTENSIONS].join(',')}}`
 
 const TAG: Readonly<Record<Unit['lang'], string>> = {
   js: 'js',
@@ -97,14 +99,9 @@ export function planDraft(scan: RepoScan): DraftPlan {
   })
 
   const hasCi = files.some((f) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))
-  const locks = LOCKS.filter((n) => files.some((f) => f === n || f.endsWith(`/${n}`)))
   const ratchets: RatchetSpec[] = []
   if (acceptance) ratchets.push({ id: 'tests', kind: 'test_count' })
-  ratchets.push(
-    locks.length > 0
-      ? { id: 'file-size', kind: 'file_lines', max: 600, exclude: locks.map((n) => `**/${n}`) }
-      : { id: 'file-size', kind: 'file_lines', max: 600 },
-  )
+  ratchets.push({ id: 'file-size', kind: 'file_lines', max: 600, include: [SOURCE_GLOB] })
   ratchets.push(
     { id: 'suppressions', kind: 'suppressions' },
     { id: 'duplication', kind: 'duplication' },
