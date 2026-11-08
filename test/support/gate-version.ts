@@ -42,6 +42,10 @@ export const GATE_FILES = [
   'src/engine/coverage.ts',
   // 판 3(V68): go test -json 읽기(수용 시험의 시험 결과를 만든다)
   'src/engine/test-report.ts',
+  // 판 5(V76): 구조 규칙 래칫(imports)과 그 import 읽기, quality.ts에서 옮긴 기본 목록(지킴 파일, 시험 파일)
+  'src/core/quality-defaults.ts',
+  'src/engine/imports.ts',
+  'src/engine/import-rules.ts',
 ] as const
 
 const sha = (text: string) => createHash('sha256').update(text).digest('hex')

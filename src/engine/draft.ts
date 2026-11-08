@@ -13,6 +13,8 @@ import {
   type Unit,
 } from './recipes.ts'
 import { SOURCE_EXTENSIONS } from './languages.ts'
+import { layersOf, structureCandidates } from './import-graph.ts'
+import type { ImportsSpec } from './import-rules.ts'
 
 /** 초안의 바뀐 줄 커버리지 바닥. 사람이 고친다(V57: min은 사람이 정한다) */
 export const DRAFT_COVERAGE_MIN = 0.8
@@ -59,7 +61,7 @@ const runs = (u: Unit) => u.fast.length > 0 || !!u.acceptance || !!u.test || u.r
 
 export function planDraft(scan: RepoScan): DraftPlan {
   const files = scan.files.map((f) => (f.startsWith('./') ? f.slice(2) : f))
-  const s: RepoScan = { files, texts: scan.texts }
+  const s: RepoScan = { ...scan, files }
   const { dirs, skipped } = unitDirs(files)
   const units: Unit[] = []
   for (const d of dirs) {
@@ -133,7 +135,7 @@ export function planDraft(scan: RepoScan): DraftPlan {
   return {
     config,
     units: units.map((u) => ({ label: u.label, dir: u.dir })),
-    questions: questionsFor(s, units),
+    questions: questionsFor(s),
     suggestions,
   }
 }
@@ -220,19 +222,6 @@ const HUMAN_NAMES = new Set(
     'helm',
   ]),
 )
-/** 경계 후보: 위층 폴더 이름 → 아래층 폴더 이름을 직접 부르지 않는다 */
-const UPPER = [
-  'ui',
-  'web',
-  'frontend',
-  'client',
-  'components',
-  'views',
-  'pages',
-  'cli',
-  'cmd',
-].concat(['api', 'handlers', 'routes', 'controllers'])
-const LOWER = ['db', 'database', 'storage', 'repository', 'repositories', 'persistence', 'dao']
 const SAFE_DIR = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)*$/
 const MAX_OPTIONS = 5
 
@@ -248,7 +237,7 @@ function foldersOf(files: string[]): string[] {
   )
 }
 
-function questionsFor(scan: RepoScan, units: Unit[]): DraftQuestion[] {
+function questionsFor(scan: RepoScan): DraftQuestion[] {
   const folders = foldersOf(scan.files)
   const out: DraftQuestion[] = []
   const human = folders
@@ -261,30 +250,17 @@ function questionsFor(scan: RepoScan, units: Unit[]): DraftQuestion[] {
     hint: 'human_paths에 들어갑니다. glob으로 적습니다(예: migrations/**)',
     options: human.map((d) => ({ value: `${d}/**`, label: `${d}/**` })),
   })
-  const parents = new Set(['.', ...units.map((u) => u.dir)])
-  for (const d of folders)
-    if (/^(?:src|app|lib|pkg|internal)$/.test(d.split('/').at(-1) ?? '')) parents.add(d)
-  const pairs: string[] = []
-  for (const p of [...parents].sort()) {
-    const kids = new Set(
-      folders
-        .filter((d) => d.startsWith(p === '.' ? '' : `${p}/`))
-        .filter((d) => {
-          const rest = p === '.' ? d : d.slice(p.length + 1)
-          return !rest.includes('/')
-        }),
-    )
-    const name = (n: string) => (p === '.' ? n : `${p}/${n}`)
-    for (const u of UPPER)
-      for (const l of LOWER)
-        if (kids.has(name(u)) && kids.has(name(l))) pairs.push(`${name(u)}:${name(l)}`)
-  }
-  if (pairs.length > 0)
+  // 지킬 경계: 지금 코드의 import에서 이미 지켜지는 방향(V75). 읽지 못한 레포(import 그래프 없음)는 묻지 않는다
+  const structure =
+    scan.imports === undefined
+      ? []
+      : structureCandidates(scan.imports, scan.files, DEFAULT_TEST_GLOBS)
+  if (structure.length > 0)
     out.push({
       id: 'boundaries',
-      text: '지킬 경계(앞 폴더의 코드가 뒤 폴더를 직접 가져오지 않는다)',
-      hint: '경계마다 가져오는 줄 수를 세는 래칫(command)이 들어갑니다. "앞:뒤"로 적습니다(예: src/ui:src/db)',
-      options: pairs.slice(0, MAX_OPTIONS).map((v) => ({ value: v, label: v.replace(':', ' → ') })),
+      text: '지킬 구조(지금 코드에서 이미 지켜지는 의존 방향)',
+      hint: '고른 것마다 구조 규칙 래칫(imports)이 들어갑니다. 손으로는 "앞:뒤"(앞 폴더는 뒤 폴더를 가져오지 않음)나 "위>가운데>아래"(층, 같은 층은 쉼표)로 적습니다',
+      options: structure.map((c) => ({ value: c.value, label: c.label })),
     })
   const jobs = [...scan.texts]
     .filter(([p]) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p))
@@ -335,27 +311,38 @@ export function workflowJobs(text: string): string[] {
 
 // ── 답 넣기 ────────────────────────────────────────────────────────────────
 
-/** 경계 "앞:뒤"를 래칫으로: 앞 폴더 파일에서 뒤 폴더 이름을 가져오는 줄 수(낮을수록 좋음) */
-export function boundaryRatchet(value: string): CommandRatchet {
-  const [from = '', to = '', ...rest] = value.split(':').map((s) => s.trim().replace(/\/+$/, ''))
-  if (rest.length > 0 || !SAFE_DIR.test(from) || !SAFE_DIR.test(to) || from === to)
-    throw new Error(`경계는 "앞 폴더:뒤 폴더"로 적습니다: ${value}`)
-  const seg = (to.split('/').at(-1) ?? to).replace(/[.]/g, '\\.')
-  const B = '[^A-Za-z0-9_-]'
-  const re = [
-    `^[[:space:]]*(import|from|use|export|#include)([[:space:]].*)?${B}${seg}(${B}|$)`,
-    `require\\(.*${B}${seg}(${B}|$)`,
-    `^[[:space:]]*"([^"]*/)?${seg}(/[^"]*)?"`,
-  ].join('|')
-  const id = `boundary-${from.split('/').at(-1)}-${to.split('/').at(-1)}`.replace(
-    /[^A-Za-z0-9._-]/g,
-    '-',
-  )
+/**
+ * 경계 답을 구조 규칙 래칫으로(V74): "위>가운데>아래"(같은 층은 쉼표)는 layers, "앞:뒤"는 앞 폴더가 뒤 폴더를 가져오지 않는 forbid.
+ * 폴더는 레포 기준 경로(glob 글자 없이)
+ */
+export function structureRatchet(value: string): ImportsSpec {
+  const bad = () => new Error(`경계는 "앞 폴더:뒤 폴더"나 "위 폴더>아래 폴더"로 적습니다: ${value}`)
+  const dir = (s: string) => {
+    const d = s.trim().replace(/\/+$/, '')
+    if (!SAFE_DIR.test(d)) throw bad()
+    return d
+  }
+  const slug = (ds: string[]) => ds.map((d) => d.split('/').at(-1) ?? d).join('-')
+  if (value.includes('>')) {
+    const layers = layersOf(value).map((l) => l.map(dir))
+    const all = layers.flat()
+    if (layers.length < 2 || new Set(all).size !== all.length) throw bad()
+    const parent = all[0]?.includes('/') ? all[0].slice(0, all[0].lastIndexOf('/')) : 'root'
+    return {
+      id: `layers-${slug([parent])}`.replace(/[^A-Za-z0-9._-]/g, '-'),
+      kind: 'imports',
+      layers,
+    }
+  }
+  const [from = '', to = '', ...rest] = value.split(':')
+  if (rest.length > 0) throw bad()
+  const f = dir(from)
+  const t = dir(to)
+  if (f === t) throw bad()
   return {
-    id,
-    kind: 'command',
-    run: `git grep -h -I -E '${re}' -- '${from}/' | wc -l`,
-    better: 'lower',
+    id: `boundary-${slug([f])}-${slug([t])}`.replace(/[^A-Za-z0-9._-]/g, '-'),
+    kind: 'imports',
+    forbid: [{ from: [f], to: [t] }],
   }
 }
 
@@ -369,7 +356,7 @@ export function applyAnswers(config: QualityConfig, answers: DraftAnswers): Qual
   if (human.length > 0) out.human_paths = [...new Set([...out.human_paths, ...human])]
   const ids = new Set(out.ratchets.map((r) => r.id))
   for (const b of clean('boundaries')) {
-    const r = boundaryRatchet(b)
+    const r = structureRatchet(b)
     if (ids.has(r.id)) continue
     ids.add(r.id)
     out.ratchets.push(r)

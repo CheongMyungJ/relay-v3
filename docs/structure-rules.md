@@ -1,6 +1,6 @@
 # 구조 규칙 래칫: 설계를 검사로 굳히기
 
-- 상태: **설계 초안**(2026-11-08). 만들기 전이다. 10절의 열린 물음은 사용자와 정한다.
+- 상태: **1단계 만듦**(2026-11-08, [design.md](design.md) V74~V76). 10절의 물음 1~3은 사용자와 정했다(✅). 2·3단계(11절)는 만들기 전이다. 만든 것과 설계와 다른 것은 12절.
 - 자리: [quality-floor.md](quality-floor.md) 2절 표의 ③(사람이 정하는 규칙)을 채운다. 거기서는 '틀은 있음'으로만 적었다.
 - 근거:
   - [philosophy.md](philosophy.md) 원칙 3: 말로 적은 규칙보다 실행되는 검사가 오래간다. v2에서 ESLint 경계 규칙은 PR마다 돌아 core 경계를 끝까지 지켰고, 크기 상한이 없던 `work.ts`는 7,834줄까지 자랐다.
@@ -40,7 +40,7 @@ AI 세션은 Work마다 새 맥락으로 시작한다. 처음의 좋은 설계�
   "id": "layers",
   "kind": "imports",
   "layers": [["src/cli/**"], ["src/engine/**"], ["src/adapters/**"], ["src/core/**"]],
-  "forbid": [{ "from": "src/renderer/**", "to": ["src/engine/**", "src/adapters/**"] }],
+  "forbid": [{ "from": ["src/renderer/**"], "to": ["src/engine/**", "src/adapters/**"] }],
   "exclude": ["**/*.generated.ts"]
 }
 ```
@@ -180,7 +180,7 @@ AI 세션은 Work마다 새 맥락으로 시작한다. 처음의 좋은 설계�
 - **모듈 안의 품질을 보지 않는다.** 이름, 추상화의 알맞음, 한 파일의 책임은 보지 않는다. 독립 리뷰어와 설계 메모(아래)의 몫이다.
 - **설계 메모와 결정 기록은 이 문서 밖이다.** 큰 Work 앞에 바꿀 모듈·방향·버린 안을 적는 짧은 설계 메모, 구조 결정 기록(ADR)은 따로 설계한다. 그때 결정 가운데 검사로 바꿀 수 있는 것은 이 래칫의 `forbid`·`layers` 후보로 이어지게 한다.
 
-## 10. 열린 물음 (사용자와 정함)
+## 10. 열린 물음 (사용자와 정함, 1~3은 2026-11-08 ✅ 안대로)
 
 1. **관문에서의 무게.** 새로 어김을 다른 래칫처럼 '사람 머지'(막지 않음, 자동 머지 후보에서 빠짐)로 둘지, 더 무겁게 둘지(예: 고치지 않으면 내보내기를 막음). 안: 다른 래칫과 같게. 끄는 조건 ②를 잴 수 있으려면 막지 않아야 하고, 무게를 늘리는 것은 실적이 쌓인 뒤 정한다.
 2. **시험 파일.** 기본으로 뺄지. 안: 뺀다. 시험이 여러 층을 부르는 것은 설계 위반이 아니다.
@@ -192,3 +192,26 @@ AI 세션은 Work마다 새 맥락으로 시작한다. 처음의 좋은 설계�
 1. **1단계:** `imports` 래칫과 JS/TS·Python·Go 읽개, 초안 후보, 드라이런 값, 시험, relay-v3 자신으로 맞춤 시험, 30개 레포 시범(정적·드라이런).
 2. **2단계:** Java/Kotlin·Rust 읽개, 이미 있는 경계 설정 옮기기, [설정]의 새 폴더 안내, 지식 규칙 → `forbid` 후보.
 3. **3단계:** 장기 평가(켬·끔), 끄는 조건 판정.
+
+## 12. 만든 것 (1단계, 2026-11-08)
+
+- **래칫(V74).** `imports` 종류, engine `imports.ts`(읽기), `import-rules.ts`(맞추기·비교), `ratchets.ts`의 `importsAt`. 관문·되먹임·빚은 다른 래칫 그대로이고, 관문 판 5(V76, 재생 digest 같음, epoch 1을 이음).
+- **후보(V75).** engine `import-graph.ts`. 초안의 '지킬 경계' 물음은 이제 이 후보만 낸다. 드라이런은 imports 래칫의 지금 값을 낸다.
+- **맞춤 시험.** relay-v3 자신에서 첫 후보는 `src`의 층 cli·main > engine·preload·renderer > adapters·shared > core(어긴 곳 0, 못 본 import 0)이다. eslint.config.mjs가 막는 방향(core·adapters·engine이 위를 가져오기)을 모두 막는다([어댑터] structure.test.ts).
+- **시험.**
+  - [단위] `imports.test.ts`, `import-rules.test.ts`, `quality.test.ts`(새 칸), `draft-recipes.test.ts`(후보 묻기, `structureRatchet`).
+  - [어댑터] `structure.test.ts`.
+  - [흐름] `works-structure.test.ts`(금지된 import → [증거] 나빠짐 → 되먹임 → 빚), `works-draft.test.ts`·`cli.test.ts`(후보와 답).
+  - [스모크] `draft.spec.ts`(초안 화면의 구조 후보, `smoke-draft-02-answers.png`를 열어 봄).
+- 시범은 [experiments/structure-rules-pilot/report.md](experiments/structure-rules-pilot/report.md).
+
+**설계와 다른 것.**
+
+- **`forbid`의 `from`은 glob 목록이다.** 3절의 첫 예는 글 하나였다. `to`와 같은 꼴로 맞췄다.
+- **이름 공간 패키지와 Go 패키지는 폴더를 대상으로 한다.** 4절은 '파일이나 모듈로 푼다'였다. 이름 공간 패키지는 `__init__.py`가 없는 Python 패키지다. 규칙의 묶음은 폴더 아래를 함께 맞춘다.
+- **Python의 import 대상은 정확히 모듈이어야 한다.** `import a.b`, `from a.b import …`에서 `a.b`가 레포에 없으면 앞부분(`a`)으로 물러서지 않고 '못 봄'으로 센다. 그런 것은 C 확장이나 만든 파일이다(markupsafe `._speedups`, humanize `._version`).
+- **옛 경계 물음과 `git grep` 래칫은 없앴다.** 옛 경계 물음은 폴더 이름 목록으로 짐작했다. 옛 quality.json의 `boundary-*` command 래칫은 그대로 돈다. 손으로 적는 `--boundary 앞:뒤`는 같은 뜻의 `forbid`가 된다.
+- **읽지 않는 언어 파일은 조용히 빠진다.** Java/Kotlin·Rust 레포에 손으로 규칙을 적으면 늘 같음이다. 이 사실은 드라이런의 '읽은 소스 N'이 드러낸다. 2단계에서 읽개를 더한다.
+- **src/core에는 타입과 읽기 검증만 넣었다.** 지금 4,992줄이다. quality.ts가 파일 상한을 넘어, 기본 목록 둘을 `core/quality-defaults.ts`로 옮겼다.
+- **electron-vite의 ESM 심 문제를 피했다.** 이 심은 소스 안의 `import … from '…'` 꼴 글을 마지막 import로 읽고, 그 뒤에 심을 끼운다. 그래서 imports.ts의 주석에 그 꼴을 그대로 적지 않는다.
+

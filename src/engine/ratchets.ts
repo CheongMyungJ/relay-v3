@@ -1,5 +1,6 @@
 // 래칫 재기 (docs/m1-modules.md engine/check.ts 6단계). check.ts에서 옮겼다(파일 상한).
-// file_lines·test_count·command는 core ratchet.ts로, 앱이 직접 재는 셋(V55~V57)은 suppressions·duplication·coverage로 견준다.
+// file_lines·test_count·command는 core ratchet.ts로, 앱이 직접 재는 셋(V55~V57)은 suppressions·duplication·coverage로,
+// 구조 규칙(V74)은 imports·import-rules로 견준다.
 // 억누름과 중복은 git만 읽고(worktree 없음), 바뀐 줄 커버리지는 수용 시험이 head worktree에 쓴 보고서를 읽는다.
 
 import { readFile, realpath, stat } from 'node:fs/promises'
@@ -36,6 +37,14 @@ import {
   type Suppression,
 } from './suppressions.ts'
 import { message, type Workspace } from './workspace.ts'
+import {
+  importConfig,
+  importContext,
+  importFacts,
+  importSource,
+  type ImportFacts,
+} from './imports.ts'
+import { importsRatchet, unseenIn, violations } from './import-rules.ts'
 
 /** 커버리지 보고서의 상한(바이트) */
 export const MAX_REPORT_BYTES = 64 * 1024 * 1024
@@ -104,6 +113,23 @@ export async function measureRatchets(i: RatchetInputs): Promise<RatchetResult[]
           (e) => unknown(spec.id, `중복을 재지 못함: ${message(e)}`),
         ),
       )
+    } else if (spec.kind === 'imports') {
+      const read = (sha: string) => once(`i:${sha}`, () => importsAt(root, sha))
+      out.push(
+        await Promise.all([read(diff.base), read(diff.head)]).then(
+          ([b, h]) => {
+            const r = importsRatchet(
+              spec,
+              violations(spec, b, q.test_globs),
+              violations(spec, h, q.test_globs),
+              diff,
+            )
+            const unseen = unseenIn(spec, h, q.test_globs)
+            return unseen === 0 ? r : { ...r, detail: `${r.detail} (못 본 import ${unseen})` }
+          },
+          (e) => unknown(spec.id, `import를 읽지 못함: ${message(e)}`),
+        ),
+      )
     } else {
       const report = await coverageReport(spec, ws, acceptance, i.acceptanceStarted)
       out.push(diffCoverageRatchet(spec, report, diff, q.test_globs))
@@ -126,6 +152,16 @@ async function sourcesAt(root: string, sha: string): Promise<Map<string, string>
     (p) => langOf(p) !== null && !matchAny(p, [...SCAN_EXCLUDE]),
   )
   return readBlobs(root, sha, paths, MAX_FILE_BYTES)
+}
+
+/** sha의 import 그래프(JS/TS·Python·Go 소스와 풀기에 쓰는 설정 글, V74) */
+export async function importsAt(root: string, sha: string): Promise<ImportFacts> {
+  const files = await lsTree(root, sha)
+  const [sources, configs] = await Promise.all([
+    readBlobs(root, sha, files.filter(importSource), MAX_FILE_BYTES),
+    readBlobs(root, sha, files.filter(importConfig), MAX_FILE_BYTES),
+  ])
+  return importFacts(sources, importContext(files, configs))
 }
 
 /**

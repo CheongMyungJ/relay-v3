@@ -6,47 +6,8 @@ import type { AutoCondition, CommandSpec, QualityConfig, RatchetSpec, SetupSpec 
 /** 품질 기준 파일의 자리(레포 루트 기준) */
 export const QUALITY_PATH = '.relay/quality.json'
 
-export const DEFAULT_GUARD_PATHS: string[] = [
-  '.relay/quality.json',
-  '.github/workflows/**',
-  '.gitlab-ci.yml',
-  '.circleci/**',
-  '**/eslint.config.*',
-  '**/.eslintrc*',
-  '**/tsconfig*.json',
-  '**/.prettierrc*',
-  '**/vitest.*',
-  '**/vite.config.*',
-  '**/jest.*',
-  '**/.mocharc*',
-  '**/playwright.config.*',
-  '**/pytest.ini',
-  '**/conftest.py',
-  '**/tox.ini',
-  '**/setup.cfg',
-  '**/.coveragerc',
-  '**/.gitattributes',
-  'CODEOWNERS',
-  '.github/CODEOWNERS',
-  'docs/CODEOWNERS',
-]
-
-export const DEFAULT_TEST_GLOBS: string[] = [
-  '**/*.test.*',
-  '**/*.spec.*',
-  '**/test_*.py',
-  '**/*_test.py',
-  '**/*_test.go',
-  '**/*Test.java',
-  '**/*Tests.java',
-  '**/*Test.kt',
-  '**/*Tests.kt',
-  '**/src/test/**',
-  'test/**',
-  'tests/**',
-  '__tests__/**',
-  'spec/**',
-]
+export { DEFAULT_GUARD_PATHS, DEFAULT_TEST_GLOBS } from './quality-defaults.ts'
+import { DEFAULT_GUARD_PATHS, DEFAULT_TEST_GLOBS } from './quality-defaults.ts'
 
 const DEFAULT_EXAMPLES_DIR = '.relay/examples'
 
@@ -221,6 +182,7 @@ const RATCHET_KINDS = [
   'suppressions',
   'duplication',
   'diff_coverage',
+  'imports',
 ] as const
 
 /** 바뀐 줄 커버리지의 바닥: 0보다 크고 1 이하 */
@@ -282,9 +244,38 @@ const readRatchet: Read<RatchetSpec> = (v, p, e) => {
     const extra = kind === 'diff_coverage' ? ['report', 'format', 'min'] : []
     return readScanned(shape(v, p, e, ['id', 'kind', ...extra, 'include', 'exclude']) ?? {}, p, e)
   }
+  if (kind === 'imports') return readImports(v, p, e)
   if (Object.hasOwn(v, 'kind')) oneOf(RATCHET_KINDS)(kind, sub(p, 'kind'), e)
   else e.push(`${sub(p, 'kind')}: 필요함`)
   return fallback
+}
+
+/** 구조 규칙(V74): 묶음은 빈 glob 목록이 아님, 층은 둘 이상, layers나 forbid가 있어야 함 */
+function readImports(v: Obj, p: string, e: string[]): RatchetSpec {
+  const o = shape(v, p, e, ['id', 'kind', 'layers', 'forbid', 'tests', 'include', 'exclude']) ?? {}
+  const group = globs
+  const pair: Read<{ from: string[]; to: string[] }> = (x, q, er) => {
+    const f = shape(x, q, er, ['from', 'to']) ?? {}
+    return { from: req(f, 'from', q, er, group, []), to: req(f, 'to', q, er, group, []) }
+  }
+  const layers = opt(o, 'layers', p, e, list(group))
+  const forbid = opt(o, 'forbid', p, e, list(pair))
+  const empty = [...(layers ?? []), ...(forbid ?? []).flatMap((f) => [f.from, f.to])]
+  if (empty.some((g) => g.length === 0)) e.push(`${where(p)}: 묶음마다 glob이 하나 이상 있어야 함`)
+  if (layers !== undefined && layers.length < 2)
+    e.push(`${sub(p, 'layers')}: 층이 둘 이상이어야 함`)
+  if ((layers?.length ?? 0) + (forbid?.length ?? 0) === 0)
+    e.push(`${where(p)}: imports에는 layers나 forbid가 있어야 함`)
+  const scope = { include: opt(o, 'include', p, e, globs), exclude: opt(o, 'exclude', p, e, globs) }
+  const id = req(o, 'id', p, e, ident, '')
+  return prune({
+    id,
+    kind: 'imports',
+    layers,
+    forbid,
+    tests: opt(o, 'tests', p, e, bool),
+    ...scope,
+  })
 }
 
 const AUTO_KEYS = [

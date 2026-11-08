@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { delimiter, join } from 'node:path'
 import { beforeAll, expect, test, vi } from 'vitest'
 import { parseQuality } from '../../src/core/quality.ts'
-import { boundaryRatchet } from '../../src/engine/draft.ts'
+import { structureRatchet } from '../../src/engine/draft.ts'
 import { FAKE_UV_DIR, pathKey } from '../support/fakes.ts'
 import { makeRepo, makeTempDir } from '../support/repo.ts'
 import { flowKit } from '../support/works-flow.ts'
@@ -39,6 +39,10 @@ test.skipIf(windows)(
         'app/__init__.py': '',
         'app/calc.py': 'import os  # noqa: F401\n\ndef clamp(n, lo, hi):\n    return lo\n',
         'app/ui/view.py': 'from app.db import rows\n',
+        'app/ui/form.py': 'from app.db import rows\n',
+        'app/ui/list.py': 'from app.db import rows\n',
+        'app/ui/menu.py': 'from app.db import rows\n',
+        'app/ui/page.py': 'from app.db import rows\n',
         'app/db/rows.py': 'rows = []\n',
         'migrations/001_init.py': 'up = 1\n',
         'tests/test_calc.py': 'from app.calc import clamp\n',
@@ -76,7 +80,7 @@ test.skipIf(windows)(
     expect(v.fixes.map((f) => f.id)).toEqual(['lint'])
     expect(v.questions.map((q) => [q.id, q.options.map((o) => o.value)])).toEqual([
       ['human_paths', ['migrations/**']],
-      ['boundaries', ['app/ui:app/db']],
+      ['boundaries', ['app/db:app/ui']],
       ['ci_checks', ['Python tests']],
     ])
     expect(v.suggestions).toEqual([])
@@ -88,7 +92,7 @@ test.skipIf(windows)(
     expect(
       await works.writeQualityDraft(project.id, {
         human_paths: ['migrations/**'],
-        boundaries: ['app/ui:app/db'],
+        boundaries: ['app/db:app/ui'],
         ci_checks: ['Python tests'],
       }),
     ).toEqual({ written: true, path: target })
@@ -111,9 +115,9 @@ test.skipIf(windows)(
       'duplication',
       'diff-coverage',
       'complexity',
-      'boundary-ui-db',
+      'boundary-db-ui',
     ])
-    expect(q.value.ratchets.at(-1)).toEqual(boundaryRatchet('app/ui:app/db'))
+    expect(q.value.ratchets.at(-1)).toEqual(structureRatchet('app/db:app/ui'))
     // 앱은 커밋하지 않는다(V20): 초안은 작업 트리의 새 파일이고, 화면은 초안이 있다고 알린다
     expect(await repo.git('rev-list', '--count', 'HEAD')).toBe(commits)
     expect(await repo.git('status', '--porcelain')).toBe('?? .relay/')

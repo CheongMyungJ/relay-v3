@@ -1,0 +1,43 @@
+// 품질 기준의 기본 목록(quality.ts가 다시 내보낸다. 파일 상한). 지킴 파일과 시험 파일의 glob.
+
+export const DEFAULT_GUARD_PATHS: string[] = [
+  '.relay/quality.json',
+  '.github/workflows/**',
+  '.gitlab-ci.yml',
+  '.circleci/**',
+  '**/eslint.config.*',
+  '**/.eslintrc*',
+  '**/tsconfig*.json',
+  '**/.prettierrc*',
+  '**/vitest.*',
+  '**/vite.config.*',
+  '**/jest.*',
+  '**/.mocharc*',
+  '**/playwright.config.*',
+  '**/pytest.ini',
+  '**/conftest.py',
+  '**/tox.ini',
+  '**/setup.cfg',
+  '**/.coveragerc',
+  '**/.gitattributes',
+  'CODEOWNERS',
+  '.github/CODEOWNERS',
+  'docs/CODEOWNERS',
+]
+
+export const DEFAULT_TEST_GLOBS: string[] = [
+  '**/*.test.*',
+  '**/*.spec.*',
+  '**/test_*.py',
+  '**/*_test.py',
+  '**/*_test.go',
+  '**/*Test.java',
+  '**/*Tests.java',
+  '**/*Test.kt',
+  '**/*Tests.kt',
+  '**/src/test/**',
+  'test/**',
+  'tests/**',
+  '__tests__/**',
+  'spec/**',
+]

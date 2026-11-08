@@ -36,6 +36,10 @@ test.beforeAll(async () => {
       'app/__init__.py': '',
       'app/calc.py': 'import os  # noqa: F401\n\ndef clamp(n, lo, hi):\n    return lo\n',
       'app/ui/view.py': 'from app.db import rows\n',
+      'app/ui/form.py': 'from app.db import rows\n',
+      'app/ui/list.py': 'from app.db import rows\n',
+      'app/ui/menu.py': 'from app.db import rows\n',
+      'app/ui/page.py': 'from app.db import rows\n',
       'app/db/rows.py': 'rows = []\n',
       'migrations/001_init.py': 'up = 1\n',
       'tests/test_calc.py': 'from app.calc import clamp\n',
@@ -99,7 +103,7 @@ test('[초안 만들기] → 지금 값, 고칠 것, 묻는 것 → 답을 골�
   await shot('dialog')
 
   await dialog.getByLabel('migrations/**').check()
-  await dialog.getByLabel('app/ui → app/db').check()
+  await dialog.getByLabel('app/db는 app/ui를 가져오지 않음', { exact: false }).check()
   await dialog.getByLabel('Python tests').check()
   await dialog.getByRole('textbox', { name: /^늘 사람이 볼 경로.*더 적기$/ }).fill('app/db/**')
   await dialog.getByTestId('draft-questions').scrollIntoViewIfNeeded()
@@ -117,7 +121,7 @@ test('[초안 만들기] → 지금 값, 고칠 것, 묻는 것 → 답을 골�
   expect(q.human_paths).toEqual(['migrations/**', 'app/db/**'])
   expect(q.commands.fast).toEqual([])
   expect(q.commands.full?.ci_checks).toEqual(['Python tests'])
-  expect(q.ratchets.map((r) => r.id)).toContain('boundary-ui-db')
+  expect(q.ratchets.map((r) => r.id)).toContain('boundary-db-ui')
   // 앱은 커밋하지 않는다
   expect(await repo.git('status', '--porcelain')).toBe('?? .relay/')
   await shot('written')

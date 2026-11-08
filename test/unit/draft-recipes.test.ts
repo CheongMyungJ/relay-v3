@@ -7,19 +7,20 @@ import { draftQuality, parseQuality } from '../../src/core/quality.ts'
 import type { QualityConfig, RatchetSpec } from '../../src/core/types.ts'
 import {
   applyAnswers,
-  boundaryRatchet,
+  structureRatchet,
   planDraft,
   SOURCE_GLOB,
   workflowJobs,
   type DraftPlan,
 } from '../../src/engine/draft.ts'
+import type { ImportFacts } from '../../src/engine/imports.ts'
 import { goTools, hasDep, mergeJUnit, nextestJUnit, unitDirs } from '../../src/engine/recipes.ts'
 
 /** 파일 목록과 글. 글이 null이면 목록에만 있다 */
-function plan(files: Record<string, string | null>): DraftPlan {
+function plan(files: Record<string, string | null>, imports?: ImportFacts): DraftPlan {
   const texts = new Map<string, string>()
   for (const [p, t] of Object.entries(files)) if (t !== null) texts.set(p, t)
-  const out = planDraft({ files: Object.keys(files), texts })
+  const out = planDraft({ files: Object.keys(files), texts, ...(imports ? { imports } : {}) })
   // 초안은 늘 품질 기준으로 읽힌다
   const parsed = parseQuality(JSON.stringify(out.config))
   if (!parsed.ok) throw new Error(parsed.errors.join('; '))
@@ -478,13 +479,31 @@ describe('묻는 것과 답', () => {
       'on: push\njobs:\n  build:\n    name: "Build and test"\n    steps: []\n  lint:\n    runs-on: x\n    steps:\n      - name: not a job\n',
   }
 
-  test('늘 볼 경로, 폴더에서 고른 경계, CI 작업 이름이 후보로 나온다(셋까지)', () => {
-    const q = plan(files).questions
+  // src/ui의 다섯 파일이 src/db를 가져오고 반대쪽은 없다(import 그래프는 init.ts가 작업 트리에서 읽는다)
+  const graph: ImportFacts = {
+    edges: [1, 2, 3, 4, 5].map((i) => ({
+      from: `src/ui/a${i}.ts`,
+      to: 'src/db/b.ts',
+      line: 1,
+      spec: '../db/b',
+    })),
+    unseen: [],
+    files: 6,
+  }
+
+  test('늘 볼 경로, import에서 고른 구조, CI 작업 이름이 후보로 나온다(셋까지)', () => {
+    const q = plan(files, graph).questions
     expect(q.map((x) => x.id)).toEqual(['human_paths', 'boundaries', 'ci_checks'])
     expect(q[0]?.options.map((o) => o.value)).toEqual(['db/migrations/**', 'src/auth/**'])
-    expect(q[1]?.options).toEqual([{ value: 'src/ui:src/db', label: 'src/ui → src/db' }])
+    expect(q[1]?.options).toEqual([
+      {
+        value: 'src/db:src/ui',
+        label: 'src/db는 src/ui를 가져오지 않음 (반대쪽 5, 지금 어긴 곳 0)',
+      },
+    ])
     expect(q[2]?.options.map((o) => o.value)).toEqual(['Build and test', 'lint'])
-    // 경계 후보도 CI도 없으면 늘 볼 경로만 묻는다
+    // import 그래프가 없거나(읽지 않음) 후보가 없으면 묻지 않는다. CI도 없으면 늘 볼 경로만
+    expect(plan(files).questions.map((x) => x.id)).toEqual(['human_paths', 'ci_checks'])
     expect(plan({ 'a.py': null }).questions.map((x) => x.id)).toEqual(['human_paths'])
   })
 
@@ -495,40 +514,38 @@ describe('묻는 것과 답', () => {
     expect(workflowJobs('name: x\n')).toEqual([])
   })
 
-  test('답 넣기: human_paths, 경계 래칫, ci_checks. 같은 답은 한 번. 깨진 답은 던진다', () => {
+  test('답 넣기: human_paths, 구조 규칙 래칫, ci_checks. 같은 답은 한 번. 깨진 답은 던진다', () => {
     const q = plan(files).config
     const out = applyAnswers(q, {
       human_paths: ['db/migrations/**', ' db/migrations/** ', ''],
-      boundaries: ['src/ui:src/db', 'src/ui:src/db'],
+      boundaries: ['src/db:src/ui', 'src/db:src/ui', 'src/cli>src/engine,src/main>src/core'],
       ci_checks: ['Build and test'],
     })
     expect(out.human_paths).toEqual(['db/migrations/**'])
     expect(out.commands.full).toEqual({ ci_checks: ['Build and test'] })
-    expect(out.ratchets.at(-1)).toEqual(boundaryRatchet('src/ui:src/db'))
+    expect(out.ratchets.slice(-2)).toEqual([
+      structureRatchet('src/db:src/ui'),
+      structureRatchet('src/cli>src/engine,src/main>src/core'),
+    ])
     expect(q.human_paths).toEqual([])
     expect(() => applyAnswers(q, { boundaries: ['src/ui'] })).toThrow(/앞 폴더:뒤 폴더/)
     expect(() => applyAnswers(q, { boundaries: ["a:b'; rm -rf ~"] })).toThrow(/앞 폴더:뒤 폴더/)
     expect(() => applyAnswers(q, { human_paths: ['/etc/**'] })).toThrow(/품질 기준으로 읽히지 않음/)
   })
 
-  test('경계 래칫: 앞 폴더에서 뒤 폴더 이름을 가져오는 줄을 git grep으로 센다', () => {
-    const r = boundaryRatchet('src/ui:src/db')
-    expect(r).toMatchObject({ id: 'boundary-ui-db', kind: 'command', better: 'lower' })
-    expect(r.run).toMatch(/^git grep -h -I -E '.+' -- 'src\/ui\/' \| wc -l$/)
-    const re = new RegExp(
-      (/-E '([^']+)'/.exec(r.run)?.[1] ?? '').replace(/\[\[:space:\]\]/g, '\\s'),
-    )
-    for (const line of [
-      "import { q } from '../db/query'",
-      'from app.db import models',
-      'from ..db import x',
-      'import com.acme.db.Repo;',
-      'use crate::db::Pool;',
-      'const db = require("../db")',
-      '\t"example.com/app/db"',
-    ])
-      expect(re.test(line), line).toBe(true)
-    for (const line of ["import { dbx } from '../dbx'", 'const db = 1', '// db here'])
-      expect(re.test(line), line).toBe(false)
+  test('구조 규칙 래칫: "앞:뒤"는 forbid, "위>아래"는 layers(같은 층은 쉼표). 깨진 답은 던진다', () => {
+    expect(structureRatchet('src/db:src/ui/')).toEqual({
+      id: 'boundary-db-ui',
+      kind: 'imports',
+      forbid: [{ from: ['src/db'], to: ['src/ui'] }],
+    })
+    expect(structureRatchet('src/cli > src/engine, src/main > src/core')).toEqual({
+      id: 'layers-src',
+      kind: 'imports',
+      layers: [['src/cli'], ['src/engine', 'src/main'], ['src/core']],
+    })
+    expect(structureRatchet('ui>db').id).toBe('layers-root')
+    for (const bad of ['a', 'a:a', 'a:b:c', 'a>a', 'a>', '**/x:y', '../x:y'])
+      expect(() => structureRatchet(bad), bad).toThrow(/앞 폴더:뒤 폴더/)
   })
 })

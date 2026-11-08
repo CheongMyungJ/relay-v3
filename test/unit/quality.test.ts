@@ -119,6 +119,25 @@ describe('parseQuality: 정상', () => {
     expect(q.ratchets).toEqual(ratchets)
   })
 
+  test('구조 규칙 래칫(V74): layers, forbid, tests와 범위를 읽는다', () => {
+    const ratchets = [
+      {
+        id: 'layers',
+        kind: 'imports',
+        layers: [['src/cli'], ['src/engine', 'src/main/**'], ['src/core']],
+      },
+      {
+        id: 'b',
+        kind: 'imports',
+        forbid: [{ from: ['src/ui'], to: ['src/db', 'src/infra'] }],
+        tests: true,
+        include: ['src/**'],
+        exclude: ['**/*.gen.ts'],
+      },
+    ]
+    expect(valueOf(doc({ ratchets })).ratchets).toEqual(ratchets)
+  })
+
   test('full.local 명령과 setup.timeout_sec을 읽는다', () => {
     const setup = { run: 'npm ci', inputs: [], keep: [], timeout_sec: 600 }
     const full = { local: [{ id: 'e2e', run: 'npm run e2e', timeout_sec: 1.5 }] }
@@ -331,7 +350,7 @@ describe('parseQuality: 잘못된 입력', () => {
       'ratchets[1].max: 0 이상의 정수여야 함',
       'ratchets[2].max: 필요함',
       "ratchets[3].better: 'lower', 'higher' 중 하나여야 함",
-      "ratchets[4].kind: 'file_lines', 'test_count', 'command', 'suppressions', 'duplication', 'diff_coverage' 중 하나여야 함",
+      "ratchets[4].kind: 'file_lines', 'test_count', 'command', 'suppressions', 'duplication', 'diff_coverage', 'imports' 중 하나여야 함",
       'ratchets[5].kind: 필요함',
       'ratchets[6]: 객체여야 함',
     )
@@ -356,6 +375,28 @@ describe('parseQuality: 잘못된 입력', () => {
       'ratchets[3].report: 레포 안의 상대 경로여야 함',
       'ratchets[3].min: 0보다 크고 1 이하인 수여야 함',
       'ratchets[4].min: 0보다 크고 1 이하인 수여야 함',
+    )
+  })
+
+  test('구조 규칙 래칫(V74)의 칸을 검사한다: 층은 둘 이상, 빈 묶음 없음, layers나 forbid 하나는', () => {
+    const ratchets = [
+      { id: 'a', kind: 'imports' },
+      { id: 'b', kind: 'imports', layers: [['src/a']] },
+      { id: 'c', kind: 'imports', layers: [['src/a'], []] },
+      { id: 'd', kind: 'imports', forbid: [{ from: ['x'] }], tests: 'yes' },
+      { id: 'e', kind: 'imports', forbid: [{ from: ['/x'], to: ['y'], why: 1 }], depth: 2 },
+    ]
+    fails(
+      { ratchets },
+      'ratchets[0]: imports에는 layers나 forbid가 있어야 함',
+      'ratchets[1].layers: 층이 둘 이상이어야 함',
+      'ratchets[2]: 묶음마다 glob이 하나 이상 있어야 함',
+      'ratchets[3].forbid[0].to: 필요함',
+      'ratchets[3]: 묶음마다 glob이 하나 이상 있어야 함',
+      'ratchets[3].tests: true나 false여야 함',
+      'ratchets[4].depth: 알 수 없는 키',
+      'ratchets[4].forbid[0].why: 알 수 없는 키',
+      'ratchets[4].forbid[0].from[0]: 레포 루트 기준이라 /로 시작하지 않는다 (/x)',
     )
   })
 

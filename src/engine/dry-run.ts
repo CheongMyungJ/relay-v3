@@ -15,6 +15,8 @@ import { duplication, MAX_FILE_BYTES, scoped } from './duplication.ts'
 import { inScan, langOf, listText, percent, SCAN_EXCLUDE } from './languages.ts'
 import { GREP_NEEDLES, suppressionsInLine } from './suppressions.ts'
 import { formatLabel } from './test-report.ts'
+import { unseenIn, violations } from './import-rules.ts'
+import { importsAt } from './ratchets.ts'
 import { DEFAULT_COMMAND_TIMEOUT_SEC, message, runIn } from './workspace.ts'
 
 export type DryKind = 'setup' | 'fast' | 'acceptance' | 'ratchet'
@@ -269,7 +271,7 @@ async function coverageValue(
   }
 }
 
-/** 앱이 직접 재는 래칫(줄 수, 억누름, 중복)의 지금 값. git의 커밋을 읽는다(engine ratchets.ts와 같은 범위) */
+/** 앱이 직접 재는 래칫(줄 수, 억누름, 중복, 구조 규칙)의 지금 값. git의 커밋을 읽는다(engine ratchets.ts와 같은 범위) */
 async function measure(
   root: string,
   head: string,
@@ -318,6 +320,15 @@ async function measure(
         v(
           Math.round(r.share * 1000) / 10,
           `중복 ${percent(r.share)} (코드 줄 ${r.code}, 쌍 ${r.pairs.length})`,
+        )
+      } else if (spec.kind === 'imports') {
+        const facts = await importsAt(root, head)
+        const bad = violations(spec, facts, q.test_globs)
+        const unseen = unseenIn(spec, facts, q.test_globs)
+        const at = bad.slice(0, 3).map((x) => `${x.from}:${x.line} → ${x.to}`)
+        v(
+          bad.length,
+          `구조 규칙을 어긴 import ${bad.length}${at.length > 0 ? ` (${at.join(', ')}${bad.length > 3 ? ' …' : ''})` : ''}, 못 본 import ${unseen}, 읽은 소스 ${facts.files}`,
         )
       } else if (spec.kind === 'test_count' || spec.kind === 'diff_coverage') {
         // 수용 시험이 돌지 않았으면 runOne이 값을 내지 않았다

@@ -2,11 +2,14 @@
 // recipes-jvm.ts가 가져간다. 순수 함수다.
 
 import type { CommandSpec, RatchetSpec, SetupSpec } from '../core/types.ts'
+import type { ImportFacts } from './imports.ts'
 
 /** 레포의 파일 목록(레포 기준 경로)과 읽은 매니페스트·설정 글(경로 → 글) */
 export interface RepoScan {
   files: string[]
   texts: ReadonlyMap<string, string>
+  /** 작업 트리 소스의 import 그래프(구조 규칙 후보, V75). 없으면 경계 후보를 내지 않는다 */
+  imports?: ImportFacts
 }
 
 export type UnitLang = 'js' | 'py' | 'go' | 'java' | 'rust'

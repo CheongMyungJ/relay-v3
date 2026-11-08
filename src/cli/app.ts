@@ -36,10 +36,10 @@ export interface Io {
 
 export const USAGE = `쓰는 법: relay <명령> [옵션]
 
-  relay init [--try | --write [--no-try]] [--human-path <glob>]... [--boundary <앞:뒤>]... [--ci-check <이름>]...
+  relay init [--try | --write [--no-try]] [--human-path <glob>]... [--boundary <앞:뒤 | 위>아래>]... [--ci-check <이름>]...
       quality.json 초안(언어별 레시피)을 찍는다. --try는 지금 커밋에서 한 번 돌려 보고 요약을 찍는다(쓰지 않음).
       --write는 돌려 본 뒤 안 된 명령을 빼고 .relay/quality.json이 없을 때만 쓴다(커밋은 사람이 한다).
-      --human-path·--boundary·--ci-check는 묻는 것의 답이다(human_paths, 경계 래칫, ci_checks).
+      --human-path·--boundary·--ci-check는 묻는 것의 답이다(human_paths, 구조 규칙 래칫 imports, ci_checks).
   relay check [--base <ref>] [--head <ref>] [--contract <파일>] [--request <파일>] [--rerun] [--json]
       head를 base와 견줘 증거 묶음을 만든다. --rerun은 base 캐시를 쓰지 않는다.
   relay gate [--evidence <파일>] [--contract <파일>] [--head <ref>] [--auto-merge] [--json]

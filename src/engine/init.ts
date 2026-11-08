@@ -13,6 +13,13 @@ import { applyAnswers, planDraft, type DraftAnswers, type DraftPlan } from './dr
 import { dryRun, type DryRun } from './dry-run.ts'
 import { SCAN_EXCLUDE } from './languages.ts'
 import { manifestLang, type RepoScan } from './recipes.ts'
+import {
+  importConfig,
+  importContext,
+  importFacts,
+  importSource,
+  type ImportFacts,
+} from './imports.ts'
 
 /** 읽는 설정 글의 상한(바이트). 매니페스트는 작다 */
 const MAX_TEXT_BYTES = 1_000_000
@@ -44,7 +51,27 @@ export async function scanRepo(root: string): Promise<RepoScan> {
     const text = await readFile(full, 'utf8').catch(() => null)
     if (text !== null) texts.set(f, text)
   }
-  return { files, texts }
+  return { files, texts, imports: await workTreeImports(root, files) }
+}
+
+/** 구조 규칙 후보에 쓸 작업 트리의 import 그래프(V75). 읽는 소스는 MAX_IMPORT_FILES개까지, 넘으면 후보를 내지 않는다 */
+const MAX_IMPORT_FILES = 20_000
+
+async function workTreeImports(root: string, files: string[]): Promise<ImportFacts | undefined> {
+  const read = async (list: string[]) => {
+    const out = new Map<string, string>()
+    for (const f of list) {
+      const st = await stat(join(root, f)).catch(() => null)
+      if (st === null || !st.isFile() || st.size > MAX_TEXT_BYTES) continue
+      const text = await readFile(join(root, f), 'utf8').catch(() => null)
+      if (text !== null) out.set(f, text)
+    }
+    return out
+  }
+  const sources = files.filter(importSource)
+  if (sources.length === 0 || sources.length > MAX_IMPORT_FILES) return undefined
+  const configs = await read(files.filter(importConfig))
+  return importFacts(await read(sources), importContext(files, configs))
 }
 
 export async function planFor(root: string): Promise<DraftPlan> {
@@ -156,7 +183,7 @@ export function summaryLines(r: DraftReport): string[] {
       )
   }
   if (r.plan.questions.length > 0)
-    out.push('묻는 것(답: --human-path, --boundary 앞:뒤, --ci-check):')
+    out.push('묻는 것(답: --human-path, --boundary 앞:뒤 또는 위>아래, --ci-check):')
   r.plan.questions.forEach((q, i) => {
     const opts = q.options.map((o) => o.value)
     out.push(`  ${i + 1}. ${q.text}${opts.length > 0 ? `. 후보: ${opts.join(', ')}` : ''}`)

@@ -69,6 +69,19 @@ export type RatchetSpec =
       include?: string[]
       exclude?: string[]
     }
+  | {
+      id: string
+      /** 사람이 고른 의존 방향을 어긴 import(파일 → 대상)의 집합(engine import-rules.ts, V74). 새로 어긴 것이 있으면 나빠짐 */
+      kind: 'imports'
+      /** 위에서 아래로 놓은 묶음(glob). 아래 묶음은 위 묶음을 가져오지 않는다 */
+      layers?: string[][]
+      /** from 묶음은 to 묶음을 가져오지 않는다 */
+      forbid?: { from: string[]; to: string[] }[]
+      /** 시험 파일(test_globs)도 가져오는 쪽으로 센다. 기본 뺌 */
+      tests?: boolean
+      include?: string[]
+      exclude?: string[]
+    }
 
 export interface AutoCondition {
   id: string
