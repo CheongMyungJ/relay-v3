@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "files": {
     "src/core/gate.ts": "97fe1b2fdc672a00",
     "src/core/lines.ts": "239c99de48b4e6b6",
@@ -22,7 +22,7 @@
     "src/engine/coverage.ts": "495c9d1162b00a74",
     "src/engine/test-report.ts": "320226b54539299f",
     "src/core/quality-defaults.ts": "5107a14fd82392aa",
-    "src/engine/imports.ts": "a8136e824ed89122",
+    "src/engine/imports.ts": "e45ce8f16695474f",
     "src/engine/import-rules.ts": "7db28fcfc82fd755"
   },
   "replays": {
@@ -30,6 +30,7 @@
     "2": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
     "3": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
     "4": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
-    "5": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d"
+    "5": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
+    "6": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d"
   }
 }

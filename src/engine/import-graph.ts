@@ -32,7 +32,7 @@ function folderGraph(facts: ImportFacts, parent: string, skip: (p: string) => bo
   const node = (p: string): string | null => {
     if (parent !== '.' && !p.startsWith(`${parent}/`)) return null
     const rest = under(p, parent).split('/')
-    return rest.length < 2 || rest[0] === ''
+    return rest.length < 2 || rest[0] === '' || rest[0] === '.'
       ? null
       : parent === '.'
         ? (rest[0] ?? null)
@@ -42,8 +42,8 @@ function folderGraph(facts: ImportFacts, parent: string, skip: (p: string) => bo
   for (const e of facts.edges) {
     if (skip(e.from) || skip(e.to)) continue
     const a = node(e.from)
-    // 폴더 대상(Go 패키지)은 그 폴더 아래의 파일처럼 본다
-    const b = node(`${e.to}/_`)
+    // 폴더 대상(Go 패키지, 이름 공간 패키지)은 그 폴더 아래의 파일처럼 본다
+    const b = node(e.folder === true ? `${e.to}/_` : e.to)
     if (a === null || b === null || a === b) continue
     const row = w.get(a) ?? new Map<string, number>()
     row.set(b, (row.get(b) ?? 0) + 1)
@@ -94,19 +94,71 @@ function acyclic(w: Weights, limit: number): Weights | null {
   return g
 }
 
-/** 층: 가져오는 것이 없는 마디가 맨 아래(0), 나머지는 가져오는 마디의 가장 높은 층 + 1 */
+/** 층: 가져오는 것이 없는 마디가 맨 아래(0), 나머지는 가져오는 마디의 가장 높은 층 + 1. nodes 밖의 마디는 보지 않는다 */
 function levels(g: Weights, nodes: string[]): Map<string, number> {
   const out = new Map<string, number>()
+  const inside = new Set(nodes)
   const level = (n: string): number => {
     const known = out.get(n)
     if (known !== undefined) return known
-    const next = [...(g.get(n)?.keys() ?? [])]
+    const next = [...(g.get(n)?.keys() ?? [])].filter((m) => inside.has(m))
     const v = next.length === 0 ? 0 : 1 + Math.max(...next.map(level))
     out.set(n, v)
     return v
   }
   for (const n of nodes) level(n)
   return out
+}
+
+/** 마디마다 가져오는 경로로 닿는 마디(순환 없는 그래프) */
+function reach(g: Weights, nodes: string[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  const visit = (n: string): Set<string> => {
+    const known = out.get(n)
+    if (known !== undefined) return known
+    const r = new Set<string>()
+    out.set(n, r)
+    for (const m of g.get(n)?.keys() ?? []) {
+      r.add(m)
+      for (const x of visit(m)) r.add(x)
+    }
+    return r
+  }
+  for (const n of nodes) visit(n)
+  return out
+}
+
+/**
+ * 근거 있는 층(V75): 위 층의 마디는 아래 층의 마디마다 가져오는 경로가 있어야 한다. 관계없는 마디 사이에 순서를 지어내지 않으려고,
+ * 근거 없는 쌍이 가장 많은 마디(같으면 무게가 작은 것, 그다음 이름)를 규칙 밖으로 빼기를 되풀이한다
+ */
+function evidencedLayers(g: Weights, nodes: string[], w: Weights): string[][] | null {
+  const r = reach(g, nodes)
+  const deg = (n: string) =>
+    [...(w.get(n)?.values() ?? [])].reduce((a, b) => a + b, 0) +
+    nodes.reduce((a, m) => a + weight(w, m, n), 0)
+  let keep = nodes.filter((n) => (g.get(n)?.size ?? 0) > 0 || nodes.some((m) => g.get(m)?.has(n)))
+  for (;;) {
+    const lv = levels(g, keep)
+    const bad = new Map<string, number>()
+    for (const u of keep)
+      for (const v of keep)
+        if ((lv.get(u) ?? 0) > (lv.get(v) ?? 0) && !r.get(u)?.has(v)) {
+          bad.set(u, (bad.get(u) ?? 0) + 1)
+          bad.set(v, (bad.get(v) ?? 0) + 1)
+        }
+    if (bad.size === 0) {
+      const top = Math.max(-1, ...lv.values())
+      if (keep.length < 3 || top < 2) return null
+      return Array.from({ length: top + 1 }, (_, i) => top - i).map((l) =>
+        keep.filter((n) => lv.get(n) === l),
+      )
+    }
+    const [drop] = [...bad].sort(
+      (a, b) => b[1] - a[1] || deg(a[0]) - deg(b[0]) || (a[0] < b[0] ? -1 : 1),
+    )[0] ?? ['']
+    keep = keep.filter((n) => n !== drop)
+  }
 }
 
 /** 층 후보의 답 글을 규칙으로(래칫 만들기와 같은 꼴) */
@@ -128,7 +180,7 @@ const shown = (bad: { from: string; line: number }[]) =>
 
 /**
  * 후보를 낸다(다섯까지, 무게 순: 층이 먼저). 부모 폴더는 레포 루트와 깊이 둘까지의 폴더. 시험 파일은 양쪽에서 뺀다.
- * 층 후보가 있는 부모에서는 쌍 후보를 내지 않는다(층이 이미 덮는다)
+ * 층 후보는 근거 있는 순서만(evidencedLayers). 층 후보가 있는 부모에서는 쌍 후보를 내지 않는다(층이 이미 덮는다)
  */
 export function structureCandidates(
   facts: ImportFacts,
@@ -154,17 +206,17 @@ export function structureCandidates(
       0,
     )
     const g = nodes.length >= 3 ? acyclic(w, backLimit(total)) : null
-    const lv = g === null ? null : levels(g, nodes)
-    const top = lv === null ? -1 : Math.max(...lv.values())
-    if (lv !== null && top >= 2) {
-      const order = Array.from({ length: top + 1 }, (_, i) => top - i).map((l) =>
-        nodes.filter((n) => lv.get(n) === l),
-      )
+    const order = g === null ? null : evidencedLayers(g, nodes, w)
+    if (order !== null) {
       const value = order.map((l) => l.join(',')).join('>')
       const spec: ImportsSpec = { id: 'x', kind: 'imports', layers: layersOf(value) }
       const bad = examples(spec, facts, skip)
       const where = parent === '.' ? '레포 루트' : parent
-      const text = order.map((l) => l.map(tail).join('·')).join(' > ')
+      const names = (l: string[]) =>
+        l.length > 4
+          ? `${l.slice(0, 3).map(tail).join('·')} 외 ${l.length - 3}`
+          : l.map(tail).join('·')
+      const text = order.map(names).join(' > ')
       layered.push({
         value,
         label: `${where}의 층(위 > 아래): ${text}. 아래 층은 위 층을 가져오지 않음 (${shown(bad)})`,

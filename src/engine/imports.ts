@@ -11,6 +11,8 @@ export interface ImportEdge {
   line: number
   /** 적힌 그대로의 대상(보이기용) */
   spec: string
+  /** to가 폴더다 */
+  folder?: true
 }
 
 export interface ImportFacts {
@@ -206,6 +208,8 @@ interface Alias {
   dir: string
   base: string | null
   paths: [string, string[]][]
+  /** paths를 적은 tsconfig의 폴더(baseUrl이 없을 때 대상의 기준) */
+  pathsDir: string
 }
 
 /** 풀기에 쓰는 레포의 사실. 파일 목록과 설정 글로 한 번 만든다 */
@@ -270,15 +274,8 @@ export function importContext(
       const n = obj(looseJson(text))?.['name']
       if (typeof n === 'string' && n !== '' && dir !== '.') packages.set(n, dir)
     } else {
-      const opts = obj(obj(looseJson(text))?.['compilerOptions'])
-      if (opts === null) continue
-      const base = typeof opts['baseUrl'] === 'string' ? join(dir, opts['baseUrl']) : null
-      const paths = Object.entries(obj(opts['paths']) ?? {}).flatMap(([k, v]) =>
-        Array.isArray(v)
-          ? [[k, v.filter((x): x is string => typeof x === 'string')] as [string, string[]]]
-          : [],
-      )
-      if (base !== null || paths.length > 0) aliases.push({ dir, base, paths })
+      const a = tsAlias(path, texts, 0)
+      if (a !== null && (a.base !== null || a.paths.length > 0)) aliases.push({ ...a, dir })
     }
   }
   modules.sort((a, b) => b[0].length - a[0].length)
@@ -326,6 +323,40 @@ function pythonModules(files: readonly string[], set: ReadonlySet<string>) {
   return { pyModules, pyTop }
 }
 
+/**
+ * tsconfig 하나의 별칭. `extends`(레포 안의 상대 경로, 다섯 겹까지)를 따라가 baseUrl·paths를 물려받는다: baseUrl은 적은 파일의
+ * 폴더 기준, paths의 대상은 baseUrl이 있으면 그 기준, 없으면 paths를 적은 파일의 폴더 기준(TypeScript와 같다)
+ */
+function tsAlias(
+  path: string,
+  texts: ReadonlyMap<string, string>,
+  depth: number,
+): Omit<Alias, 'dir'> | null {
+  const text = texts.get(path)
+  const doc = text === undefined ? null : obj(looseJson(text))
+  if (doc === null) return null
+  const dir = dirOf(path)
+  const ext = doc['extends']
+  const parentPath =
+    typeof ext === 'string' && ext.startsWith('.') && depth < 5
+      ? join(dir, ext.endsWith('.json') ? ext : `${ext}.json`)
+      : null
+  const parent = parentPath === null ? null : tsAlias(parentPath, texts, depth + 1)
+  const opts = obj(doc['compilerOptions']) ?? {}
+  const base = typeof opts['baseUrl'] === 'string' ? join(dir, opts['baseUrl']) : null
+  const own = obj(opts['paths'])
+  const paths =
+    own === null
+      ? (parent?.paths ?? [])
+      : Object.entries(own).flatMap(([k, v]) =>
+          Array.isArray(v)
+            ? [[k, v.filter((x): x is string => typeof x === 'string')] as [string, string[]]]
+            : [],
+        )
+  const pathsDir = own === null ? (parent?.pathsDir ?? dir) : dir
+  return { base: base ?? parent?.base ?? null, paths, pathsDir }
+}
+
 const JS_EXT = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.d.ts']
 
 /** JS 경로(확장자 없음, .js를 .ts로 쓴 ESM 꼴, 폴더의 index)를 레포의 파일로 */
@@ -341,7 +372,8 @@ function jsFile(ctx: ImportContext, path: string): string | null {
 type Resolved = { to: string } | 'external' | 'unseen'
 
 function resolveJs(ctx: ImportContext, from: string, spec: string): Resolved {
-  const clean = spec.replace(/[?#].*$/, '')
+  // 물음표·해시 뒤(쿼리)는 버린다. 맨 앞의 #은 Node의 하위 경로 import(#/x)다
+  const clean = spec.replace(/(?<=.)[?#].*$/, '')
   if (clean.startsWith('.') || clean.startsWith('/')) {
     const p = clean.startsWith('/') ? join('.', clean) : join(dirOf(from), clean)
     const f = p === null ? null : jsFile(ctx, p)
@@ -361,7 +393,7 @@ function resolveJs(ctx: ImportContext, from: string, spec: string): Resolved {
             : null
       if (hit === null) continue
       for (const t of targets) {
-        const p = join(a.base ?? a.dir, t.replace('*', hit))
+        const p = join(a.base ?? a.pathsDir, t.replace('*', hit))
         const f = p === null ? null : jsFile(ctx, p)
         if (f !== null) return { to: f }
       }
@@ -456,7 +488,14 @@ export function importFacts(sources: ReadonlyMap<string, string>, ctx: ImportCon
         }
         if (r.to === from || (lang === 'go' && r.to === dirOf(from)) || seen.has(r.to)) continue
         seen.add(r.to)
-        edges.push({ from, to: r.to, line: imp.line, spec: imp.spec })
+        const folder = !ctx.files.has(r.to)
+        edges.push({
+          from,
+          to: r.to,
+          line: imp.line,
+          spec: imp.spec,
+          ...(folder ? { folder } : {}),
+        })
       }
     }
   }

@@ -197,13 +197,17 @@ AI 세션은 Work마다 새 맥락으로 시작한다. 처음의 좋은 설계�
 
 - **래칫(V74).** `imports` 종류, engine `imports.ts`(읽기), `import-rules.ts`(맞추기·비교), `ratchets.ts`의 `importsAt`. 관문·되먹임·빚은 다른 래칫 그대로이고, 관문 판 5(V76, 재생 digest 같음, epoch 1을 이음).
 - **후보(V75).** engine `import-graph.ts`. 초안의 '지킬 경계' 물음은 이제 이 후보만 낸다. 드라이런은 imports 래칫의 지금 값을 낸다.
-- **맞춤 시험.** relay-v3 자신에서 첫 후보는 `src`의 층 cli·main > engine·preload·renderer > adapters·shared > core(어긴 곳 0, 못 본 import 0)이다. eslint.config.mjs가 막는 방향(core·adapters·engine이 위를 가져오기)을 모두 막는다([어댑터] structure.test.ts).
+- **맞춤 시험.** relay-v3 자신에서 첫 후보는 `src`의 층 cli·main > engine > adapters·shared > core(어긴 곳 0, 못 본 import 0)이다. preload·renderer는 근거 있는 순서가 아니라 빠진다. eslint.config.mjs가 막는 방향(core·adapters·engine이 위를 가져오기)을 모두 막는다([어댑터] structure.test.ts).
 - **시험.**
   - [단위] `imports.test.ts`, `import-rules.test.ts`, `quality.test.ts`(새 칸), `draft-recipes.test.ts`(후보 묻기, `structureRatchet`).
   - [어댑터] `structure.test.ts`.
   - [흐름] `works-structure.test.ts`(금지된 import → [증거] 나빠짐 → 되먹임 → 빚), `works-draft.test.ts`·`cli.test.ts`(후보와 답).
   - [스모크] `draft.spec.ts`(초안 화면의 구조 후보, `smoke-draft-02-answers.png`를 열어 봄).
-- 시범은 [experiments/structure-rules-pilot/report.md](experiments/structure-rules-pilot/report.md).
+- **시범**([experiments/structure-rules-pilot/report.md](experiments/structure-rules-pilot/report.md)). 레포 28개를 정적으로만 봤다: 품질 바닥 시범의 JS/Python/Go 15개, 경계 설정이 있는 12개, relay-v3.
+  - 푼 비율은 JS 96.7%, Python 99.8%, Go 100%다. 못 봄은 만든 코드·`dist/`·C 확장뿐이다.
+  - 폴더 단위 경계 설정이 있는 7개 모두에서 설정과 맞는 후보가 첫 자리였고, 설정과 어긋난 후보는 0개다.
+  - 작은 단일 패키지 15개는 후보가 없었다.
+  - 시범에서 다섯 가지를 고쳤다: tsconfig `extends`, 파일 대상은 마디가 아님, 근거 있는 층만, 긴 층 글, Go 루트 패키지.
 
 **설계와 다른 것.**
 
@@ -213,5 +217,7 @@ AI 세션은 Work마다 새 맥락으로 시작한다. 처음의 좋은 설계�
 - **옛 경계 물음과 `git grep` 래칫은 없앴다.** 옛 경계 물음은 폴더 이름 목록으로 짐작했다. 옛 quality.json의 `boundary-*` command 래칫은 그대로 돈다. 손으로 적는 `--boundary 앞:뒤`는 같은 뜻의 `forbid`가 된다.
 - **읽지 않는 언어 파일은 조용히 빠진다.** Java/Kotlin·Rust 레포에 손으로 규칙을 적으면 늘 같음이다. 이 사실은 드라이런의 '읽은 소스 N'이 드러낸다. 2단계에서 읽개를 더한다.
 - **src/core에는 타입과 읽기 검증만 넣었다.** 지금 4,992줄이다. quality.ts가 파일 상한을 넘어, 기본 목록 둘을 `core/quality-defaults.ts`로 옮겼다.
+- **층 후보는 근거 있는 순서만 낸다.** 5절은 '순환이 없으면 위상 정렬'이었다. 그러면 서로 관계없는 폴더 사이에도 순서가 생기고, 시범에서 그 순서가 사람이 적은 설정과 반대인 일이 있었다(wemake). 이제 위 층의 폴더는 아래 층의 폴더마다 가져오는 경로가 있어야 하고, 근거가 모자란 폴더는 규칙 밖으로 뺀다.
+- **tsconfig의 `extends`를 따라간다.** 4절 표에는 없었다. 레포 안의 상대 경로만 따라가고, 패키지(`@tsconfig/…`)는 따라가지 않는다.
 - **electron-vite의 ESM 심 문제를 피했다.** 이 심은 소스 안의 `import … from '…'` 꼴 글을 마지막 import로 읽고, 그 뒤에 심을 끼운다. 그래서 imports.ts의 주석에 그 꼴을 그대로 적지 않는다.
 

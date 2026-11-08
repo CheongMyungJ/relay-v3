@@ -201,6 +201,41 @@ describe('후보 내기', () => {
     ).not.toContain('src/a>src/b>src/c')
   })
 
+  test('층은 근거 있는 순서만: 서로 가져오지 않는 마디 사이에 순서를 지어내지 않고 그 마디를 규칙 밖으로 뺀다(wemake 시범)', () => {
+    // presets → visitors → logic → compat, visitors → violations. violations와 logic 사이에는 경로가 없다
+    const g = graph([
+      ['p/presets/a.py', 'p/visitors/a.py'],
+      ['p/visitors/a.py', 'p/logic/a.py'],
+      ['p/logic/a.py', 'p/compat/a.py'],
+      ['p/visitors/b.py', 'p/violations/a.py'],
+    ])
+    const [c] = structureCandidates(g, ['p/presets/a.py'], DEFAULT_TEST_GLOBS)
+    // 고치기 전에는 violations를 맨 아래에 두어 'violations는 logic을 가져오지 않음'을 지어냈다. 이제는 규칙 밖으로 뺀다
+    expect(c?.value).toBe('p/presets>p/visitors>p/logic>p/compat')
+  })
+
+  test('파일 대상(루트의 설정 파일)은 마디가 아니다. Go 루트 패키지(.)도 마디가 아니다. 긴 층은 셋과 외 N으로 보인다', () => {
+    const edges: [string, string][] = [
+      ...Array.from(
+        { length: 6 },
+        (_, i) => [`docs/d${i}.js`, 'eslint.config.js'] as [string, string],
+      ),
+      ...Array.from({ length: 6 }, (_, i) => [`cmd/c${i}.go`, '.'] as [string, string]),
+    ]
+    const g = {
+      ...graph(edges),
+      edges: graph(edges).edges.map((e) => (e.to === '.' ? { ...e, folder: true as const } : e)),
+    }
+    expect(structureCandidates(g, ['docs/d0.js', 'cmd/c0.go'], DEFAULT_TEST_GLOBS)).toEqual([])
+    const wide = graph([
+      ...['a', 'b', 'c', 'd', 'e'].map((n) => [`m/${n}/x.ts`, 'm/mid/y.ts'] as [string, string]),
+      ['m/mid/y.ts', 'm/low/z.ts'],
+    ])
+    const [c] = structureCandidates(wide, ['m/a/x.ts'], DEFAULT_TEST_GLOBS)
+    expect(c?.value).toBe('m/a,m/b,m/c,m/d,m/e>m/mid>m/low')
+    expect(c?.label).toMatch(/^m의 층\(위 > 아래\): a·b·c 외 2 > mid > low\./)
+  })
+
   test('쌍: 한쪽 방향(5 이상, 반대 0), 거의 한쪽(10 이상, 반대 1~2). 문턱 아래는 없다. 무게 순 다섯까지', () => {
     const many = (from: string, to: string, n: number): [string, string][] =>
       Array.from({ length: n }, (_, i) => [`${from}/f${i}.py`, `${to}/t.py`])

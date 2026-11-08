@@ -150,6 +150,30 @@ describe('풀기', () => {
     expect(f.unseen).toEqual([{ from: 'src/ui/v.ts', line: 5, spec: '@/missing' }])
   })
 
+  test('JS: tsconfig의 extends(상대 경로)를 따라가 paths를 물려받고 baseUrl은 자식 것이 이긴다(castore 시범)', () => {
+    const f = facts({
+      'tsconfig.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "~/*": ["*"] } } }',
+      'demo/tsconfig.json':
+        '{ "extends": "../tsconfig.json", "compilerOptions": { "baseUrl": "src" } }',
+      'demo/tsconfig.build.json': '{ "extends": "./tsconfig" }',
+      'demo/src/a.ts': "import p from '~/pokemons'",
+      'demo/src/pokemons/index.ts': '',
+      'lib/x.ts': "import y from '~/lib/y'",
+      'lib/y.ts': '',
+      'pkg/tsconfig.json':
+        '{ "extends": "@tsconfig/node20/tsconfig.json", "compilerOptions": { "paths": { "#/*": ["./src/*"] } } }',
+      'pkg/src/m.ts': "import n from '#/n'",
+      'pkg/src/n.ts': '',
+    })
+    expect(f.edges.map((e) => `${e.from} → ${e.to}`)).toEqual([
+      'demo/src/a.ts → demo/src/pokemons/index.ts',
+      'lib/x.ts → lib/y.ts',
+      // baseUrl이 없으면 paths의 대상은 paths를 적은 tsconfig의 폴더 기준
+      'pkg/src/m.ts → pkg/src/n.ts',
+    ])
+    expect(f.unseen).toEqual([])
+  })
+
   test('JS: 풀지 못한 상대 경로와 동적 import는 못 봄. 자기 자신과 같은 대상은 한 번', () => {
     const f = facts({
       'a.js': "import './gone'\nimport('./a.js')\nrequire('./b')\nrequire('./b')\nimport(x)",
@@ -213,9 +237,9 @@ describe('풀기', () => {
       'internal/db/db.go': 'package db',
       'tools/gen/gen.go': 'package gen',
     })
-    expect(f.edges.map((e) => `${e.from}:${e.line} → ${e.to}`)).toEqual([
-      'cmd/app/main.go:5 → internal/db',
-      'cmd/app/main.go:6 → tools/gen',
+    expect(f.edges.map((e) => `${e.from}:${e.line} → ${e.to}${e.folder ? '/' : ''}`)).toEqual([
+      'cmd/app/main.go:5 → internal/db/',
+      'cmd/app/main.go:6 → tools/gen/',
     ])
     expect(f.unseen.map((u) => u.spec)).toEqual(['example.com/m/gone'])
   })
