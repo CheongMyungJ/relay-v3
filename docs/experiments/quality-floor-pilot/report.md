@@ -118,12 +118,12 @@ relay-v3 `ff41612`(문제 1·2·3·6 고침, V64~V68). 언어마다 레포 5개,
 
 ### 새로 찾은 relay 문제
 
-7. **Python 설치가 lint 도구를 안 깐다**(tenacity): 초안이 고른 도구가 설치한 묶음에 있는지 보지 않는다.
-8. **Python 설치 파일을 잘못 고른다**(humanize: `requirements-mypy.txt`): 이름에 `mypy`, `docs`, `lint`가 든 requirements를 설치 본으로 고르지 말아야 한다.
-9. **`go.mod` 없는 Go 레포를 모른다**(pkg/errors).
-10. **여러 모듈 Maven**(gson): 빠른 검사로 `test-compile` 대신 `-DskipTests install`(로컬 저장소에 씀) 또는 `verify`.
-11. **Kotlin 멀티플랫폼**(turbine): `jvmTestClasses`, `jvmTest`, 결과 경로 `build/test-results/jvmTest`.
-12. **Rust 시험 수**: nextest가 없으면 시험 수가 없다. `cargo test -- -Z unstable-options --format json`은 안정판에서 안 되므로, 기본 출력의 `test result:` 줄을 읽는 길을 볼 만하다.
+7. **Python 설치가 lint 도구를 안 깐다**(tenacity): 초안이 고른 도구가 설치한 묶음에 있는지 보지 않는다. → **고침**(V69)
+8. **Python 설치 파일을 잘못 고른다**(humanize: `requirements-mypy.txt`): 이름에 `mypy`, `docs`, `lint`가 든 requirements를 설치 본으로 고르지 말아야 한다. → **고침**(V69)
+9. **`go.mod` 없는 Go 레포를 모른다**(pkg/errors). → **고침**(V70: 알아보기만 하고 명령은 넣지 않음)
+10. **여러 모듈 Maven**(gson): 빠른 검사로 `test-compile` 대신 `-DskipTests install`(로컬 저장소에 씀) 또는 `verify`. → **고침**(V70: verify)
+11. **Kotlin 멀티플랫폼**(turbine): `jvmTestClasses`, `jvmTest`, 결과 경로 `build/test-results/jvmTest`. → **고침**(V70)
+12. **Rust 시험 수**: nextest가 없으면 시험 수가 없다. `cargo test -- -Z unstable-options --format json`은 안정판에서 안 되므로, 기본 출력의 `test result:` 줄을 읽는 길을 볼 만하다. → **고침**(V71: `test_format: 'cargo-test'`)
 
 ### 다음
 
@@ -134,3 +134,25 @@ relay-v3 `ff41612`(문제 1·2·3·6 고침, V64~V68). 언어마다 레포 5개,
 ### 사용자 결정 (2026-11-08, ✅)
 
 - '여러 언어 초안'의 끄는 조건은 지금 적용하지 않는다. relay 탓 문제 7~12를 고친 뒤, 끄는 조건에 **'환경 탓(이 기계의 네트워크, JDK·Gradle 판)은 분모에서 뺀다'**를 더해 다시 잰다. 그때까지 Java·Kotlin 레시피는 그대로 둔다.
+
+## 7~12를 고친 뒤 (2026-11-08)
+
+relay-v3에서 문제 7~12를 고쳤다(V69~V71). 끄는 조건에 사용자 결정대로 '환경 탓은 분모에서 뺀다'를 더하고, 드라이런이 뚜렷한 환경 탓을 출력의 무늬로 표시한다(V72). 관문 판 4(V73, 재생 digest 같음). 같은 기계에서 문제의 레포와, 고친 레시피가 닿는 앞서 되던 레포를 `relay init --try`로 다시 돌렸다(레포의 작업 트리는 모두 깨끗하게 남았다). 레시피가 그대로인 레포(JS 5개, pflag·uuid·cast·go-cmp, jsoup·commons-cli·commons-text·javapoet)는 다시 돌리지 않았다.
+
+| 레포 | 고치기 전 | 고친 뒤 |
+|---|---|---|
+| tenacity | relay: `.[test]`만 깔아 ruff·mypy 없음 | setup `pip install 'pip>=25.1'` 뒤 `-e . --group dev`(297초), lint·types(`mypy`, [tool.mypy] files)·수용 시험 됨, 시험 185 |
+| humanize | relay: `requirements-mypy.txt`만 깔아 pytest 종료 코드 4 | setup `-e '.[tests]'`, 수용 시험(`--cov`) 됨, 시험 878, Cobertura 읽음. mypy는 requirements-mypy.txt에만 있어 빼고 제안 |
+| itsdangerous·markupsafe·blinker | 됨 | 됨(`uv sync` 그대로, mypy는 [tool.mypy] files로 대상 없이). 시험 297·80·25 |
+| pkg/errors | relay: Go를 모름 | 'Go (go.mod 없음)', 명령 없음과 `go mod init` 제안(`GO111MODULE=off go test ./...`는 GOPATH 밖에서 `cannot find package "github.com/pkg/errors"`로 안 됨을 확인), 래칫 셋의 지금 값 |
+| gson | relay: test-compile이 JPMS 시험 모듈에서 `module not found` | `-DskipTests verify`(43초)·`spotless:check`·수용 시험 `verify` 됨, 시험 4,910 |
+| turbine | relay: `testClasses` 없음 | 첫 판: `jvmTestClasses`·`jvmTest`가 `:compileKotlinJvm`까지 돌고 Maven Central의 429(Too Many Requests)로 끝남(드라이런이 '네트워크'로 표시). 몇 분 뒤 다시: 수용 시험 `jvmTest` 됨(시험 144, `build/test-results/jvmTest`), `jvmTestClasses`는 또 429: **환경** |
+| kotlinpoet | 환경(Kotlin 컴파일 변환) | 첫 판은 같은 429. 다시: `testClasses jvmTestClasses`(65초)·수용 시험 `test jvmTest` 됨, 시험 1,188(interop의 test와 kotlinpoet의 jvmTest를 함께 묶음) |
+| itoa·ryu·semver | 됨, 시험 수 없음 | 됨, 수용 시험 `cargo test --no-fail-fast > .relay-out/cargo-test.txt`로 시험 13·51·38 |
+| log | 레포(clippy `-D warnings`) | 같음(clippy만 빠짐), 시험 59 |
+| anyhow | 레포·환경(`test_fmt`) | 같음: 수용 시험이 빠짐(`종료 코드 101: --test test_fmt`), 무늬 없음 |
+| kotlin-result·moshi·kotlinx-cli | 환경 | 같음. 드라이런이 '네트워크'·'Gradle 플러그인 저장소'·'JDK 판'으로 표시 |
+
+**언어마다 다시 센 것(환경 탓을 분모에서 뺌, 다시 돌리지 않은 레포는 앞의 결과).** JS 5/5. Python 5/5(tenacity, humanize가 더해짐). Go 3/5(pkg/errors는 명령 없는 초안이라 '바로 돎'에 넣지 않았다, go-cmp는 레포 탓). Rust 3/5(anyhow·log는 레포 탓으로 셈. anyhow는 이 컴파일러 판에서만 실패해 환경이라 볼 수도 있지만 무늬가 없어 손으로 레포로 둠). Java 3/4(gson이 더해짐, javapoet은 환경이라 분모에서 뺌, commons-text는 레포·환경이라 레포로 둠). Kotlin 1/1(kotlinpoet. turbine은 수용 시험이 되었지만 컴파일이 429로 안 돼 환경, kotlin-result·moshi·kotlinx-cli도 환경이라 분모에서 뺌). 끄는 조건에 걸리는 언어는 없다. Kotlin은 남은 분모가 최소 n(레포 5)에 모자라 판정하지 않고, 환경 탓을 줄인 기계(Maven Central·Gradle 플러그인 저장소에 닿고 JDK를 고를 수 있는 곳)에서 다시 잰다(devices.md의 고친 끄는 조건 그대로).
+
+**남은 것.** turbine의 컴파일 검사가 한 번에 되는 것은 이 기계에서 보지 못했다(Maven Central 429, 수용 시험은 됨). 환경 탓 무늬는 첫 가름이고, 무늬 없는 환경 탓(javapoet의 옛 release 설정, commons-text의 XML 엔티티 상한, anyhow)은 손으로 가른다. 앱의 초안 화면은 환경 탓 표시를 아직 보이지 않는다(`relay init` 요약에만).

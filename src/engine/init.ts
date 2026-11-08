@@ -22,11 +22,15 @@ async function listFiles(root: string): Promise<string[]> {
   return listed.split('\0').filter((f) => f !== '')
 }
 
-/** 레시피가 읽는 글: 매니페스트(깊이 둘까지), .config/nextest.toml, CI 워크플로 */
+/** 레시피가 읽는 글: 매니페스트(깊이 둘까지), .config/nextest.toml, Gradle 판 목록(V70), CI 워크플로 */
 function wanted(path: string): boolean {
   if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(path)) return true
   if (path.split('/').length > 4 || matchAny(path, [...SCAN_EXCLUDE])) return false
-  return manifestLang(path) !== null || path.endsWith('.config/nextest.toml')
+  return (
+    manifestLang(path) !== null ||
+    path.endsWith('.config/nextest.toml') ||
+    /(^|\/)gradle\/libs\.versions\.toml$/.test(path)
+  )
 }
 
 /** 레포 루트(작업 트리)를 훑는다 */
@@ -134,14 +138,22 @@ export function summaryLines(r: DraftReport): string[] {
         : `돌려 본 커밋: ${r.dry.head.slice(0, 7)} (check worktree에서 한 번씩)`,
     )
     if (r.dry.commands.length > 0) out.push('명령:')
+    const env = (c: { environment?: string }) =>
+      c.environment === undefined ? '' : ` [환경 탓으로 보임: ${c.environment}]`
     for (const c of r.dry.commands)
       out.push(
-        `  ${c.ok ? '됨  ' : '안 됨'} ${c.id}: ${c.run}${secs(c.duration_ms)}${c.ok ? '' : ` — ${c.reason ?? ''}`}`,
+        `  ${c.ok ? '됨  ' : '안 됨'} ${c.id}: ${c.run}${secs(c.duration_ms)}${c.ok ? '' : ` — ${c.reason ?? ''}${env(c)}`}`,
       )
     if (r.dry.values.length > 0) out.push('지금 값:')
     for (const v of r.dry.values) out.push(`  ${v.id}: ${v.text}`)
     if (r.dry.fixes.length > 0) out.push('고칠 것(초안에서 뺌):')
-    for (const f of r.dry.fixes) out.push(`  - ${f.id} \`${f.run}\`: ${f.reason ?? ''}`)
+    for (const f of r.dry.fixes) out.push(`  - ${f.id} \`${f.run}\`: ${f.reason ?? ''}${env(f)}`)
+    // 끄는 조건(devices.md '여러 언어 초안')은 환경 탓을 분모에서 뺀다. 나머지(relay 탓인지 레포 탓인지)는 사람이 가른다
+    const envFixes = r.dry.fixes.filter((f) => f.environment !== undefined).length
+    if (r.dry.fixes.length > 0)
+      out.push(
+        `  가름: 환경 탓으로 보임 ${envFixes}, 나머지 ${r.dry.fixes.length - envFixes}(relay 탓인지 레포 탓인지는 사람이 가름)`,
+      )
   }
   if (r.plan.questions.length > 0)
     out.push('묻는 것(답: --human-path, --boundary 앞:뒤, --ci-check):')

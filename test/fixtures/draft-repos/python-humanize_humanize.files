@@ -1,0 +1,15 @@
+.gitignore
+.pre-commit-config.yaml
+.readthedocs.yml
+.yamlfmt.yaml
+LICENCE
+README.md
+RELEASING.md
+docs/requirements.txt
+mkdocs.yml
+pyproject.toml
+requirements-mypy.txt
+src/humanize/__init__.py
+src/humanize/filesize.py
+src/humanize/i18n.py
+tox.ini

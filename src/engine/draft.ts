@@ -54,6 +54,9 @@ const TAG: Readonly<Record<Unit['lang'], string>> = {
   rust: 'rust',
 }
 
+/** 돌릴 것이 있는 단위 */
+const runs = (u: Unit) => u.fast.length > 0 || !!u.acceptance || !!u.test || u.ratchets.length > 0
+
 export function planDraft(scan: RepoScan): DraftPlan {
   const files = scan.files.map((f) => (f.startsWith('./') ? f.slice(2) : f))
   const s: RepoScan = { files, texts: scan.texts }
@@ -61,9 +64,8 @@ export function planDraft(scan: RepoScan): DraftPlan {
   const units: Unit[] = []
   for (const d of dirs) {
     const u = buildUnit(s, d.lang, d.dir)
-    // 돌릴 것이 없는 단위(설치만 있음)는 넣지 않는다
-    if (u !== null && (u.fast.length > 0 || u.acceptance || u.test || u.ratchets.length > 0))
-      units.push(u)
+    // 돌릴 것이 없는 단위(설치만 있음)는 넣지 않는다. 알아보기만 한 단위(bare, V70)는 언어와 제안을 보이려고 넣는다
+    if (u !== null && (u.bare === true || runs(u))) units.push(u)
   }
   // 루트 package.json이 없어도 JS 잠금 파일이 있으면 core 초안이 setup을 넣는다(V19 그대로)
   if (!units.some((u) => u.lang === 'js' && u.dir === '.')) {
@@ -73,7 +75,6 @@ export function planDraft(scan: RepoScan): DraftPlan {
   const tags = tagsOf(units)
   const primary = pickPrimary(units, files)
   // 명령이 있는 단위가 하나면 id를 그대로 둔다(JS 하나뿐인 레포는 core 초안과 같다)
-  const runs = (u: Unit) => u.fast.length > 0 || !!u.acceptance || !!u.test || u.ratchets.length > 0
   const single = units.filter(runs).length <= 1
 
   const fast: CommandSpec[] = []
@@ -122,8 +123,10 @@ export function planDraft(scan: RepoScan): DraftPlan {
     rules: [],
     auto: [{ ...DRAFT_AUTO }],
   })
+  // 단위가 하나면(알아보기만 한 단위 포함) 제안에 단위 이름을 붙이지 않는다
+  const one = units.length <= 1
   const suggestions = units.flatMap((u) =>
-    u.suggestions.map((t) => (single ? t : `${u.label}(${u.dir}): ${t}`)),
+    u.suggestions.map((t) => (one || (single && runs(u)) ? t : `${u.label}(${u.dir}): ${t}`)),
   )
   for (const s of skipped)
     suggestions.push(`매니페스트가 여러 폴더에 있어 초안에 넣지 않음(사람이 고름): ${s}`)

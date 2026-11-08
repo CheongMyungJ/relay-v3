@@ -267,16 +267,18 @@ describe('parseQuality: 잘못된 입력', () => {
     fails(acceptance({ id: 't', run: 'x' }), 'commands.acceptance.junit: 필요함')
   })
 
-  test('시험 결과의 꼴(test_format, V65): junit | go-test-json, junit 칸과 함께만', () => {
+  test('시험 결과의 꼴(test_format, V65·V69): junit | go-test-json | cargo-test, junit 칸과 함께만', () => {
     const go = { id: 't', run: 'go test -json ./... > o.json', junit: 'o.json' }
     expect(
       valueOf(doc(acceptance({ ...go, test_format: 'go-test-json' }))).commands.acceptance,
     ).toEqual({ ...go, test_format: 'go-test-json' })
+    const cargo = { id: 't', run: 'cargo test > o.txt', junit: 'o.txt', test_format: 'cargo-test' }
+    expect(valueOf(doc(acceptance(cargo))).commands.acceptance).toEqual(cargo)
     // 칸이 없는 옛 명령은 읽은 값에도 칸이 없다
     expect(valueOf(doc(acceptance(go))).commands.acceptance).toEqual(go)
     fails(
       acceptance({ ...go, test_format: 'tap' }),
-      "commands.acceptance.test_format: 'junit', 'go-test-json' 중 하나여야 함",
+      "commands.acceptance.test_format: 'junit', 'go-test-json', 'cargo-test' 중 하나여야 함",
     )
     fails(
       { commands: { fast: [{ id: 'a', run: 'x', test_format: 'junit' }] } },

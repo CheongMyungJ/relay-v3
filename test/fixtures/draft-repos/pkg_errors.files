@@ -1,0 +1,16 @@
+.gitignore
+.travis.yml
+LICENSE
+Makefile
+README.md
+appveyor.yml
+bench_test.go
+errors.go
+errors_test.go
+example_test.go
+format_test.go
+go113.go
+go113_test.go
+json_test.go
+stack.go
+stack_test.go

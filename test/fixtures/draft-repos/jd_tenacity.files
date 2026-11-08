@@ -1,0 +1,11 @@
+.editorconfig
+.gitignore
+.mergify.yml
+.readthedocs.yml
+LICENSE
+README.rst
+doc/source/conf.py
+pyproject.toml
+reno.yaml
+tenacity/__init__.py
+tenacity/_utils.py

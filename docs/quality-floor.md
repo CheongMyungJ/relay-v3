@@ -1,6 +1,6 @@
 # 품질 바닥 넓히기: 래칫 셋과 여러 언어 초안
 
-- 상태: **설계**(2026-11-07). A(①의 래칫 셋: 억누름, 중복, 바뀐 줄 커버리지)는 **만듦**(2026-11-07, [design.md](design.md) V55~V59). B(5절: 여러 언어 초안, 드라이런, 묻는 화면)도 **만듦**(2026-11-07, V60~V63). 실제 레포 시범(정적·드라이런, [experiments/quality-floor-pilot/report.md](experiments/quality-floor-pilot/report.md))은 했고 그 찾은 문제 1·2·3·6을 고쳤다(2026-11-08, V64~V68). 나머지(6절의 [설정] 안내, 장기 평가)는 만들기 전이다. 만든 절에는 '만든 것'과 '설계와 다른 것'을 더한다.
+- 상태: **설계**(2026-11-07). A(①의 래칫 셋: 억누름, 중복, 바뀐 줄 커버리지)는 **만듦**(2026-11-07, [design.md](design.md) V55~V59). B(5절: 여러 언어 초안, 드라이런, 묻는 화면)도 **만듦**(2026-11-07, V60~V63). 실제 레포 시범(정적·드라이런, [experiments/quality-floor-pilot/report.md](experiments/quality-floor-pilot/report.md))은 했고 그 찾은 문제 1·2·3·6을 고쳤다(2026-11-08, V64~V68). 30개로 다시 잰 시범의 새 문제 7~12를 고치고 끄는 조건의 분모에서 환경 탓을 뺐다(2026-11-08, V69~V73). 나머지(6절의 [설정] 안내, 장기 평가)는 만들기 전이다. 만든 절에는 '만든 것'과 '설계와 다른 것'을 더한다.
 - 근거: [philosophy.md](philosophy.md) 원칙 3(품질의 바닥은 레포에 산다), [v2-evidence.md](v2-evidence.md)(v2에는 품질 래칫, 커버리지, 복잡도, 아키텍처 규칙을 기계로 보는 층이 없었다), [design.md](design.md) V9·V19·V20(품질 기준, 초안), M3 장기 평가([experiments/m3/report.md](experiments/m3/report.md): 구조 지표가 바닥·천장에 붙어 차이가 보이지 않음).
 - 이 글은 relay에 품질 장치가 하나도 없다고 놓고 처음부터 적는다. 지금 relay-v3에 있는 것과 새로 만들 것을 표시한다.
 
@@ -122,6 +122,15 @@ Work마다 사람이나 리뷰어가 diff를 보는 것으로는 둘 다 잘 못
 - 중복(문제 3, V67)은 2절 아래 '만든 것'이 아니라 [design.md](design.md) V67: 한 파일 안의 표 같은 반복을 세지 않는다. Rust의 `fuzz/`(문제 5)는 늘 빼는 곳에 더하지 않았다(그 쌍이 모두 표 같은 반복이었다).
 - 문제 4(기계에 없는 golangci-lint)는 고치지 않았다: 드라이런이 빼는 설계 그대로이고 시범 기계에는 있었다.
 
+**만든 것 (30개 시범 뒤 고침, V69~V72).** 다시 잰 시범(레포 30개)의 새 문제 7~12를 고쳤다.
+
+- Python(문제 7·8, V69): 도구(pytest, pytest-cov, ruff·flake8, mypy·pyright, import-linter, radon)는 setup이 실제로 까는 묶음에 있을 때만 쓴다. pyproject의 extra·PEP 735 묶음·poetry group·uv 기본 묶음을 읽어(engine `python-deps.ts`, 작은 TOML 읽개 `toml-lite.ts`) 늘 까는 것에 없는 도구가 든 묶음을 setup에 더한다(uv `--extra`·`--group`, poetry `-E`·`--with`, pip `-e '.[x]'`·`--group`). pip의 `--group`은 pip 25.1부터라 venv의 pip을 먼저 올린다(`pip install 'pip>=25.1'`). 어디에도 깔 길이 없는 도구는 빼고 제안한다. 이름이 좁은 쓰임(mypy, typing, lint, docs, tools 등)인 requirements는 설치 본으로 고르지 않는다. `--cov`는 pytest-cov를 깔 때만. 위 5.2 표의 Python '설치' 칸은 이제 'uv sync(·--extra·--group), poetry install(·-E·--with), pip install -r 설치 본 requirements -e .[extra] --group 묶음'이다.
+- Go(문제 9, V70): go.mod 없는 옛 Go 레포는 Go로 알아보지만 명령은 넣지 않는다(`GO111MODULE=off`는 GOPATH 밖에서 레포 자신의 가져오기 경로를 찾지 못한다. `go mod init`은 레포를 바꿔 제안 글).
+- Java(문제 10, V70): 여러 모듈 Maven의 빠른 검사는 `-DskipTests verify`, 수용 시험은 `verify`(install은 ~/.m2에 SNAPSHOT을 써서 쓰지 않는다).
+- Kotlin(문제 11, V70): 멀티플랫폼(Gradle 판 목록의 별칭까지 읽음)은 `jvmTestClasses`·`jvmTest`와 `build/test-results/jvmTest`. JVM 하위 프로젝트가 함께 있으면 두 작업 모두.
+- Rust(문제 12, V71): nextest가 없으면 수용 시험 `cargo test --no-fail-fast > .relay-out/cargo-test.txt`(`test_format: 'cargo-test'`)를 앱이 읽어(engine test-report.ts `parseCargoTest`) 시험 수 래칫이 든다. 위 5.2 표의 Rust '시험' 칸은 'nextest의 JUnit profile이면 JUnit, 아니면 cargo test 출력'이다.
+- 드라이런(V72): 안 된 명령의 출력이 뚜렷한 환경 탓의 무늬(플러그인 저장소, JDK 판, 네트워크, Gradle 받기 실패, 도구 판)면 요약에 `[환경 탓으로 보임: …]`과 '가름' 줄을 찍는다. 8절 끄는 조건의 분모에서 환경 탓을 뺀다.
+
 ### 5.3 Python 초안의 예
 
 ```json
@@ -171,6 +180,8 @@ CLAUDE.md의 층대로, 한 동작은 가장 낮은 층에서 한 번만 자세�
 
 **만든 것 (시범 뒤 고침).** [단위] `draft-js-split.test.ts`(defu·ufo의 package.json 모양 그대로, 나누기와 나누지 않음, 주 단위가 아닐 때), `draft-recipes.test.ts`(Go: pflag·uuid 모양에 go test -json 수용 시험, 줄 수 래칫의 소스 범위), `test-report.test.ts`(이 기계의 go 1.24가 낸 `go test -json` 출력 두 벌: 통과·실패·건너뜀·하위 시험·시험 없는 패키지·빌드 실패, 시간 초과), `quality.test.ts`(`test_format`), `duplication.test.ts`(itoa `fuzz_itoa.rs`의 match 팔 12줄, markupsafe의 split·rsplit·splitlines와 번갈아 이어진 위임 메서드는 쌍이 아님, 표를 다른 파일에 복사하면 한 쌍, 바로 아래 복사와 셋이 이어진 함수는 셈). [어댑터] `draft-dry-run.test.ts`의 Go: 실제 go로 `go test -json` 수용 시험이 되고 시험 3을 읽는다. 관문 판 3(V68, 재생 digest 같음, epoch 1을 이음).
 
+**만든 것 (30개 시범 뒤 고침).** [단위] `draft-pilot30.test.ts`(시범 레포의 매니페스트 그대로 `test/fixtures/draft-repos/`: tenacity의 `--group dev`와 [tool.mypy] files, humanize의 `-e '.[tests]'`와 requirements-mypy.txt 제안, itsdangerous의 uv 기본 묶음, uv·poetry의 묶음 플래그, 묶음 고르기, 좁은 requirements 가르기와 `-r`, pkg/errors의 'Go (go.mod 없음)', gson의 verify, turbine·kotlinpoet의 jvmTest, 플러그인·판 목록 읽기, TOML 읽개, 환경 탓 무늬와 요약의 가름 줄), `test-report.test.ts`(이 기계의 cargo 1.99가 낸 출력 네 벌), `quality.test.ts`(`cargo-test`), `draft-recipes.test.ts`(Rust의 수용 시험). [어댑터] `draft-dry-run.test.ts`: 실제 pip(venv)으로 PEP 735 dev 묶음을 `--group`으로 깔아 ruff·pytest가 돎, 실제 cargo로 cargo test 출력의 시험 4(통합 시험·doc 시험·ignored), 환경 탓 무늬로 끝난 명령의 표시. 관문 판 4(V73, 재생 digest 같음, epoch 1을 이음).
+
 **설계와 다른 것 (B).** [흐름]의 Go 레포 고정 자료는 따로 두지 않았다: Go 레시피는 [단위]가, Go 드라이런은 [어댑터]가 실제 go로 보고, [흐름]은 이어지는 것(앱의 두 단계와 작업 트리)을 Python 하나로 본다.
 
 ## 8. 끄는 조건 (devices.md에 올릴 것, 안)
@@ -183,5 +194,7 @@ CLAUDE.md의 층대로, 한 동작은 가장 낮은 층에서 한 번만 자세�
 | 여러 언어 초안 | 레포를 훑어 고른 명령이 대개 바로 돈다 | 드라이런에서 고친 것 없이 도는 초안이 절반 아래면 그 언어의 레시피를 '제안만'으로 내린다 | 언어마다 레포 5 |
 
 **만든 것 (A).** 위 셋을 [devices.md](devices.md)에 올렸다(억누름 래칫, 중복 래칫, 바뀐 줄 커버리지). 지표에 '거짓 양성(사람이 틀린 셈으로 표시)'을 두었지만 표시할 자리(화면의 [틀린 셈])는 아직 없어 손으로 센다. 바뀐 줄 커버리지에는 '보고서에 없어 세지 않은 파일 수'를 지표로 더했다(V57의 낙관 쪽 선택을 지켜보려고).
+
+**만든 것 (끄는 조건 고침, V72).** 사용자 결정(2026-11-08 ✅)으로 '여러 언어 초안'의 분모에서 환경 탓(이 기계의 네트워크, JDK·Gradle·도구 판)으로만 안 된 레포를 뺀다. 드라이런이 뚜렷한 환경 탓을 출력의 무늬로 표시하고, 무늬 없는 것과 relay·레포의 가름은 사람이 시범 기록에 적는다.
 
 **만든 것 (B).** '여러 언어 초안'을 [devices.md](devices.md)에 올렸다(끄는 조건은 위 표 그대로에 '사람이 쓴 뒤 같은 칸을 절반 넘게 고치면 그 칸의 레시피를 고친다'를 더함). 초안 결과는 장부에 남기지 않아 지표는 지금 손으로 센다. 억누름·중복 래칫의 상태 칸에 '초안이 늘 넣는다(V63)'를 더했다.

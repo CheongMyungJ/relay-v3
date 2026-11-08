@@ -164,7 +164,13 @@ const paths = list(relPath)
 const readCommand: Read<CommandSpec> = (v, p, e) => {
   const o = shape(v, p, e, ['id', 'run', 'timeout_sec', 'junit', 'test_format'])
   if (o === null) return { id: '', run: '' }
-  const format = opt(o, 'test_format', p, e, oneOf(['junit', 'go-test-json'] as const))
+  const format = opt(
+    o,
+    'test_format',
+    p,
+    e,
+    oneOf(['junit', 'go-test-json', 'cargo-test'] as const),
+  )
   if (format !== undefined && o['junit'] === undefined)
     e.push(`${sub(p, 'test_format')}: junit이 있어야 함`)
   return prune({

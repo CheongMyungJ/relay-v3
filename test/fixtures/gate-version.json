@@ -1,9 +1,9 @@
 {
-  "version": 3,
+  "version": 4,
   "files": {
     "src/core/gate.ts": "97fe1b2fdc672a00",
     "src/core/lines.ts": "239c99de48b4e6b6",
-    "src/core/quality.ts": "82bb0d0ec430d331",
+    "src/core/quality.ts": "6a4be376ba1a63e3",
     "src/core/review.ts": "6f7ae08b3540bbed",
     "src/core/evidence.ts": "de4149670c199f23",
     "src/core/contract.ts": "c5a8b92921525cd0",
@@ -20,11 +20,12 @@
     "src/engine/suppressions.ts": "f4b11293e2107aa7",
     "src/engine/duplication.ts": "20f41737ed0309d1",
     "src/engine/coverage.ts": "495c9d1162b00a74",
-    "src/engine/test-report.ts": "8280c196af2a63d3"
+    "src/engine/test-report.ts": "320226b54539299f"
   },
   "replays": {
     "1": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
     "2": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
-    "3": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d"
+    "3": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d",
+    "4": "c0b3a3933a7d88498f8d9fffc19471ed6bd5873b09461c28321d9a6010d9579d"
   }
 }

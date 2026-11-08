@@ -352,7 +352,7 @@ describe('Java·Kotlin', () => {
 })
 
 describe('Rust', () => {
-  test('cargo fetch, 엄격한 clippy 표시가 없으면 cargo check, cargo test, rustfmt 설정이면 형식', () => {
+  test('cargo fetch, 엄격한 clippy 표시가 없으면 cargo check, 수용 시험은 cargo test의 출력(V69), rustfmt 설정이면 형식', () => {
     const q = plan({
       'Cargo.toml': '[package]\nname = "x"\n',
       'Cargo.lock': null,
@@ -367,9 +367,14 @@ describe('Rust', () => {
     expect(q.commands.fast).toEqual([
       { id: 'check', run: 'cargo check --all-targets' },
       { id: 'format', run: 'cargo fmt --check' },
-      { id: 'test', run: 'cargo test' },
     ])
-    expect(q.ratchets[0]).toEqual(FILE_SIZE)
+    expect(q.commands.acceptance).toEqual({
+      id: 'test',
+      run: 'cargo test --no-fail-fast > .relay-out/cargo-test.txt',
+      junit: '.relay-out/cargo-test.txt',
+      test_format: 'cargo-test',
+    })
+    expect(q.ratchets.slice(0, 2)).toEqual([{ id: 'tests', kind: 'test_count' }, FILE_SIZE])
   })
 
   test('[lints.clippy]면 clippy -D warnings, nextest의 JUnit profile이면 수용 시험', () => {

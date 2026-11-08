@@ -14,6 +14,7 @@ import { parseCoverage } from './coverage.ts'
 import { duplication, MAX_FILE_BYTES, scoped } from './duplication.ts'
 import { inScan, langOf, listText, percent, SCAN_EXCLUDE } from './languages.ts'
 import { GREP_NEEDLES, suppressionsInLine } from './suppressions.ts'
+import { formatLabel } from './test-report.ts'
 import { DEFAULT_COMMAND_TIMEOUT_SEC, message, runIn } from './workspace.ts'
 
 export type DryKind = 'setup' | 'fast' | 'acceptance' | 'ratchet'
@@ -26,6 +27,11 @@ export interface DryCommand {
   ok: boolean
   /** 안 됐으면 까닭 */
   reason?: string
+  /**
+   * 안 된 까닭이 이 기계의 환경(네트워크, JDK·Gradle·도구 판)으로 보이면 그 무늬의 이름(V72). 출력의 무늬로만 가른다: 없으면
+   * relay(고른 명령·설치가 틀림)인지 레포(코드·시험이 실제로 실패)인지 앱은 모르고 사람이 가른다
+   */
+  environment?: string
   duration_ms?: number
 }
 
@@ -66,6 +72,37 @@ const lastLine = (t: string) =>
     .filter((l) => l !== '')
     .at(-1) ?? ''
 
+/**
+ * 환경 탓으로 보이는 실패의 무늬(V72, devices.md '여러 언어 초안'의 끄는 조건: 환경 탓은 분모에서 뺀다). 앞의 것이 먼저.
+ * 'Could not resolve'는 Gradle의 받기 실패 꼴만 본다(Maven의 'Could not resolve dependencies for project'는 모듈 사이의
+ * SNAPSHOT처럼 고른 명령 탓일 수 있다)
+ */
+const ENVIRONMENT: readonly [string, RegExp][] = [
+  ['Gradle 플러그인 저장소', /Plugin \[id: '[^']+'[^\]]*\] was not found/],
+  [
+    'JDK 판',
+    /Unsupported class file major version|has been compiled by a more recent version of the Java Runtime|Unsupported major\.minor version|No matching toolchains? found|Cannot find a Java installation|invalid (?:source|target) release/,
+  ],
+  [
+    '네트워크',
+    /UnknownHostException|Connection (?:refused|reset|timed out)|Network is unreachable|Temporary failure in name resolution|Could not resolve host|Failed to connect to|Could not (?:GET|HEAD) '|Could not transfer artifact|PKIX path building failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|failed to download from|Max retries exceeded/,
+  ],
+  [
+    '받기 실패(Gradle)',
+    /Could not resolve (?:all (?:files|dependencies|artifacts) for configuration|plugin artifact|[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:)/,
+  ],
+  [
+    '도구 판',
+    /requires rustc [\d.]+ or newer|is not supported by the current version of|go: go\.mod requires go >=|requires a different Python|Could not determine java version|Gradle .* requires Java|Unsupported Java\. ?Your build is currently configured to use Java/,
+  ],
+]
+
+/** 실행의 출력(setup은 오류 글)이 환경 탓의 무늬에 맞으면 그 이름 */
+export function environmentCause(text: string): string | null {
+  for (const [name, re] of ENVIRONMENT) if (re.test(text)) return name
+  return null
+}
+
 /** 안 된 실행의 까닭 한 줄 */
 export function failReason(r: CommandRun, sec: number): string {
   if (r.timed_out) return `시간 초과 (${sec}초)`
@@ -98,21 +135,26 @@ export async function dryRun(o: DryRunOptions): Promise<DryRun> {
   try {
     let dir: string | null = null
     let blocked: string | null = null
+    let setupText: string | null = null
     const t0 = Date.now()
     try {
       const c = await prepareCheckout(o.home, key, o.root, 'head', head, q.setup)
-      if (c.setupError !== undefined) blocked = message(c.setupError)
-      else dir = c.dir
+      if (c.setupError !== undefined) {
+        blocked = message(c.setupError)
+        setupText = c.setupError
+      } else dir = c.dir
     } catch (e) {
       blocked = `worktree: ${message(e)}`
     }
     for (const c of planned) {
       if (c.kind === 'setup') {
+        const env = blocked === null ? null : environmentCause(setupText ?? blocked)
         commands.push({
           ...c,
           ok: blocked === null,
           duration_ms: Date.now() - t0,
           ...(blocked === null ? {} : { reason: blocked }),
+          ...(env === null ? {} : { environment: env }),
         })
         continue
       }
@@ -163,7 +205,15 @@ async function runOne(
   const started = Date.now()
   const r = await runIn(dir, head, spec)
   const done = { ...base, duration_ms: r.duration_ms }
-  if (!ok(r)) return { ...done, ok: false, reason: failReason(r, sec) }
+  if (!ok(r)) {
+    const env = r.timed_out ? null : environmentCause(`${r.stderr_tail}\n${r.stdout_tail}`)
+    return {
+      ...done,
+      ok: false,
+      reason: failReason(r, sec),
+      ...(env === null ? {} : { environment: env }),
+    }
+  }
   if (c.kind === 'ratchet') {
     const n = lastNumber(r.stdout_tail)
     if (n === null) return { ...done, ok: false, reason: '출력에서 숫자를 읽지 못함' }
@@ -172,7 +222,7 @@ async function runOne(
   }
   if (c.kind !== 'acceptance') return { ...done, ok: true }
   if ('junit' in spec && spec.junit !== undefined && r.tests === undefined) {
-    const what = spec.test_format === 'go-test-json' ? 'go test -json 출력' : 'JUnit'
+    const what = formatLabel(spec.test_format)
     return { ...done, ok: false, reason: `${what}을 읽지 못함 (${spec.junit})` }
   }
   const tests = r.tests ?? []

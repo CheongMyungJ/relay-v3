@@ -1,0 +1,12 @@
+.editorconfig
+.gitignore
+.pre-commit-config.yaml
+.readthedocs.yaml
+CHANGES.rst
+LICENSE.txt
+README.md
+docs/conf.py
+pyproject.toml
+src/itsdangerous/__init__.py
+src/itsdangerous/_json.py
+uv.lock
