@@ -156,3 +156,20 @@ relay-v3에서 문제 7~12를 고쳤다(V69~V71). 끄는 조건에 사용자 결
 **언어마다 다시 센 것(환경 탓을 분모에서 뺌, 다시 돌리지 않은 레포는 앞의 결과).** JS 5/5. Python 5/5(tenacity, humanize가 더해짐). Go 3/5(pkg/errors는 명령 없는 초안이라 '바로 돎'에 넣지 않았다, go-cmp는 레포 탓). Rust 3/5(anyhow·log는 레포 탓으로 셈. anyhow는 이 컴파일러 판에서만 실패해 환경이라 볼 수도 있지만 무늬가 없어 손으로 레포로 둠). Java 3/4(gson이 더해짐, javapoet은 환경이라 분모에서 뺌, commons-text는 레포·환경이라 레포로 둠). Kotlin 1/1(kotlinpoet. turbine은 수용 시험이 되었지만 컴파일이 429로 안 돼 환경, kotlin-result·moshi·kotlinx-cli도 환경이라 분모에서 뺌). 끄는 조건에 걸리는 언어는 없다. Kotlin은 남은 분모가 최소 n(레포 5)에 모자라 판정하지 않고, 환경 탓을 줄인 기계(Maven Central·Gradle 플러그인 저장소에 닿고 JDK를 고를 수 있는 곳)에서 다시 잰다(devices.md의 고친 끄는 조건 그대로).
 
 **남은 것.** turbine의 컴파일 검사가 한 번에 되는 것은 이 기계에서 보지 못했다(Maven Central 429, 수용 시험은 됨). 환경 탓 무늬는 첫 가름이고, 무늬 없는 환경 탓(javapoet의 옛 release 설정, commons-text의 XML 엔티티 상한, anyhow)은 손으로 가른다. 앱의 초안 화면은 환경 탓 표시를 아직 보이지 않는다(`relay init` 요약에만).
+
+## 마지막 다시 잼: 30개 모두, 한 빌드로 (2026-11-08)
+
+relay-v3 `1d9c28d`(문제 1~3, 6~12 고침, 끄는 조건에 환경 탓 빼기). 30개를 같은 빌드로 처음부터 다시 돌렸다(레포마다 확인 worktree를 지우며. 처음 돌릴 때 디스크가 차서 멈췄고, 이 세션이 만든 시범 작업 폴더와 지난 평가의 작업 폴더를 지운 뒤 다시 했다). 30개 모두 레포의 작업 트리가 깨끗했다.
+
+| 언어 | 모든 명령이 됨 | 안 된 레포 | 가름 | 환경 탓을 뺀 셈 | 끄는 조건 |
+|---|---|---|---|---|---|
+| JS/TS | 5/5 (defu 23, ufo 491, pathe 483, destr 22, scule 75 시험) | - | - | 5/5 | 남음 |
+| Python | 5/5 (itsdangerous 297, tenacity 185, markupsafe 80, blinker 25, humanize 878) | - | - | 5/5 | 남음 |
+| Go | 3/5 (pflag 228, uuid 213, cast 8,987) | go-cmp(`go vet`이 레포 코드의 경고로 실패, 시험 733은 됨), pkg/errors(`go.mod` 없음: 명령 없이 제안만) | 레포, relay(설계대로 제안만) | 3/5 | 남음 |
+| Rust | 3/5 (itoa 13, ryu 51, semver 38) | anyhow(`cargo test`의 `test_fmt` 실패), log(clippy `-D warnings` 실패, 시험 59는 됨) | 레포·도구판(무늬 없음, 손으로 가름) | 3/5 | 남음 |
+| Java | 3/5 (commons-cli 1,002, gson 4,910, jsoup 2,648) | commons-text(이 JDK의 XML 엔티티 상한에 시험이 걸림), javapoet(이 JDK에서 옛 `release` 설정이 컴파일 실패) | 환경(JDK, 무늬 없음, 손으로 가름) | 3/3 | **판정 없음**(환경을 빼면 n 3 < 5) |
+| Kotlin | 2/5 (turbine 144, kotlinpoet 1,188) | kotlinx-cli(Gradle 7.6이 JDK 21을 못 읽음), kotlin-result·moshi(Gradle 플러그인 저장소에 못 닿음) | 환경(드라이런이 셋 모두 '환경 탓으로 보임'으로 표시) | 2/2 | **판정 없음**(n 2 < 5) |
+
+- **끄는 조건(devices.md '여러 언어 초안', V72): 걸린 언어 없음.** JS, Python, Go, Rust는 n 5에서 절반 넘게 바로 돌아 레시피를 그대로 둔다. Java와 Kotlin은 환경 탓을 빼면 n이 5에 못 미쳐 판정하지 않는다. 남은 레포는 모두 바로 돌았다(3/3, 2/2). 레시피는 그대로 두고, Gradle 플러그인 저장소에 닿고 JDK를 고를 수 있는 기계에서 다시 잰다.
+- 처음 9개 시범(고치기 전)과 견주면: 바로 돈 레포 8/9 → 9/9(kotlinpoet가 멀티플랫폼 고침으로 됨), 시험 수 래칫이 있는 레포 4/9 → 9/9.
+- 손으로 가른 환경 탓 둘(commons-text, javapoet)과 레포·도구판 탓 둘(anyhow, log)은 드라이런의 무늬에 걸리지 않았다. 무늬를 늘릴지는 다음 일이다.
