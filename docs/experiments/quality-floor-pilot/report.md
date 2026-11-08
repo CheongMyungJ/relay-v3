@@ -81,3 +81,52 @@ pflag의 64.6%는 타입마다 거의 같은 파일(`bool_slice.go`, `int_slice.
 
 1. ~~1·2·3·6을 고친다~~ 고쳤다(2026-11-08, V64~V68). 같은 레포로 드라이런을 다시 돌려 이번 값(위 '고침')을 확인한다.
 2. 언어마다 레포를 다섯까지 늘려 여러 언어 초안의 끄는 조건을 잰다(이번에 길이 열림: 외부 코드 실행 허용).
+
+## 고친 뒤 다시 잼: 레포 30개 (2026-11-08)
+
+relay-v3 `ff41612`(문제 1·2·3·6 고침, V64~V68). 언어마다 레포 5개, 모두 `relay init --try`(드라이런). 레포의 작업 트리는 30개 모두 깨끗하게 남았다.
+
+### 처음 9개: 고치기 전과 후
+
+| 레포 | 고치기 전 시험 수 | 고친 뒤 |
+|---|---|---|
+| defu | 없음 | 23 (수용 시험 `pnpm vitest run --reporter=junit …`, lint는 한 번) |
+| ufo | 없음 | 491 |
+| pflag | 없음 | 228 (`go test -json`) |
+| uuid | 없음 | 213 |
+
+중복 비율(정적): itoa 21.5% → 18.0%, markupsafe 16.0% → 8.2%, pflag 64.6% → 64.2%(타입별 파일은 진짜 중복이라 남음). 줄 수 래칫(초안): ufo의 600줄 넘는 파일 3 → 1(시험 자료 JSON과 CHANGELOG가 빠짐).
+
+### 언어마다 '고친 것 없이 바로 도는 초안'
+
+모든 명령이 된 레포를 셌다. 안 된 것은 까닭을 셋으로 나눴다: **relay**(초안이 고른 명령이나 설치가 틀림), **레포**(레포의 코드나 시험이 이 도구판에서 실제로 실패함. 드라이런이 설계대로 뺌), **환경**(이 기계의 네트워크나 JDK·Gradle 판).
+
+| 언어 | 바로 돎 | 안 된 레포와 까닭 |
+|---|---|---|
+| JS/TS | **5/5** (defu, ufo, pathe, destr, scule) | - |
+| Python | **3/5** (itsdangerous, markupsafe, blinker) | tenacity: **relay**. 설치는 `pip install -e '.[test]'`인데 ruff·mypy는 다른 묶음에 있어 `.venv/bin/ruff`가 없음. humanize: **relay**. 설치가 `requirements-mypy.txt`만 골라 pytest·pytest-cov가 없음(pytest 종료 코드 4). 그와 별개로 mypy 오류 1(**레포**) |
+| Go | **3/5** (pflag, uuid, cast) | go-cmp: **레포**. `go vet`이 레포 시험 코드의 실제 경고로 실패(뺌, 시험은 733개로 됨). pkg/errors: **relay**. `go.mod`가 없는 옛 Go 레포를 Go로 알아보지 못함(앱이 직접 재는 래칫만 남음) |
+| Rust | **3/5** (itoa, ryu, semver) | anyhow: **레포·환경**. 이 컴파일러 판에서 `test_fmt` 시험이 실패. log: **레포·환경**. clippy 경고가 `-D warnings`로 실패. 둘 다 드라이런이 뺌. 다섯 모두 시험 수 래칫 없음(nextest가 없으면 JUnit을 못 냄) |
+| Java | **2/5** (jsoup, commons-cli) | gson: **relay**. 여러 모듈 Maven에서 `test-compile`은 JPMS 시험 모듈이 쓸 jar를 만들지 않아 컴파일 실패(`install`이나 `verify`가 맞음). javapoet: **환경**. 이 JDK에서 옛 `release` 설정이 `java.io.IOException`을 찾지 못함. commons-text: **레포·환경**. 이 JDK의 XML 엔티티 상한에 시험이 걸림 |
+| Kotlin | **0/5** | turbine: **relay**. 멀티플랫폼 프로젝트에는 `testClasses`가 없고 `jvmTestClasses`·`jvmTest`를 써야 함. kotlin-result, moshi: **환경**. Gradle 플러그인 저장소에 닿지 못함. kotlinx-cli: **환경**. Gradle 7.6이 이 JDK(21)를 못 읽음. kotlinpoet: **환경**. Kotlin 컴파일 변환 실패(이 JDK) |
+
+### 끄는 조건 (devices.md '여러 언어 초안': 언어마다 레포 5, 바로 도는 초안이 절반 아래면 그 언어 레시피를 '제안만'으로)
+
+- 글자 그대로 읽으면 **JS, Python, Go, Rust는 남고(5/5, 3/5, 3/5, 3/5), Java(2/5)와 Kotlin(0/5)은 걸린다.**
+- 다만 Java와 Kotlin의 실패 일곱 가운데 다섯이 이 기계의 네트워크나 JDK·Gradle 판 탓(환경)이다. 끄는 조건은 환경 탓을 따로 두지 않았다. relay 탓만 세면 Java는 relay 탓 1(gson), Kotlin은 relay 탓 1(turbine)이다.
+- 그래서 등록부의 상태는 바꾸지 않고 사용자에게 올린다(아래 '다음').
+
+### 새로 찾은 relay 문제
+
+7. **Python 설치가 lint 도구를 안 깐다**(tenacity): 초안이 고른 도구가 설치한 묶음에 있는지 보지 않는다.
+8. **Python 설치 파일을 잘못 고른다**(humanize: `requirements-mypy.txt`): 이름에 `mypy`, `docs`, `lint`가 든 requirements를 설치 본으로 고르지 말아야 한다.
+9. **`go.mod` 없는 Go 레포를 모른다**(pkg/errors).
+10. **여러 모듈 Maven**(gson): 빠른 검사로 `test-compile` 대신 `-DskipTests install`(로컬 저장소에 씀) 또는 `verify`.
+11. **Kotlin 멀티플랫폼**(turbine): `jvmTestClasses`, `jvmTest`, 결과 경로 `build/test-results/jvmTest`.
+12. **Rust 시험 수**: nextest가 없으면 시험 수가 없다. `cargo test -- -Z unstable-options --format json`은 안정판에서 안 되므로, 기본 출력의 `test result:` 줄을 읽는 길을 볼 만하다.
+
+### 다음
+
+1. 7~12를 고친다.
+2. 환경 탓을 줄인 기계(Gradle 플러그인 저장소에 닿고, JDK를 고를 수 있는 곳)에서 Java·Kotlin을 다시 잰 뒤 끄는 조건을 판정한다. 그 전에는 레시피를 그대로 둔다(사용자 결정 대상).
+3. 끄는 조건에 '환경 탓은 분모에서 뺀다'를 더할지 정한다(사용자 결정 대상).
