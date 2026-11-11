@@ -37,6 +37,7 @@
 //   waitInput                              터미널에서 한 줄을 받아 UserPromptSubmit으로 보낸다
 //   stop     { message? }                  Stop (stop_hook_active false)
 //   sleep    { ms }                        기다린다
+//   waitFile { path }                      그 파일이 생길 때까지 기다린다(시험이 앱의 상태에 맞춰 다음 단계를 풀 때)
 //   print    { text }                      터미널에 한 줄
 //   exit     { reason?, code? }            SessionEnd를 보내고 끝난다
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -547,6 +548,9 @@ async function step(s) {
       }))
     case 'sleep':
       return sleep(s.ms ?? 100)
+    case 'waitFile':
+      while (!fs.existsSync(fill(s.path, vs))) await sleep(25)
+      return
     case 'print':
       return out(fill(s.text ?? '', vs))
     case 'exit':

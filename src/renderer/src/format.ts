@@ -255,10 +255,8 @@ export function nextStep(
 
 const ending = (v: Pick<WorkView, 'state'>) => v.state === 'working' || v.state === 'recontract'
 
-/** [끝내기]의 상자(V25)를 보일 때: 구현 중이고 지금 HEAD에 열린 것이 있는 상자가 있다(메인이 work.json에 둔다) */
-export function showEndBox(v: WorkView): boolean {
-  return ending(v) && v.endPending?.armed === false && v.endPending.handed !== true
-}
+// [끝내기]의 상자(V25)를 보일 때의 판정은 메인의 알림과 같이 쓴다(src/shared/answer.ts)
+export { showEndBox } from '../../shared/answer.ts'
 
 /**
  * [끝내기]가 걸려 있다(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. 상자에서 세션에 넘겨 다시 건
@@ -337,8 +335,8 @@ export function qualityNotice(q: QualityState): string | null {
  */
 function draftNext(ref: string | null): string {
   return ref?.startsWith('origin/')
-    ? `검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(V9: 기준은 ${ref}에서 읽음).`
-    : '검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).'
+    ? `검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(기준은 ${ref}에서 읽습니다).`
+    : '검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(기준은 기준 브랜치에서 읽습니다).'
 }
 
 /** [초안 만들기]의 답을 한 줄로. 이미 있으면 덮지 않았다고 */

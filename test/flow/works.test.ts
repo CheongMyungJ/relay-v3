@@ -526,8 +526,9 @@ test('앱을 다시 켜면 세션은 stopped, [다시 열기]는 --resume과 새
   const started = (await fake()).find((e) => e.type === 'start') as Entry
   await first.close()
   kit.forget(first)
-  // 세션의 claude가 끝났다(SIGHUP → SessionEnd)
-  expect((await fake()).some((e) => e.type === 'hook' && e.event === 'SessionEnd')).toBe(true)
+  // 세션의 claude가 끝났다(SIGHUP → SessionEnd). Windows는 신호가 없어 트리째 바로 끝낸다(taskkill): 훅을 보낼 틈이 없다
+  if (process.platform !== 'win32')
+    expect((await fake()).some((e) => e.type === 'hook' && e.event === 'SessionEnd')).toBe(true)
 
   const second = await openApp(home)
   const { works } = second

@@ -33,13 +33,21 @@ export function Tag({ tone = 'muted', children }: { tone?: Tone; children: React
   )
 }
 
+/** 접는 칸의 오른쪽 한 마디: 숫자 대신 상태를 말한다(예: '2개 통과', '나빠짐 1') */
+export interface FoldSummary {
+  text: string
+  tone: Tone
+}
+
 /**
- * 접는 칸: 제목, 수(선택), 내용. 처음에는 닫혀 있다(open이면 열림). Collapsible은 닫힌 내용도 그려 두므로, 무거운 내용은
- * lazy로 처음 열 때 그린다(그 뒤로는 닫아도 남김)
+ * 접는 칸: 제목, 오른쪽 한 마디(summary) 또는 수(count), 내용. 처음에는 닫혀 있다(open이면 열림). Collapsible은 닫힌 내용도
+ * 그려 두므로, 무거운 내용은 lazy로 처음 열 때 그린다(그 뒤로는 닫아도 남김). help는 제목에 올리면 보이는 풀이
  */
 export function Fold(p: {
   title: ReactNode
   count?: number
+  summary?: FoldSummary
+  help?: string
   open?: boolean
   lazy?: boolean
   className?: string
@@ -57,9 +65,13 @@ export function Fold(p: {
       }}
       chevronPosition="start"
       trigger={
-        <span className="fold-trigger">
+        <span className="fold-trigger" title={p.help}>
           <span className="fold-title">{p.title}</span>
-          {p.count === undefined ? null : <span className="count">{p.count}</span>}
+          {p.summary ? (
+            <span className={`fold-summary tone-${p.summary.tone}`}>{p.summary.text}</span>
+          ) : p.count === undefined ? null : (
+            <span className="count">{p.count}</span>
+          )}
         </span>
       }
     >
@@ -78,7 +90,7 @@ export function Empty(p: { title: string; children?: ReactNode; actions?: ReactN
     <div className="empty">
       <Heading level={3}>{p.title}</Heading>
       {p.children ? <div className="empty-body">{p.children}</div> : null}
-      {p.actions ? <div className="row">{p.actions}</div> : null}
+      {p.actions ? <div className="row empty-actions">{p.actions}</div> : null}
     </div>
   )
 }
@@ -135,4 +147,12 @@ export function useAction(): {
   }, [])
   const clear = useCallback(() => setError(null), [])
   return { busy, error, run, clear }
+}
+
+/**
+ * 대화상자가 떠 있는가. relay의 대화상자(새 Work, 설정, 품질 기준 초안, 버리기 확인)는 모두 Astryx Dialog·AlertDialog이고 그것은
+ * showModal()로 연 <dialog>다. 전역 단축키는 이것 하나를 보고 대화상자 뒤의 화면을 건드리지 않는다
+ */
+export function modalOpen(): boolean {
+  return document.querySelector('dialog[open]') !== null
 }

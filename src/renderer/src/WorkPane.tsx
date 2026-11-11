@@ -1,29 +1,23 @@
-// 고른 Work 하나: 머리(요청, 상태, 브랜치, 동작), 가운데 터미널, 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
-// [끝내기](V25)는 화면의 HEAD(V22: 와 단위 브랜치의 끝)를 넘긴다. 열린 것이 없으면 Work가 끝나고, 재는 동안은 걸린 끝, 열린 것이 있으면 [증거]의
-// 상자다. 걸린 끝과 상자는 메인이 Work에 둔다(view.endPending): 다른 Work로 갔다 와도 남는다.
-import { useEffect, useRef, useState } from 'react'
-import { AlertDialog } from '@astryxdesign/core/AlertDialog'
-import { Button } from '@astryxdesign/core/Button'
-import { Code } from '@astryxdesign/core/Code'
-import { Heading } from '@astryxdesign/core/Heading'
+// 고른 Work 하나: 머리줄(WorkHeader.tsx), 가운데 터미널(위에 세션 상태 띠), 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
+// 터미널과 패널 사이의 경계를 끌어 패널 너비를 바꾼다(V78: Astryx Resizable, 너비는 기억한다). 좁은 창에서는 터미널이 70열쯤
+// 남게 패널이 먼저 준다. 탭 줄 오른쪽의 단추로 패널만 넓게 본다(터미널을 가린다). 단축키: ⌘1~4(다른 OS는 Alt+1~4)로 탭.
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { ResizeHandle, useResizable } from '@astryxdesign/core/Resizable'
 import { StatusDot } from '@astryxdesign/core/StatusDot'
 import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { answerReason, showEndBox } from '../../shared/answer.ts'
 import type { ProjectView, WorkState, WorkView } from '../../shared/api.ts'
 import { DebtPanel, DiffPanel } from './ChangesPanel.tsx'
 import { ContractPanel } from './ContractPanel.tsx'
 import { EvidencePanel } from './EvidencePanel.tsx'
-import { endTips } from './exports.ts'
-import {
-  SESSION_LABEL,
-  STATE_LABEL,
-  endArmed,
-  endHanded,
-  endTexts,
-  isActive,
-  workTone,
-} from './format.ts'
+import { SESSION_LABEL, isActive } from './format.ts'
+import { ExpandIcon, ShrinkIcon } from './icons.tsx'
+import { tabKey } from './keys.ts'
+import { PANEL_DEFAULT, PANEL_MIN, panelMax } from './panelSize.ts'
 import { TerminalView } from './TerminalView.tsx'
-import { ErrorLine, Tag, useAction } from './ui.tsx'
+import { modalOpen } from './ui.tsx'
+import { WorkHeader } from './WorkHeader.tsx'
 
 type PanelTab = 'contract' | 'evidence' | 'diff' | 'debt'
 
@@ -41,25 +35,93 @@ function defaultTab(s: WorkState): PanelTab {
     : 'evidence'
 }
 
+/** 사람의 답이 필요한 탭(판정은 src/shared/answer.ts): 계약(승인, 계약 다시)과 증거(끝내기 상자) */
+function tabNeeds(view: WorkView, tab: PanelTab): boolean {
+  if (tab === 'contract') return ['approval', 'change'].includes(answerReason(view) ?? '')
+  return tab === 'evidence' && showEndBox(view)
+}
+
+/** 터미널과 패널이 나눠 쓰는 너비(경계 손잡이를 뺀 것). 재기 전에는 null. 창 크기가 바뀌면 다시 잰다 */
+function useRoom(ref: RefObject<HTMLDivElement | null>, wide: boolean): number | null {
+  const [room, setRoom] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => {
+      let rest = 0
+      for (const k of el.children)
+        if (!k.matches('.terminal-pane, .panel')) rest += k.getBoundingClientRect().width
+      setRoom(el.clientWidth - rest)
+    }
+    const seen = new ResizeObserver(measure)
+    seen.observe(el)
+    return () => seen.disconnect()
+  }, [ref, wide])
+  return room
+}
+
 export function WorkPane({ view, project }: { view: WorkView; project: ProjectView | null }) {
   const [picked, setPicked] = useState<{ tab: PanelTab; state: WorkState } | null>(null)
+  const [wide, setWide] = useState(false)
   const tab = picked && picked.state === view.state ? picked.tab : defaultTab(view.state)
   const live = view.session !== 'stopped'
-  // 탭이나 상태가 바뀌면 맨 위로: 결론 한 줄과 답이 필요한 상자(승인, 계약 바꾸기, 끝내기)가 먼저 보이게
+  // 패널을 끌 수 있는 끝은 창에 달려 있다: 터미널이 줄 수 있는 데까지만(끝이 줄면 기억하는 너비도 따라 준다)
+  const body = useRef<HTMLDivElement>(null)
+  const panel = useResizable({
+    defaultSize: PANEL_DEFAULT,
+    minSize: PANEL_MIN,
+    maxSize: panelMax(useRoom(body, wide)),
+    autoSaveId: 'relay-panel',
+  })
+  // 탭이나 상태가 바뀌면 맨 위로: 결론 한 줄과 답이 필요한 상자(계약 바꾸기, 끝내기)가 먼저 보이게
   const scroll = useRef<HTMLDivElement>(null)
   const pend = view.endPending
   const endKey = pend ? `${pend.head}:${pend.armed}:${pend.handed === true}` : null
   useEffect(() => {
     scroll.current?.scrollTo(0, 0)
   }, [tab, view.state, endKey])
+  const state = view.state
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const i = tabKey(e)
+      const t = i === null ? undefined : TABS[i]
+      // 대화상자가 떠 있으면 그 뒤의 탭을 바꾸지 않는다(글쇠는 대화상자의 것이다)
+      if (!t || modalOpen()) return
+      e.preventDefault()
+      e.stopPropagation()
+      setPicked({ tab: t.id, state })
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [state])
   return (
     <div className="work">
       <WorkHeader view={view} onEnding={() => setPicked({ tab: 'evidence', state: view.state })} />
-      <div className="work-body">
-        <section className="terminal-pane" aria-label="세션 터미널">
-          <TerminalView workId={view.id} live={live} />
+      <div className={`work-body${wide ? ' wide' : ''}`} ref={body}>
+        <section
+          className={`terminal-pane${live ? '' : ' stopped'}`}
+          aria-label="세션 터미널"
+          aria-hidden={wide}
+        >
+          <TerminalBar view={view} />
+          <div className="terminal-wrap">
+            <TerminalView workId={view.id} live={live} />
+          </div>
         </section>
-        <aside className="panel" aria-label="계약과 증거">
+        {wide ? null : (
+          <ResizeHandle
+            isReversed
+            hasDivider
+            isAlwaysVisible={false}
+            label="패널 너비"
+            resizable={panel.props}
+          />
+        )}
+        <aside
+          className="panel"
+          aria-label="계약과 증거"
+          style={wide ? undefined : { flexBasis: panel.size }}
+        >
           <div className="tabs">
             <TabList
               role="tablist"
@@ -68,7 +130,6 @@ export function WorkPane({ view, project }: { view: WorkView; project: ProjectVi
                 const t = TABS.find((x) => x.id === v)
                 if (t) setPicked({ tab: t.id, state: view.state })
               }}
-              hasDivider
               size="sm"
             >
               {TABS.map((t) => (
@@ -78,14 +139,21 @@ export function WorkPane({ view, project }: { view: WorkView; project: ProjectVi
                   label={t.label}
                   panelId={`panel-${view.id}`}
                   endContent={
-                    t.id === 'contract' &&
-                    (view.state === 'awaiting_approval' || view.state === 'recontract') ? (
+                    tabNeeds(view, t.id) ? (
                       <StatusDot variant="warning" label="답이 필요함" />
                     ) : undefined
                   }
                 />
               ))}
             </TabList>
+            <IconButton
+              variant="ghost"
+              size="sm"
+              label={wide ? '터미널 다시 보기' : '패널 넓게 보기'}
+              tooltip={wide ? '터미널 다시 보기' : '패널 넓게 보기'}
+              icon={wide ? <ShrinkIcon /> : <ExpandIcon />}
+              onClick={() => setWide((w) => !w)}
+            />
           </div>
           <div className="panel-scroll" role="tabpanel" id={`panel-${view.id}`} ref={scroll}>
             {tab === 'contract' ? <ContractPanel view={view} /> : null}
@@ -99,99 +167,19 @@ export function WorkPane({ view, project }: { view: WorkView; project: ProjectVi
   )
 }
 
-/** 세션의 상태. 계약 도구가 사람의 답을 기다리는 동안은 그렇게 말한다 */
-function sessionText(v: WorkView): string {
-  const waiting = v.state === 'awaiting_approval' || v.state === 'recontract'
-  return waiting && v.session !== 'stopped' ? '세션이 답을 기다림' : SESSION_LABEL[v.session]
-}
-
-function WorkHeader(p: {
-  view: WorkView
-  /** [끝내기]를 눌렀다: [증거] 탭으로 옮겨 걸린 끝이나 상자를 보인다 */
-  onEnding: () => void
-}) {
-  const { view } = p
-  const act = useAction()
-  const ending = useAction()
+/** 터미널 위의 띠: 세션의 상태. 계약 도구가 사람의 답을 기다리는 동안은 그렇게 말한다 */
+function TerminalBar({ view }: { view: WorkView }) {
+  const waiting =
+    (view.state === 'awaiting_approval' || view.state === 'recontract') &&
+    view.session !== 'stopped'
   const active = isActive(view.state)
-  const canEnd = view.state === 'working' || view.state === 'recontract'
-  const armed = endArmed(view)
-  const stopped = view.session === 'stopped'
-  const [abandoning, setAbandoning] = useState(false)
+  const text = waiting ? '세션이 답을 기다림' : active ? SESSION_LABEL[view.session] : '세션 닫힘'
   return (
-    <header className="work-head">
-      <div className="work-head-main">
-        <Heading level={1} maxLines={1}>
-          <span className="work-name">{view.title}</span>
-        </Heading>
-        <div className="work-meta">
-          <Tag tone={workTone(view)}>{STATE_LABEL[view.state]}</Tag>
-          {active ? (
-            <span className={stopped ? 'warn-text' : undefined}>{sessionText(view)}</span>
-          ) : null}
-          <span className="branch" title="작업 브랜치 ← 기준 브랜치">
-            <Code>{view.branch}</Code> ← <Code>{view.base}</Code>
-          </span>
-        </div>
-        {/* 남아 있는 마지막 실패는 새 일이 아니다: Work를 고를 때마다 다시 알리지 않는다(role alert 없음) */}
-        <ErrorLine text={view.error ? `마지막 실패: ${view.error}` : null} quiet />
-        <ErrorLine text={act.error ?? ending.error} />
-      </div>
-      <div className="row">
-        {active && stopped ? (
-          <Button
-            variant="primary"
-            label="다시 열기"
-            isDisabled={act.busy}
-            onClick={() => void act.run(() => window.relay.resumeWork(view.id))}
-          />
-        ) : null}
-        {canEnd ? (
-          <Button
-            variant="secondary"
-            isDisabled={act.busy || ending.busy || armed}
-            tooltip={endTexts(view).button}
-            label={
-              endHanded(view)
-                ? endTexts(view).handedButton
-                : armed
-                  ? endTexts(view).waiting
-                  : ending.busy
-                    ? '끝내는 중…'
-                    : '끝내기'
-            }
-            onClick={() => {
-              p.onEnding()
-              void ending.run(() =>
-                window.relay.end(
-                  view.id,
-                  view.head === null ? {} : { head: view.head, ...endTips(view) },
-                ),
-              )
-            }}
-          />
-        ) : null}
-        {active ? (
-          <Button
-            variant="ghost"
-            label="버리기"
-            isDisabled={act.busy}
-            onClick={() => setAbandoning(true)}
-          />
-        ) : null}
-      </div>
-      <AlertDialog
-        isOpen={abandoning && active}
-        onOpenChange={setAbandoning}
-        title="이 Work를 버릴까요?"
-        description="세션을 끝냅니다. 브랜치와 worktree는 남습니다."
-        actionLabel="버리기"
-        cancelLabel="취소"
-        onAction={() => {
-          setAbandoning(false)
-          void act.run(() => window.relay.abandon(view.id))
-        }}
-      />
-    </header>
+    <div className="terminal-bar" data-testid="terminal-bar">
+      <span className={`term-dot ${waiting ? 'waiting' : active ? view.session : 'stopped'}`} />
+      <span className={waiting || (active && view.session === 'stopped') ? 'waiting-text' : ''}>
+        {text}
+      </span>
+    </div>
   )
 }

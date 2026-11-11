@@ -108,7 +108,7 @@ M1(V12)은 앱 없이 CLI로 확인 실행기와 관문을 만든다. 타입의 
 ## adapters
 
 ### `src/adapters/exec.ts`
-- `run(cmd: string, opts: { cwd: string; timeoutMs: number; env?: Record<string, string> }): Promise<{ exit: number | null; timed_out: boolean; duration_ms: number; stdout: string; stderr: string }>` — `sh -c`(Windows는 `cmd /d /s /c`). 던지지 않는다(명령이나 환경 값의 NUL도 exit null과 stderr로). 시간이 넘으면 프로세스 묶음을 끝낸다. 시간 제한은 타이머 상한(2^31-1ms)으로 자른다. 출력은 뒤쪽 64KB만 남긴다.
+- `run(cmd: string, opts: { cwd: string; timeoutMs: number; env?: Record<string, string> }): Promise<{ exit: number | null; timed_out: boolean; duration_ms: number; stdout: string; stderr: string }>` — `sh -c`(Windows는 `cmd /d /s /c`). 던지지 않는다(명령이나 환경 값의 NUL도 exit null과 stderr로). 시간이 넘으면 프로세스 묶음을 끝낸다. 시간 제한은 타이머 상한(2^31-1ms)으로 자른다. 출력은 뒤쪽 64KB만 남긴다. `killActive()`가 끝낸 run은 exit null이다(Windows의 taskkill은 종료 코드 1을 남기므로 앱이 끝낸 것을 따로 적는다).
 - `scrubbedEnv(base: NodeJS.ProcessEnv): Record<string, string>` — 자격 증명을 뺀다: `GH_TOKEN`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `NPM_TOKEN`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, `GPG_AGENT_INFO`, 그리고 이름(대문자로 바꿔)에 `TOKEN`, `SECRET`, `PASSWORD`·`PASSWD`, `PASSPHRASE`, `CREDENTIAL`, `API_KEY`·`APIKEY`, `ACCESS_KEY`·`PRIVATE_KEY`·`SIGNING_KEY`·`ENCRYPTION_KEY`·`DEPLOY_KEY`·`SSH_KEY`, `ASKPASS`가 들었거나, `_KEY`·`_PAT`로 끝나거나, 조각 머리에 `AUTH`(`AUTHOR`는 뺀다)가 있거나, `NPM_CONFIG_*AUTH*`인 것. git 위치 변수(`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, `GIT_PREFIX`)도 뺀다(git 훅 안에서 relay를 부르면 명령의 git이 사용자 레포를 건드린다). `CI=1`을 넣는다. HOME 아래 설정 파일(~/.npmrc, gh 설정 등)의 자격 증명은 막지 못한다.
 - `git(args: string[], cwd: string, o?: { input?: string; env?: Record<string, string> }): Promise<string>` — 실패하면 던진다(stderr 포함. 메시지는 `-c` 설정을 빼고 긴 SHA를 줄여 잘려도 까닭이 남게). git 위치 변수는 뺀다. o는 표준 입력과, 위치 변수를 뺀 뒤 얹는 환경 변수(M3b 빚 기록의 임시 index, `GIT_AUTHOR_*`).
 
@@ -138,7 +138,7 @@ git.ts는 읽기만 한다. 앱이 레포에 쓰는 것은 빚 기록 하나다.
 ### `src/adapters/store.ts`
 - `relayHome(env)` — `RELAY_HOME` 또는 `~/.relay-v3`.
 - `repoKey(repoRoot: string): string` — 경로 해시 + 폴더 이름.
-- `evidencePath(home, key, sha)`, `writeJson(path, value)`, `readJson<T>(path): Promise<T | null>`.
+- `evidencePath(home, key, sha)`, `writeJson(path, value)`, `readJson<T>(path): Promise<T | null>`. `writeJson`은 임시 파일에 쓰고 바꿔 넣는다. Windows는 대상이 잠깐 잡혀 있으면(겹친 쓰기, 읽는 중) rename이 EPERM·EACCES·EBUSY로 실패하므로 5초까지 다시 한다.
 - `ledgerPath(home)`(`$RELAY_HOME/ledger.jsonl`), `readLedgerText(home): Promise<string>`(없으면 빈 글. M4c: 앱의 `main/store.ts`와 CLI `relay record`가 함께 읽는다. 줄을 읽는 것은 engine `parseRecord`).
 - `baseCache` — `(key, sha, commandId, runHash) → CommandRun` 읽기·쓰기.
 

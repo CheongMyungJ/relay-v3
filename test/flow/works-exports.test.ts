@@ -82,11 +82,14 @@ const WORK_COMMITS = [
   { do: 'bash', command: 'git branch {branch}--clamp HEAD~1' },
 ]
 
-/** sub 단위 브랜치: 기준에서 sub 커밋을 얹고 예시 자료(Work 브랜치의 것)를 커밋한다 */
+/**
+ * sub 단위 브랜치: 기준에서 sub 커밋을 얹고 예시 자료(Work 브랜치의 것)를 커밋한다. 가짜 claude는 Windows에서 cmd.exe로
+ * 돌리므로 sh의 변수와 넘기기 없이 쓴다({branch}는 가짜 claude가 채운다)
+ */
 const SUB_BRANCH = {
   do: 'bash',
   command:
-    'W={branch} && git checkout -q -b $W--sub main && git cherry-pick $W >/dev/null && git checkout $W -- .relay/examples && git commit -qm examples && git checkout -q $W',
+    'git checkout -q -b {branch}--sub main && git cherry-pick {branch} && git checkout {branch} -- .relay/examples && git commit -qm examples && git checkout -q {branch}',
 }
 
 const tipOf = (app: TestApp, id: string, branch: string) =>
@@ -485,7 +488,7 @@ test('단위 브랜치에만 있는 커밋(Work 브랜치에 없음)은 통합 �
     {
       do: 'bash',
       command:
-        'W={branch} && git checkout -q $W--clamp && echo "clamp 고침" > NOTE.txt && git add NOTE.txt && git commit -qm 고침 && git checkout -q $W',
+        'git checkout -q {branch}--clamp && echo clamp > NOTE.txt && git add NOTE.txt && git commit -qm 고침 && git checkout -q {branch}',
     },
     { do: 'mcp', tool: 'relay_check', args: {} },
     { do: 'stop' },

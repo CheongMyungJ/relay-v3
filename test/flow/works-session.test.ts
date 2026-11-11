@@ -24,6 +24,10 @@ const kit = flowKit()
 const { scenario, until } = kit
 
 const SUBMIT = { do: 'mcp', tool: 'submit_contract', args: CONTRACT }
+
+/** 심이 사고를 남긴 것처럼(원래 훅 자리를 찾지 못함) hooks.log에 한 줄을 더하는 node 한 줄 */
+const INCIDENT =
+  "require('node:fs').appendFileSync(process.env.RELAY_HOOK_LOG, 'pre-commit: 원래 훅 자리를 찾지 못함\\n')"
 /** 세션이 셸 도구로 고치고 커밋한다(트레일러는 세션 환경의 심이 붙인다) */
 const SESSION_FIX = [
   { do: 'write', files: FIX_COMMIT.files },
@@ -188,11 +192,8 @@ test('트레일러를 끈 프로젝트는 세션 환경에 심이 없고, 심의
   await scenario([
     SUBMIT,
     ...SESSION_FIX,
-    // 심이 사고를 남긴 것처럼(원래 훅 자리를 찾지 못함)
-    {
-      do: 'bash',
-      command: 'printf "pre-commit: 원래 훅 자리를 찾지 못함\\n" >> "$RELAY_HOOK_LOG"',
-    },
+    // 심이 사고를 남긴 것처럼. sh와 cmd.exe 어느 쪽에서도 도는 명령으로 쓴다(가짜 claude는 Windows에서 cmd.exe로 돌린다)
+    { do: 'bash', command: `node -e "${INCIDENT}"` },
     { do: 'stop' },
   ])
   const app = await kit.openApp(await makeTempDir('relay-home-'))

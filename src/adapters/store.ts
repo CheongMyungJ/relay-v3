@@ -76,6 +76,29 @@ export function evidencePath(home: string, key: string, sha: string): string {
   return join(home, 'evidence', checkSegment(key, '레포 키'), `${checkSha(sha)}.json`)
 }
 
+/** Windows의 rename이 대상을 다른 손이 쥐고 있을 때(겹친 쓰기의 rename, 읽는 중, 백신) 내는 오류 */
+const RENAME_BUSY = new Set(['EPERM', 'EACCES', 'EBUSY'])
+/** 그 오류에 다시 해 보는 시간 */
+const RENAME_RETRY_MS = 5_000
+
+/**
+ * 임시 파일을 제자리에 바꿔 넣는다. Windows는 대상이 잠깐 잡혀 있으면 rename이 실패하므로(POSIX는 그냥 덮는다) 잠깐씩
+ * 쉬며 다시 한다. 출처: graceful-fs의 rename
+ */
+async function replaceFile(tmp: string, path: string): Promise<void> {
+  if (process.platform !== 'win32') return rename(tmp, path)
+  const until = Date.now() + RENAME_RETRY_MS
+  for (let wait = 1; ; wait = Math.min(wait * 2, 100)) {
+    try {
+      return await rename(tmp, path)
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (code === undefined || !RENAME_BUSY.has(code) || Date.now() >= until) throw e
+      await new Promise((r) => setTimeout(r, wait))
+    }
+  }
+}
+
 /** JSON을 쓴다. 폴더를 만들고, 임시 파일에 쓴 뒤 바꿔 넣어 반쯤 쓴 파일이 남지 않게 한다 */
 export async function writeJson(path: string, value: unknown): Promise<void> {
   const text = JSON.stringify(value, null, 2)
@@ -84,7 +107,7 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
   const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   try {
     await writeFile(tmp, `${text}\n`, 'utf8')
-    await rename(tmp, path)
+    await replaceFile(tmp, path)
   } catch (e) {
     await rm(tmp, { force: true })
     throw e

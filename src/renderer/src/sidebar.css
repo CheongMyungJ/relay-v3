@@ -1,0 +1,223 @@
+/* 왼쪽 사이드바 (docs/m2-modules.md 4절): 프로젝트 묶음, Work 줄, 끝난 Work 묶음, 품질 기준 알림의 짧은 글.
+   토큰과 바탕은 styles.css에 있다(main.tsx가 그 뒤에 이 파일을 싣는다). */
+
+.sidebar {
+  width: 264px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 2px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--color-on-accent);
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.brand-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.sidebar-note {
+  padding: 8px 12px;
+}
+
+.project {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project + .project {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.project-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding-left: 8px;
+}
+
+.project-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* 프로젝트 줄의 단추는 올리거나 포커스가 들어오면 또렷해진다 */
+.project-actions {
+  display: flex;
+  flex: none;
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+
+.project:hover .project-actions,
+.project-actions:focus-within {
+  opacity: 1;
+}
+
+.new-work {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+.new-work:hover {
+  background: var(--color-overlay-hover);
+}
+
+.new-work:focus-visible,
+.work-item:focus-visible,
+.done-toggle:focus-visible,
+.branch-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.work-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px 7px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-item:hover {
+  background: var(--color-overlay-hover);
+}
+
+.work-item.selected {
+  background: var(--accent-soft);
+}
+
+.work-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.work-item.selected .work-title {
+  font-weight: 650;
+}
+
+.work-item.closed .work-title {
+  color: var(--muted);
+}
+
+.work-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.work-state.needs {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.done-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.done-toggle:hover {
+  background: var(--color-overlay-hover);
+}
+
+.done-toggle .icon {
+  transition: transform 0.12s;
+}
+
+.done-toggle[aria-expanded='true'] .icon {
+  transform: rotate(90deg);
+}
+
+/* 품질 기준 알림(V20): [증거] 탭 위(.callout)와 사이드바의 프로젝트 줄(작게) */
+.quality-notice {
+  line-height: 1.5;
+}
+
+.quality-notice.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 2px;
+  padding: 4px 8px 6px;
+  font-size: 12px;
+}
+
+.quality-short {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.quality-drafted {
+  color: var(--muted);
+}

@@ -38,6 +38,21 @@ const PYPI =
 
 const why = (ok: boolean, text: string) => (ok ? '' : ` (건너뜀: ${text})`)
 
+/**
+ * pip(venv) 레시피는 POSIX의 venv 자리(.venv/bin/…)와 sh의 따옴표로 쓴다(V60, V69). Windows의 cmd.exe에서는 setup이
+ * 돌지 않는다: 드라이런은 그것을 까닭과 함께 고칠 것으로 빼고, setup에 기대는 명령은 돌려 보지 못함으로 둔다(V61)
+ */
+const WINDOWS = process.platform === 'win32'
+function expectSetupDropped(r: Awaited<ReturnType<typeof tryDraft>>, ids: string[]): void {
+  const dry = r.dry
+  if (dry === null) throw new Error('돌려 보지 않음')
+  expect(dry.commands.map((c) => [c.id, c.ok])).toEqual(ids.map((id) => [id, false]))
+  expect(dry.commands[0]?.reason).toMatch(/^setup 실패/)
+  for (const c of dry.commands.slice(1)) expect(c.reason).toBe('setup이 안 돼 돌려 보지 못함')
+  expect(dry.fixes.map((f) => f.id)).toEqual(ids)
+  expect(r.config.setup).toBeUndefined()
+}
+
 describe('드라이런', () => {
   test.skipIf(!GO)(
     `Go: go mod download·go test -json(앱이 시험 수를 읽음)은 되고 go vet은 까닭과 함께 빠진다${why(GO, 'go가 없음')}`,
@@ -98,6 +113,7 @@ describe('드라이런', () => {
       })
       const home = await makeTempDir('relay-home-')
       const r = await tryDraft(repo.dir, home)
+      if (WINDOWS) return expectSetupDropped(r, ['setup', 'test'])
       const dry = r.dry
       if (dry === null) throw new Error('돌려 보지 않음')
       expect(dry.commands.map((c) => [c.id, c.ok, c.reason ?? ''])).toEqual([
@@ -142,6 +158,7 @@ describe('드라이런', () => {
         },
       })
       const r = await tryDraft(repo.dir, await makeTempDir('relay-home-'))
+      if (WINDOWS) return expectSetupDropped(r, ['setup', 'lint', 'test'])
       const dry = r.dry
       if (dry === null) throw new Error('돌려 보지 않음')
       expect(r.config.setup?.run).toBe(

@@ -478,6 +478,8 @@ export const EVENTS = {
   terminalExit: 'relay:terminal-exit',
   /** 실적 장부에 줄이 더해짐(끝까지 따라가기, 머지 뒤 30일, 이의). payload: { project } */
   record: 'relay:record',
+  /** 사람이 OS 알림을 눌렀다: 그 Work를 고른다(V78). payload: { id } */
+  show: 'relay:show',
 } as const
 
 export type RelayEvent = (typeof EVENTS)[keyof typeof EVENTS]
@@ -499,6 +501,7 @@ export interface RelayEventPayload {
   'relay:terminal-data': TerminalData
   'relay:terminal-exit': TerminalExit
   'relay:record': { project: string }
+  'relay:show': { id: string }
 }
 
 // ── preload가 내놓는 API (window.relay) ─────────────────────────────────────

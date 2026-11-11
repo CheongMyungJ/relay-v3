@@ -1,4 +1,5 @@
-/* 오른쪽 패널: [계약] [증거] [변경] [빚] (docs/m2-modules.md 4절). 색과 글꼴은 styles.css가 이은 Astryx 토큰을 쓴다.
+/* 오른쪽 패널의 틀과 [계약] (docs/m2-modules.md 4절). [증거]는 evidence.css, [변경]·[빚]은 changes.css.
+   색과 글꼴은 styles.css가 이은 Astryx 토큰을 쓴다.
    탭(TabList), 접기(Collapsible), 꼬리표(Badge), 단추는 Astryx 부품이고 여기서는 둘레만 잡는다. */
 
 /* ── 오른쪽 패널 ──────────────────────────────────────────────────────────── */
@@ -6,20 +7,38 @@
 .panel {
   display: flex;
   flex-direction: column;
-  /* 가장 좁은 창(1180px)에서도 가운데 터미널이 70열쯤 남게 */
-  width: clamp(340px, 30%, 560px);
-  flex: none;
+  /* 너비는 경계를 끌어 정한다(WorkPane.tsx, flex-basis). 좁은 창에서는 터미널(min-width 560)을 남기고 준다 */
+  flex: 0 1 480px;
+  min-width: 340px;
   min-height: 0;
   background: var(--surface);
-  border-left: 1px solid var(--border);
+}
+
+/* 패널만 넓게 보기: 터미널을 가리고 글은 읽기 좋은 너비로 가운데에 */
+.work-body.wide .panel {
+  flex: 1 1 auto;
+}
+
+.work-body.wide .panel-body,
+.work-body.wide .approve-bar > * {
+  width: 100%;
+  max-width: 880px;
+  margin-inline: auto;
 }
 
 .tabs {
+  display: flex;
   flex: none;
-  padding: 6px 16px 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px 0 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .panel-scroll {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   overflow-y: auto;
   min-height: 0;
@@ -34,28 +53,46 @@
 .panel-body {
   display: flex;
   flex-direction: column;
+  flex: 1 0 auto;
   gap: 16px;
-  padding: 22px 24px 32px;
+  padding: 20px 22px 0;
+}
+
+/* 내용 아래의 여백. 아래에 붙는 승인 칸이 있으면 그 칸이 맨 아래다 */
+.panel-body::after {
+  content: '';
+  flex: none;
+  height: 12px;
+}
+
+.panel-body:has(> .approve-bar)::after {
+  display: none;
 }
 
 .empty {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   padding: 28px 24px;
   color: var(--muted);
 }
 
 .main > .empty {
+  align-items: center;
   margin: auto;
-  max-width: 480px;
+  max-width: 440px;
+  text-align: center;
 }
 
 .empty-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.empty-actions {
+  margin-top: 6px;
 }
 
 .busy-line {
@@ -65,24 +102,36 @@
   color: var(--muted);
 }
 
+/* 알림 상자: 면을 칠하지 않고 왼쪽 띠와 제목으로 가른다(V78). 답이 필요한 것은 경고색, 알리는 것은 강조색 */
 .callout {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 18px;
-  border-radius: var(--radius-box);
+  gap: 10px;
+  padding: 14px 16px;
   border: 1px solid var(--border);
+  border-left: 3px solid var(--muted-bar);
+  border-radius: var(--radius-box);
   background: var(--surface);
 }
 
 .callout.tone-warn {
+  border-left-color: var(--warn-bar);
   background: var(--warn-soft);
-  border-color: transparent;
 }
 
 .callout.tone-info {
+  border-left-color: var(--info-bar);
   background: var(--info-soft);
-  border-color: transparent;
+}
+
+.callout .callout {
+  background: var(--surface);
+}
+
+/* 품질 기준 알림은 알리는 글이다: 답이 필요한 상자와 겹쳐 보이지 않게 면을 칠하지 않는다 */
+.callout.quality-notice {
+  background: var(--surface);
+  font-size: 13px;
 }
 
 .callout-title {
@@ -91,18 +140,17 @@
 
 .quote {
   padding-left: 12px;
-  border-left: 3px solid var(--warn);
+  border-left: 3px solid var(--border-strong);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .section-title {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
 }
 
 .plain-list {
@@ -121,6 +169,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
 }
@@ -174,7 +223,7 @@
 .unit-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .eyebrow {
@@ -183,7 +232,8 @@
 }
 
 .goal {
-  font-size: 20px;
+  margin: 0;
+  font-size: 18px;
   font-weight: 650;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -202,6 +252,7 @@
 
 /* 단위(V21): 계약 판이 줄을 단위마다 묶는다 */
 .unit-title {
+  margin: 4px 0 0;
   font-size: 13px;
   font-weight: 650;
 }
@@ -224,7 +275,7 @@
   flex: none;
   min-width: 26px;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 22px;
   color: var(--muted);
@@ -233,7 +284,7 @@
 .line-text {
   flex: 1;
   min-width: 0;
-  font-weight: 500;
+  font-weight: 550;
   line-height: 22px;
   overflow-wrap: anywhere;
 }
@@ -249,12 +300,13 @@
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 6px 10px;
-  margin: 10px 0 0 34px;
+  margin: 8px 0 0 34px;
   font-size: 13px;
 }
 
 .line-facts dt {
   color: var(--muted);
+  font-size: 12px;
   line-height: 22px;
 }
 
@@ -275,301 +327,40 @@
   min-width: 0;
 }
 
-.ground code,
-.example code {
-  overflow-wrap: anywhere;
-}
-
 .example-id {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--muted);
 }
 
-/* ── 증거 ─────────────────────────────────────────────────────────────────── */
-
-.verdict {
-  padding: 20px 22px;
-  border-radius: var(--radius-box);
-  background: var(--surface-2);
-  border-left: 4px solid var(--muted);
-}
-
-.verdict.tone-ok {
-  background: var(--ok-soft);
-  border-left-color: var(--ok);
-}
-.verdict.tone-warn {
-  background: var(--warn-soft);
-  border-left-color: var(--warn);
-}
-.verdict.tone-info {
-  background: var(--info-soft);
-  border-left-color: var(--info);
-}
-.verdict.tone-bad {
-  background: var(--bad-soft);
-  border-left-color: var(--bad);
-}
-
-.verdict-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.verdict-title {
-  margin-top: 2px;
-  font-size: 30px;
-  font-weight: 750;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-.verdict-shadow {
-  margin-top: 6px;
-  font-weight: 600;
-  color: var(--ok);
-}
-
-.verdict-decisive {
-  margin-top: 10px;
-  font-size: 15px;
-  overflow-wrap: anywhere;
-}
-
-.verdict-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 14px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.verdict-meta > span {
-  white-space: nowrap;
-}
-
-.next-step {
-  margin-top: 12px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-
-.verdict-label + .verdict-title + .verdict-label {
-  margin-top: 8px;
-}
-
-.feedback-status {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background: var(--info-soft);
-  color: var(--info);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-
-.stale {
-  margin-top: 12px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background: var(--warn-soft);
-  color: var(--warn);
-  font-weight: 500;
-}
-
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pr-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.details,
-.fold-body {
+/* 승인 칸: 패널 아래에 붙어 계약을 읽는 동안에도 보인다(V78) */
+.approve-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-/* 접는 칸(ui.tsx Fold = Astryx Collapsible): 테두리 상자 안에 단추 줄과 내용 */
-.fold {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-box);
-  padding: 2px 12px;
-}
-
-.fold-trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.fold-title {
-  min-width: 0;
-}
-
-/* 끝낼 때의 메모(V37): 끝난 Work의 [증거] 맨 위에서 지나치지 않게 */
-.fold.end-memos {
-  background: var(--info-soft);
-  border-color: transparent;
-}
-
-.count {
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.fold-body {
-  padding: 0 2px 12px 22px;
-}
-
-.fact-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.fact-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  overflow-wrap: anywhere;
-}
-
-/* ── 변경과 빚 ────────────────────────────────────────────────────────────── */
-
-.diff-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  font-weight: 600;
-}
-
-.diff-files {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.diff-file-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-}
-
-.diff-file .fold-body {
-  padding: 0 0 10px;
-}
-
-.diff-path {
-  min-width: 0;
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-  font-weight: 500;
-}
-
-.diff-count {
-  margin-left: auto;
-  flex: none;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.diff-bar {
-  display: flex;
-  flex: none;
-  width: 48px;
-  height: 6px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--muted-soft);
-}
-
-.diff-bar .plus {
-  background: var(--ok);
-}
-
-.diff-bar .minus {
-  background: var(--bad);
-}
-
-.patch {
-  overflow: hidden;
-  border-radius: var(--radius);
-}
-
-.diff-count .plus {
-  color: var(--ok);
-}
-.diff-count .minus {
-  color: var(--bad);
-}
-
-.debt-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.debt {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-box);
-}
-
-/* 단위 브랜치의 내보내기(V22): 통합 증거 한 칸과 내보내기마다 한 칸 */
-.export-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
+  margin: auto -22px 0;
+  padding: 12px 22px 14px;
   border-top: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 -8px 16px -12px var(--color-shadow);
 }
-.export-section:first-of-type {
-  padding-top: 0;
-  border-top: none;
+
+.approve-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
 }
-.export-title {
-  margin: 0;
-  font-weight: 600;
-  font-size: 14px;
-}
-.integration-status {
-  margin: 0;
-  font-weight: 600;
-  font-size: 15px;
+
+.approve-title::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn-bar);
 }

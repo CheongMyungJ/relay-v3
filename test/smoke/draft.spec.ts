@@ -82,7 +82,12 @@ async function shot(name: string): Promise<void> {
 test('[초안 만들기] → 지금 값, 고칠 것, 묻는 것 → 답을 골라 [초안 쓰기]', async () => {
   await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click()
   const notice = page.getByTestId('project').getByTestId('quality-notice')
-  await expect(notice).toContainText('이 레포에는 품질 기준(.relay/quality.json)이 없습니다')
+  // 사이드바의 알림은 짧은 글이고(V78) 온전한 글은 풍선 글과 [증거] 탭에 있다
+  await expect(notice).toContainText('품질 기준 없음')
+  await expect(notice).toHaveAttribute(
+    'title',
+    /^이 레포에는 품질 기준\(\.relay\/quality\.json\)이 없습니다/,
+  )
   await notice.getByRole('button', { name: '초안 만들기' }).click()
 
   const dialog = page.getByRole('dialog', { name: /^품질 기준 초안/ })

@@ -3,6 +3,7 @@
 import type { DebtPayoff, EvidenceBundle } from '../../core/types.ts'
 import { tidyGroups, tidyLinesText } from './debt.ts'
 import type { Tone } from './format.ts'
+import { countSummary } from './summary.ts'
 import { Fold, Tag } from './ui.tsx'
 
 const STATUS: Record<DebtPayoff['status'], { label: string; tone: Tone }> = {
@@ -37,7 +38,11 @@ export function TidyFold({ t }: { t: NonNullable<EvidenceBundle['tidy']> }) {
   const g = tidyGroups(t)
   const lines = tidyLinesText(t)
   return (
-    <Fold title="빚" count={g.unpaid.length + g.touched.length + (g.over ? 1 : 0)}>
+    <Fold
+      title="빚"
+      summary={countSummary(g.unpaid.length + g.touched.length + (g.over ? 1 : 0))}
+      help="계약의 곁들일 정리로 갚은 빚과 못 갚은 빚, 이 변경이 건드린 곳의 빚입니다(알림)"
+    >
       {lines ? (
         <p className={g.over ? undefined : 'muted'} data-testid="tidy-lines">
           {g.over ? <Tag tone="warn">상한 넘음</Tag> : null}

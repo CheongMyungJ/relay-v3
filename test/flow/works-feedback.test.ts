@@ -135,7 +135,7 @@ test('결정론 실패와 세션 몫의 리뷰 올림은 쉬는 세션에 파일
   lines.forEach((l, i) => {
     expect(l).toMatch(
       new RegExp(
-        `^relay feedback ${i + 1} for head ${heads[i]?.slice(0, 7)} is in .*feedback/${i + 1}\\.md: `,
+        `^relay feedback ${i + 1} for head ${heads[i]?.slice(0, 7)} is in .*feedback[\\\\/]${i + 1}\\.md: `,
       ),
     )
   })

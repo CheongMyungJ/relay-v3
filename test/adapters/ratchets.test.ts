@@ -50,12 +50,14 @@ function quality(ratchets: RatchetSpec[], acceptance?: string): QualityConfig {
 
 describe('git에서 셈', () => {
   test('grepLines: 경로에 빈칸·콜론이 있어도 줄과 글을 읽고, 맞는 것이 없으면 빈 목록', async () => {
+    // Windows의 파일 이름에는 콜론을 쓸 수 없다(작업 트리에 만들지 못한다): 그곳에서는 빈칸만 본다
+    const odd = process.platform === 'win32' ? 'src/a b.ts' : 'src/a b:c.ts'
     const repo = await makeRepo({
-      files: { 'src/a b:c.ts': 'x\n// @ts-ignore\n', 'bin.dat': new Uint8Array([0, 64, 116, 115]) },
+      files: { [odd]: 'x\n// @ts-ignore\n', 'bin.dat': new Uint8Array([0, 64, 116, 115]) },
     })
     const sha = await repo.sha()
     expect(await grepLines(repo.dir, sha, GREP_NEEDLES)).toEqual([
-      { path: 'src/a b:c.ts', line: 2, text: '// @ts-ignore' },
+      { path: odd, line: 2, text: '// @ts-ignore' },
     ])
     expect(await grepLines(repo.dir, sha, ['nothing-here'])).toEqual([])
   })

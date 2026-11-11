@@ -122,11 +122,14 @@ test('내보내기 리뷰가 도는 동안 relay_check는 먼저 보인 증거�
   await writeFile(review, JSON.stringify({ findings: [finding] }))
   vi.stubEnv('FAKE_CLAUDE_REVIEW', review)
   vi.stubEnv('FAKE_CLAUDE_REVIEW_MS', '4000')
+  // 세션은 리뷰가 시작된 뒤에 relay_check를 부른다(시험이 이 파일로 알린다). 정해진 시간만 기다리면 재기가 느린 기계에서는
+  // 재는 중에 닿아 리뷰까지 기다린 답을 받는다
+  const reviewing = join(kit.tmp, 'review-started')
   await scenario([
     { do: 'mcp', tool: 'submit_contract', args: CONTRACT },
     FIX_COMMIT,
     ...PUSH_AND_PR,
-    { do: 'sleep', ms: 2000 },
+    { do: 'waitFile', path: reviewing },
     { do: 'mcp', tool: 'relay_check', args: {} },
     { do: 'stop' },
   ])
@@ -141,6 +144,7 @@ test('내보내기 리뷰가 도는 동안 relay_check는 먼저 보인 증거�
     await until(() => works.view(id).reviewRunning, '리뷰 시작')
     expect(works.view(id)).toMatchObject({ evidenceRunning: false, evidence: { review: null } })
     expect(works.view(id).gate).not.toBeNull()
+    await writeFile(reviewing, '')
     await until(async () => (await mcpResults('relay_check')).length === 1, 'relay_check')
     const checked = (await mcpResults('relay_check'))[0] as Entry
     expect(checked).toMatchObject({ status: 'ok', stale: false })
@@ -266,7 +270,11 @@ test('세션이 대화를 만들기 전에 끝났으면 [다시 열기]는 --res
   const first = await kit.openApp(home, { claudeBin: join(kit.tmp, 'no-such-claude') })
   const project = await first.works.addProject(kit.repo.dir)
   const { id } = await first.works.createWork({ project: project.id, request: REQUEST })
-  await until(() => first.works.view(id).error?.includes('시작하자마자') ?? false, '시작 실패')
+  // POSIX는 띄운 뒤 exec가 실패해 곧바로 끝나고, Windows는 프로세스를 만들지 못해 띄우는 데서 던진다
+  await until(
+    () => /시작하자마자|세션을 띄우지 못함/.test(first.works.view(id).error ?? ''),
+    '시작 실패',
+  )
   const before = JSON.parse((await first.store.readText(id, 'work.json')) ?? '') as Entry
   expect(before.session_started).toBe(false)
   await first.close()
