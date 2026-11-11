@@ -122,6 +122,11 @@ export interface Runtime {
   debounce: ReturnType<typeof setTimeout> | null
   poll: ReturnType<typeof setInterval> | null
   /**
+   * PR 확인(poll) 한 번이 도는 중. setInterval은 앞 틱을 기다리지 않으므로 겹친 틱은 건너뛴다: 앞 틱이 앱 밖 머지를 보고 장부에
+   * 머지 줄을 쓰기 전에 뒤 틱이 그 내보내기를 머지됨으로 보고 Work를 끝내지 않게
+   */
+  polling: boolean
+  /**
    * 차례를 기다리는 증거 재기(아직 시작하지 않음). 겹친 요청은 하나로 합친다. export는 내보내기 계기(PR, [끝내기]),
    * prepare는 미리 리뷰(V23)를 허락함, again은 [증거 다시 재기]: 이미 잰 head도 다시 잰다(아니면 시작할 때 앞 재기가 이미
    * 잰 head는 건너뛴다)

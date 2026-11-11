@@ -373,7 +373,13 @@ export class ExportDesk {
     const rt = this.ctx.runtime(id)
     if (rt.poll) return
     rt.poll = setInterval(() => {
-      void this.poll(id).catch((e) => this.ctx.log(`PR 확인 실패 (${id})`, e))
+      if (rt.polling) return
+      rt.polling = true
+      void this.poll(id)
+        .catch((e) => this.ctx.log(`PR 확인 실패 (${id})`, e))
+        .finally(() => {
+          rt.polling = false
+        })
     }, this.ctx.deps.prPollMs ?? PR_POLL_MS)
   }
 

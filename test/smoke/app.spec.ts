@@ -336,7 +336,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   // PR이 없으면 다음 할 일을 말한다
   await expect(evidence.getByTestId('next-step')).toContainText('PR이 열리면')
   await expect(evidence.getByText('줄 판정')).toBeVisible()
-  await evidence.locator('summary', { hasText: /^지식/ }).click()
+  await evidence.getByRole('button', { name: /^지식/ }).click()
   await expect(evidence.getByText('아직 따르지 않는 곳', { exact: true })).toBeVisible()
   await shot('evidence')
 
@@ -349,7 +349,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('decisive')).toHaveText(/^사람에게 보낼 사실 없음: 자동 조건의/)
   await expect(evidence.getByTestId('next-step')).toBeHidden()
   // 리뷰 지적은 올림과 메모로 나뉜다(V26): 둘 다 메모라 올림 묶음이 없고, 구조/low에는 갈래를 붙인다
-  await evidence.locator('summary', { hasText: '리뷰 지적' }).click()
+  await evidence.getByRole('button', { name: '리뷰 지적' }).click()
   const notes = evidence.getByTestId('review-notes')
   await expect(notes).toContainText('메모 2 · 관문에 들어가지 않습니다')
   await expect(notes.getByText('변수 이름이 짧음')).toBeVisible()
@@ -379,11 +379,13 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await page.getByRole('tab', { name: '변경' }).click()
   const diff = page.getByTestId('diff-panel')
   await expect(diff.locator('.diff-summary')).toContainText('파일 3개')
-  const calcFile = diff.locator('details', { has: page.getByText('src/calc.js', { exact: true }) })
+  const calcFile = diff.locator('.diff-file', {
+    has: page.getByText('src/calc.js', { exact: true }),
+  })
   await expect(calcFile.locator('.patch')).toBeVisible()
   await expect(calcFile.locator('.patch')).toContainText('n > hi ? hi')
   await shot('diff')
-  await calcFile.locator('summary').click()
+  await calcFile.getByRole('button', { expanded: true }).click()
   await expect(calcFile.locator('.patch')).toBeHidden()
 
   // [머지] → 끝남
@@ -478,10 +480,8 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(head).toContainText('구현 중')
   await shot('end-box')
   // [리뷰 지적]은 올림 둘과 메모 셋(요청과 어긋남 포함)으로 나뉜다(V26, V30 메모)
-  const fold = evidence.locator('details.fold', {
-    has: page.locator('summary', { hasText: '리뷰 지적' }),
-  })
-  if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
+  const fold = evidence.getByRole('button', { name: /리뷰 지적/ })
+  if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click()
   const raisedGroup = evidence.getByTestId('review-raised')
   await expect(raisedGroup).toContainText('올림 2 · 관문이 사람에게 보냅니다')
   // 세션 몫도 상자가 떠 있는 동안은 저절로 가지 않으니 사람이 넘길 수 있다
@@ -508,7 +508,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(evidence.getByTestId('feedback-status')).toHaveText(
     /^사람 몫의 리뷰 올림이 있어 세션 몫 사실 1개를 보내지 않았습니다: /,
   )
-  if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click()
+  if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click()
   await expect(raisedGroup.getByRole('button', { name: '세션에 넘기기' })).toHaveCount(2)
   await evidence.getByTestId('feedback-status').scrollIntoViewIfNeeded()
   await shot('feedback-human-findings')
@@ -528,7 +528,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(endBox).toBeHidden()
   // 끝낼 때의 메모(V37): 메모(구조/low, 요청과 어긋남)를 남기고 끝났으니 끝난 Work의 [증거] 맨 위에 접혀 있다
   const memos = evidence.getByTestId('end-memos')
-  await memos.locator('summary', { hasText: '끝낼 때의 메모 3개' }).click()
+  await memos.getByRole('button', { name: '끝낼 때의 메모 3개' }).click()
   await expect(memos.getByTestId('end-memo')).toHaveCount(3)
   await shot('ended')
 

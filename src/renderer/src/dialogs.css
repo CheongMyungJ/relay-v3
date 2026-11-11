@@ -1,35 +1,20 @@
-/* 대화상자와 입력: 새 Work, 프로젝트 설정 (docs/m2-modules.md 4절). 색과 글꼴은 styles.css의 토큰을 쓴다. */
+/* 대화상자와 입력: 새 Work, 프로젝트 설정, 품질 기준 초안 (docs/m2-modules.md 4절). 대화상자(Dialog)와 입력(TextArea,
+   TextInput, Selector, Switch, SegmentedControl, CheckboxInput)은 Astryx 부품이고 여기서는 안의 배치만 잡는다. */
 
-/* ── 대화상자와 입력 ──────────────────────────────────────────────────────── */
+/* ── 대화상자 안 ──────────────────────────────────────────────────────────── */
 
-.backdrop {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgb(0 0 0 / 0.35);
-  z-index: 10;
-}
-
-.dialog {
-  width: min(480px, 100%);
-  max-height: calc(100vh - 48px);
+.dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 24px 28px;
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  padding: 20px 24px 24px;
+  /* Astryx Dialog의 글 초기화(word-break: normal) 대신 한국어는 낱말 단위로 줄을 바꾼다 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
-.dialog.wide {
-  width: min(600px, 100%);
-}
-
-.dialog-title {
-  font-size: 19px;
-  font-weight: 650;
-  margin-bottom: 18px;
+.dialog-actions {
+  margin-top: 4px;
 }
 
 .form {
@@ -38,37 +23,10 @@
   gap: 18px;
 }
 
-.field-label {
+.field-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-weight: 600;
-}
-
-.field {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-weight: 400;
-}
-
-textarea.field {
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.field.narrow {
-  width: 120px;
-}
-
-.field:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .help {
@@ -78,101 +36,11 @@ textarea.field {
   color: var(--muted);
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chip {
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface);
-  font-weight: 500;
-}
-
-.chip.on {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.segmented {
-  display: inline-flex;
-  align-self: flex-start;
-  padding: 3px;
-  gap: 2px;
-  border-radius: 9px;
-  background: var(--surface-2);
-}
-
-.segmented button {
-  height: 30px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.segmented button.on {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
-}
-
+/* 설정의 켜고 끄기 한 줄(Switch): 옅은 바탕 상자 */
 .switch-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
   padding: 14px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-box);
   background: var(--surface-2);
-  cursor: pointer;
-}
-
-.switch-title {
-  display: block;
-  font-weight: 650;
-  margin-bottom: 4px;
-}
-
-.switch {
-  appearance: none;
-  flex: none;
-  position: relative;
-  width: 40px;
-  height: 24px;
-  margin: 2px 0 0;
-  border-radius: 999px;
-  background: var(--border-strong);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.switch::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
-  transition: transform 0.15s;
-}
-
-.switch:checked {
-  background: var(--accent);
-}
-
-.switch:checked::after {
-  transform: translateX(16px);
 }
 
 /* ── 설정의 [실적] (M4c, RecordTable.tsx) ───────────────────────────────── */
@@ -215,10 +83,6 @@ textarea.field {
 }
 
 /* ── 품질 기준 초안 (DraftDialog.tsx, V60~V62) ─────────────────────────── */
-
-.dialog.wide:has(.draft) {
-  width: min(760px, 100%);
-}
 
 .draft {
   display: flex;
@@ -271,7 +135,7 @@ textarea.field {
 
 .draft-fixes {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-box);
   background: var(--bad-soft);
 }
 
@@ -282,7 +146,7 @@ textarea.field {
   margin: 0 0 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-box);
 }
 
 .draft-question legend {
@@ -290,18 +154,11 @@ textarea.field {
   font-weight: 600;
 }
 
-.draft-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.draft-option,
+.draft-option label {
   font-family: var(--mono);
-  font-size: 12px;
 }
 
 .draft-text {
-  max-height: 260px;
-  overflow: auto;
-  margin: 8px 0 0;
-  font-family: var(--mono);
-  font-size: 11.5px;
+  margin: 4px 0 0;
 }

@@ -178,12 +178,17 @@ test('[실적]: 조건 줄, 사람 경로 줄, 판, 모든 판, [귀속이 틀�
   ).toBeChecked()
   await expect(record).not.toContainText('M5')
   await expect(page.getByRole('dialog').locator('progress')).toHaveCount(0)
+  // 창보다 긴 대화상자는 바퀴로 스크롤된다(내용 칸이 넘침을 스크롤함)
+  const body = page.getByRole('dialog').locator('.dialog-body')
+  await body.hover()
+  await page.mouse.wheel(0, 400)
+  await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await page.getByRole('dialog').getByText('세션 커밋 트레일러').scrollIntoViewIfNeeded()
   await shot('trailer-switch')
   await record.scrollIntoViewIfNeeded()
   await shot('current')
 
-  await record.getByRole('button', { name: '모든 판' }).click()
+  await record.getByRole('radio', { name: '모든 판' }).click()
   await expect(small).toContainText('small (a1b2c3) · 일치 3/5')
   await expect(record.getByTestId('record-epoch')).toHaveText('모든 판')
 

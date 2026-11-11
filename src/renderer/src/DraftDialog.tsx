@@ -2,7 +2,10 @@
 // 돌려 본 명령(됨·안 됨과 까닭), 래칫의 지금 값, 고칠 것(초안에서 뺀 것), 묻는 것(셋까지), 빠진 도구의 제안을 보이고 [초안 쓰기]가
 // 답을 넣어 작업 트리에 쓴다. 커밋은 사람이 한다(V20).
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Button } from '@astryxdesign/core/Button'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { CodeBlock } from '@astryxdesign/core/CodeBlock'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import type {
   DraftAnswersInput,
   DraftCommandView,
@@ -10,8 +13,8 @@ import type {
   DraftQualityResult,
   DraftQuestionView,
 } from '../../shared/api.ts'
-import { Modal } from './dialogs.tsx'
-import { ErrorLine, Tag, useAction } from './ui.tsx'
+import { DialogActions, Modal } from './dialogs.tsx'
+import { ErrorLine, Fold, Tag, useAction } from './ui.tsx'
 
 const KIND: Readonly<Record<DraftCommandView['kind'], string>> = {
   setup: '설치',
@@ -72,9 +75,9 @@ export function DraftDialog(p: {
   const write = () =>
     void act.run(async () => p.onWritten(await p.write(answersOf(v.questions, picked, typed))))
   const units = v.units.map((u) => (u.dir === '.' ? u.label : `${u.label} ${u.dir}/`))
-  // 사이드바의 좁은 알림 안에서 열려도 그 글꼴·색을 물려받지 않게 body에 그린다
-  return createPortal(
-    <Modal title={`품질 기준 초안 · ${p.projectName}`} onClose={p.onClose} wide>
+  // Astryx Dialog는 맨 위 층(<dialog>)에 뜬다: 사이드바의 좁은 알림 안에서 열려도 그 글꼴·색을 물려받지 않는다
+  return (
+    <Modal title={`품질 기준 초안 · ${p.projectName}`} onClose={p.onClose} size="draft">
       <div className="draft" data-testid="draft-dialog">
         <p className="muted">
           언어: {units.length === 0 ? '찾지 못함(앱이 직접 재는 래칫만)' : units.join(', ')}.{' '}
@@ -127,21 +130,23 @@ export function DraftDialog(p: {
                 <legend>{q.text}</legend>
                 <span className="help">{q.hint}</span>
                 {q.options.map((o) => (
-                  <label key={o.value} className="draft-option">
-                    <input
-                      type="checkbox"
-                      checked={(picked[q.id] ?? []).includes(o.value)}
-                      onChange={(e) => toggle(q.id, o.value, e.target.checked)}
+                  <div key={o.value} className="draft-option">
+                    <CheckboxInput
+                      size="sm"
+                      label={o.label}
+                      value={(picked[q.id] ?? []).includes(o.value)}
+                      onChange={(on) => toggle(q.id, o.value, on)}
                     />
-                    {o.label}
-                  </label>
+                  </div>
                 ))}
-                <input
-                  className="field"
-                  aria-label={`${q.text}: 더 적기`}
+                <TextInput
+                  size="sm"
+                  width="100%"
+                  label={`${q.text}: 더 적기`}
+                  isLabelHidden
                   placeholder="더 적기(쉼표로 나눔)"
                   value={typed[q.id] ?? ''}
-                  onChange={(e) => setTyped((s) => ({ ...s, [q.id]: e.target.value }))}
+                  onChange={(v) => setTyped((s) => ({ ...s, [q.id]: v }))}
                 />
               </fieldset>
             ))}
@@ -157,26 +162,28 @@ export function DraftDialog(p: {
             </ul>
           </section>
         ) : null}
-        <details className="fold">
-          <summary>쓸 초안(.relay/quality.json, 답을 넣기 전)</summary>
-          <pre className="draft-text">{v.text}</pre>
-        </details>
+        <Fold title="쓸 초안(.relay/quality.json, 답을 넣기 전)">
+          <div className="draft-text">
+            <CodeBlock code={v.text} language="json" size="sm" width="100%" maxHeight={260} />
+          </div>
+        </Fold>
         {v.exists ? (
           <p className="quality-drafted">
             작업 트리에 이미 .relay/quality.json이 있어 덮지 않습니다. 고치려면 직접 고칩니다.
           </p>
         ) : null}
         <ErrorLine text={act.error} />
-        <div className="row end">
-          <button type="button" className="secondary" onClick={p.onClose}>
-            닫기
-          </button>
-          <button type="button" className="primary" disabled={act.busy || v.exists} onClick={write}>
-            초안 쓰기
-          </button>
-        </div>
+        <DialogActions>
+          <Button variant="secondary" label="닫기" onClick={p.onClose} />
+          <Button
+            variant="primary"
+            label="초안 쓰기"
+            isLoading={act.busy}
+            isDisabled={v.exists}
+            onClick={write}
+          />
+        </DialogActions>
       </div>
-    </Modal>,
-    document.body,
+    </Modal>
   )
 }

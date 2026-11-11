@@ -1,4 +1,5 @@
-/* 오른쪽 패널: [계약] [증거] [변경] [빚] (docs/m2-modules.md 4절). 색과 글꼴은 styles.css의 토큰을 쓴다. */
+/* 오른쪽 패널: [계약] [증거] [변경] [빚] (docs/m2-modules.md 4절). 색과 글꼴은 styles.css가 이은 Astryx 토큰을 쓴다.
+   탭(TabList), 접기(Collapsible), 꼬리표(Badge), 단추는 Astryx 부품이고 여기서는 둘레만 잡는다. */
 
 /* ── 오른쪽 패널 ──────────────────────────────────────────────────────────── */
 
@@ -14,35 +15,8 @@
 }
 
 .tabs {
-  display: flex;
-  gap: 4px;
-  padding: 10px 16px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.tabs button {
-  position: relative;
-  padding: 8px 14px 10px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.tabs button.on {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-
-.tabs .badge {
-  position: absolute;
-  top: 7px;
-  right: 4px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--warn);
+  flex: none;
+  padding: 6px 16px 0;
 }
 
 .panel-scroll {
@@ -67,28 +41,21 @@
 .empty {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
   padding: 28px 24px;
   color: var(--muted);
 }
 
 .main > .empty {
   margin: auto;
-  max-width: 460px;
-  align-items: flex-start;
-}
-
-.empty-title {
-  font-size: 17px;
-  font-weight: 650;
-  color: var(--text);
+  max-width: 480px;
 }
 
 .empty-body {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
+  gap: 8px;
 }
 
 .busy-line {
@@ -98,28 +65,14 @@
   color: var(--muted);
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .callout {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 16px 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-box);
   border: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .callout.tone-warn {
@@ -155,6 +108,7 @@
 .plain-list {
   margin: 0;
   padding-left: 20px;
+  list-style: disc;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -243,7 +197,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-box);
 }
 
 /* 단위(V21): 계약 판이 줄을 단위마다 묶는다 */
@@ -336,9 +290,9 @@
 
 .verdict {
   padding: 20px 22px;
-  border-radius: 12px;
+  border-radius: var(--radius-box);
   background: var(--surface-2);
-  border-left: 5px solid var(--muted);
+  border-left: 4px solid var(--muted);
 }
 
 .verdict.tone-ok {
@@ -402,7 +356,7 @@
 .next-step {
   margin-top: 12px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--border);
   font-weight: 500;
@@ -416,23 +370,17 @@
 .feedback-status {
   margin: 0;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--info-soft);
   color: var(--info);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 
-.secondary.mini {
-  height: 24px;
-  padding: 0 8px;
-  font-size: 12px;
-}
-
 .stale {
   margin-top: 12px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--warn-soft);
   color: var(--warn);
   font-weight: 500;
@@ -457,38 +405,26 @@
   gap: 8px;
 }
 
+/* 접는 칸(ui.tsx Fold = Astryx Collapsible): 테두리 상자 안에 단추 줄과 내용 */
 .fold {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-box);
+  padding: 2px 12px;
 }
 
-.fold > summary {
+.fold-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
-  list-style: none;
+  line-height: 1.4;
 }
 
-.fold > summary::-webkit-details-marker {
-  display: none;
-}
-
-.fold > summary::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid var(--muted);
-  border-bottom: 1.5px solid var(--muted);
-  transform: rotate(-45deg);
-  transition: transform 0.15s;
-  flex: none;
-}
-
-.fold[open] > summary::before {
-  transform: rotate(45deg);
+.fold-title {
+  min-width: 0;
 }
 
 /* 끝낼 때의 메모(V37): 끝난 Work의 [증거] 맨 위에서 지나치지 않게 */
@@ -505,7 +441,7 @@
 }
 
 .fold-body {
-  padding: 0 14px 12px 28px;
+  padding: 0 2px 12px 22px;
 }
 
 .fact-list {
@@ -540,12 +476,21 @@
   gap: 8px;
 }
 
-.diff-file > summary {
+.diff-file-head {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.diff-file .fold-body {
+  padding: 0 0 10px;
 }
 
 .diff-path {
   min-width: 0;
+  font-size: 12.5px;
   overflow-wrap: anywhere;
   font-weight: 500;
 }
@@ -577,29 +522,15 @@
 }
 
 .patch {
-  margin: 0 10px 10px;
-  padding: 12px 14px;
-  border-radius: 6px;
-  background: var(--surface-2);
-  line-height: 1.5;
-  /* 좁은 패널에서 옆으로 밀지 않고 접는다 */
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  border-radius: var(--radius);
 }
 
-.patch .plus,
 .diff-count .plus {
   color: var(--ok);
 }
-.patch .minus,
 .diff-count .minus {
   color: var(--bad);
-}
-.patch .hunk {
-  color: var(--info);
-}
-.patch .meta {
-  color: var(--muted);
 }
 
 .debt-list {
@@ -617,7 +548,7 @@
   gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-box);
 }
 
 /* 단위 브랜치의 내보내기(V22): 통합 증거 한 칸과 내보내기마다 한 칸 */

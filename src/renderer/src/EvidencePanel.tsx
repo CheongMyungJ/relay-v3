@@ -7,6 +7,7 @@
 // 줄(V24: 세션에 보냄 n/3, 보내지 않은 까닭), 지적마다 보냄·세션 몫 표시와 [세션에 넘기기](사람 몫, 그리고 저절로 가지 않는
 // 세션 몫), 상자에도 [세션에 넘기기](걸린 끝과 상자는 EndPanels.tsx). 단위 브랜치로 내보내면(V22) Work 브랜치의 통합 증거
 // 칸 하나(열린 것, 명령·줄·래칫·신호, 리뷰 없음)와 내보내기마다 칸 하나(결론, 되먹임, PR과 [머지], 펼침)를 보인다.
+import { Button } from '@astryxdesign/core/Button'
 import { useState } from 'react'
 import type { EvidenceBundle, GateResult, ReviewFinding } from '../../core/types.ts'
 import type { ExportView, ProjectView, WorkView } from '../../shared/api.ts'
@@ -322,29 +323,25 @@ function Actions({ view, unit, measure }: { view: WorkView; unit?: string; measu
       ) : null}
       <div className="row">
         {view.pr && isActive(view.state) ? (
-          <button
-            type="button"
-            className="primary"
-            disabled={act.busy || !canMergeView(view)}
-            title={
+          <Button
+            variant="primary"
+            label="머지"
+            isDisabled={act.busy || !canMergeView(view)}
+            tooltip={
               canMergeView(view)
                 ? undefined
                 : '관문이 계산되고 구현 중이며, PR이 열려 있고 증거를 잰 head를 가리킬 때'
             }
             onClick={() => (asks ? setAsking(true) : merge())}
-          >
-            머지
-          </button>
+          />
         ) : null}
         {measurable ? (
-          <button
-            type="button"
-            className="secondary"
-            disabled={act.busy || running}
+          <Button
+            variant="secondary"
+            label={view.evidence ? '증거 다시 재기' : '증거 재기'}
+            isDisabled={act.busy || running}
             onClick={() => void act.run(() => window.relay.runEvidence(view.id))}
-          >
-            {view.evidence ? '증거 다시 재기' : '증거 재기'}
-          </button>
+          />
         ) : null}
       </div>
       {asking && asks ? (
@@ -389,15 +386,14 @@ function FindingList(p: { findings: ReviewFinding[]; view: WorkView; unit?: stri
               {route === 'sent' ? <Tag tone="info">세션에 보냄</Tag> : null}
               {route === 'session' ? <Tag tone="info">세션 몫</Tag> : null}
               {passable(view, f) && view.state === 'working' ? (
-                <button
-                  type="button"
-                  className="secondary mini"
-                  disabled={act.busy}
-                  title="이 지적을 되먹임 파일로 세션에 보냅니다"
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  label="세션에 넘기기"
+                  isDisabled={act.busy}
+                  tooltip="이 지적을 되먹임 파일로 세션에 보냅니다"
                   onClick={() => send(f.id)}
-                >
-                  세션에 넘기기
-                </button>
+                />
               ) : null}
             </li>
           )

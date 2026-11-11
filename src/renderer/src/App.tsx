@@ -1,6 +1,8 @@
-// 렌더러의 뿌리 (docs/m2-modules.md 4절): 왼쪽 사이드바, 가운데 터미널, 오른쪽 패널.
+// 렌더러의 뿌리 (docs/m2-modules.md 4절): 왼쪽 사이드바, 가운데 터미널, 오른쪽 패널. 틀은 Astryx AppShell이다.
 // 상태는 메인이 정본이다. 처음에 list()로 받고, 그 뒤로는 이벤트(EVENTS.work, EVENTS.projects)로 바꾼다.
 import { useCallback, useEffect, useState } from 'react'
+import { AppShell } from '@astryxdesign/core/AppShell'
+import { Button } from '@astryxdesign/core/Button'
 import { EVENTS, type ProjectView, type WorkView } from '../../shared/api.ts'
 import { NewWorkDialog, SettingsDialog } from './dialogs.tsx'
 import { Sidebar } from './Sidebar.tsx'
@@ -58,50 +60,67 @@ export function App() {
     dialog?.kind === 'settings' ? projects.find((p) => p.id === dialog.project) : undefined
 
   return (
-    <div className="app">
-      <Sidebar
-        projects={projects}
-        works={works}
-        selected={selected}
-        onSelect={setSelected}
-        onNewWork={(project) => setDialog({ kind: 'new', project })}
-        onSettings={(project) => setDialog({ kind: 'settings', project })}
-        onAddProject={addProject}
-      />
-      <main className="main">
-        <ErrorLine text={loadError ?? addError} />
-        {view ? (
-          <WorkPane
-            key={view.id}
-            view={view}
-            project={projects.find((p) => p.id === view.project) ?? null}
+    <>
+      <AppShell
+        variant="section"
+        contentPadding={0}
+        mobileNav={false}
+        sideNav={
+          <Sidebar
+            projects={projects}
+            works={works}
+            selected={selected}
+            onSelect={setSelected}
+            onNewWork={(project) => setDialog({ kind: 'new', project })}
+            onSettings={(project) => setDialog({ kind: 'settings', project })}
+            onAddProject={addProject}
           />
-        ) : projects.length === 0 ? (
-          <Empty title="프로젝트를 추가하세요">
-            <p>git 레포 폴더를 고르면 그 레포에 Work를 맡길 수 있습니다.</p>
-            <button type="button" className="primary" onClick={addProject} disabled={adding}>
-              프로젝트 추가
-            </button>
-          </Empty>
-        ) : (
-          <Empty title="Work를 고르거나 새로 만드세요">
-            <p>
-              요청을 쓰면 세션이 계약을 먼저 씁니다. 승인하면 세션이 알아서 구현하고, 앱이 증거를
-              확인합니다.
-            </p>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                const first = projects[0]
-                if (first) setDialog({ kind: 'new', project: first.id })
-              }}
+        }
+      >
+        <div className="main">
+          <ErrorLine text={loadError ?? addError} />
+          {view ? (
+            <WorkPane
+              key={view.id}
+              view={view}
+              project={projects.find((p) => p.id === view.project) ?? null}
+            />
+          ) : projects.length === 0 ? (
+            <Empty
+              title="프로젝트를 추가하세요"
+              actions={
+                <Button
+                  variant="primary"
+                  label="프로젝트 추가"
+                  onClick={addProject}
+                  isDisabled={adding}
+                />
+              }
             >
-              + 새 Work
-            </button>
-          </Empty>
-        )}
-      </main>
+              <p>git 레포 폴더를 고르면 그 레포에 Work를 맡길 수 있습니다.</p>
+            </Empty>
+          ) : (
+            <Empty
+              title="Work를 고르거나 새로 만드세요"
+              actions={
+                <Button
+                  variant="primary"
+                  label="+ 새 Work"
+                  onClick={() => {
+                    const first = projects[0]
+                    if (first) setDialog({ kind: 'new', project: first.id })
+                  }}
+                />
+              }
+            >
+              <p>
+                요청을 쓰면 세션이 계약을 먼저 씁니다. 승인하면 세션이 알아서 구현하고, 앱이 증거를
+                확인합니다.
+              </p>
+            </Empty>
+          )}
+        </div>
+      </AppShell>
       {dialog?.kind === 'new' ? (
         <NewWorkDialog
           projects={projects}
@@ -115,6 +134,6 @@ export function App() {
         />
       ) : null}
       {settingsProject ? <SettingsDialog project={settingsProject} onClose={closeDialog} /> : null}
-    </div>
+    </>
   )
 }

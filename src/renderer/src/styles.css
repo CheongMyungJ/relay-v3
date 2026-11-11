@@ -1,78 +1,56 @@
-/* relay 화면의 바탕 (docs/m2-modules.md 4절): 색 토큰, 단추, 틀, 사이드바, 터미널.
-   시스템 글꼴, 넉넉한 여백. 밝은·어두운 테마는 시스템을 따른다.
-   패널은 panels.css, 대화상자는 dialogs.css. */
+/* relay 화면의 바탕 (docs/m2-modules.md 4절): 토큰 잇기, 글꼴, 틀, 사이드바, 터미널.
+   부품(단추, 입력, 대화상자, 탭, 꼬리표)의 생김새는 Astryx(@astryxdesign/core, 테마 neutral)가 맡고, 이 파일은 층 없는
+   relay의 틀만 둔다(층 없는 규칙이 Astryx의 층을 이기므로 button·input 같은 요소 전체 규칙은 두지 않는다).
+   밝은·어두운 테마는 시스템을 따른다(Theme mode="system"). 패널은 panels.css, 대화상자는 dialogs.css. */
 
+/* 터미널은 테마를 따르되 늘 조금 어둡게 둔다(terminals.ts가 :root에서 읽는다) */
 :root {
-  color-scheme: light dark;
-  --font:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic',
-    'Noto Sans KR', 'Noto Sans CJK KR', system-ui, sans-serif;
-  --mono:
-    ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, 'D2Coding', 'DejaVu Sans Mono',
-    monospace;
-
-  --bg: #f6f6f4;
-  --surface: #ffffff;
-  --surface-2: #f1f1ee;
-  --border: #e2e2de;
-  --border-strong: #cfcfca;
-  --text: #1c1c1e;
-  --muted: #6b6b70;
-  --accent: #2463d9;
-  --accent-text: #ffffff;
-  --accent-soft: #e7eefc;
-
-  --ok: #1d7f45;
-  --ok-soft: #e4f4ea;
-  --warn: #9a6200;
-  --warn-soft: #fbf0d9;
-  --bad: #c0312b;
-  --bad-soft: #fbe5e3;
-  --info: #2463d9;
-  --info-soft: #e7eefc;
-  --muted-soft: #ededea;
-
-  /* 터미널은 테마를 따르되 늘 조금 어둡게 둔다 */
   --term-bg: #1b1c1f;
   --term-fg: #e4e4e2;
   --term-selection: #3d4a63;
-
-  --radius: 8px;
-  --shadow: 0 12px 40px rgb(0 0 0 / 0.18);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #161618;
-    --surface: #1e1e21;
-    --surface-2: #26262a;
-    --border: #2f2f34;
-    --border-strong: #3d3d43;
-    --text: #ececee;
-    --muted: #9b9ba3;
-    --accent: #5b8ff5;
-    --accent-text: #0b1020;
-    --accent-soft: #1f2b45;
-
-    --ok: #4cc77d;
-    --ok-soft: #173323;
-    --warn: #e5ad44;
-    --warn-soft: #3a2d12;
-    --bad: #f0706a;
-    --bad-soft: #3d1b1a;
-    --info: #7aa5f8;
-    --info-soft: #1f2b45;
-    --muted-soft: #2a2a2f;
-
     --term-bg: #111113;
-    --term-fg: #e4e4e2;
-    --term-selection: #3d4a63;
-    --shadow: 0 12px 40px rgb(0 0 0 / 0.5);
   }
 }
 
-* {
-  box-sizing: border-box;
+/* relay의 이름 → Astryx 토큰. Astryx 토큰은 [data-astryx-theme](html과 Theme 둘레)에 있으므로 거기서 잇는다 */
+[data-astryx-theme] {
+  /* 한국어 글꼴을 테마의 글꼴 앞에 둔다. Figtree는 받지 않는다(CSP와 오프라인), 시스템 글꼴로 떨어진다 */
+  --font-family-body:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic',
+    'Noto Sans KR', 'Noto Sans CJK KR', system-ui, sans-serif;
+  --font-family-heading: var(--font-family-body);
+  --font-family-code:
+    ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, 'D2Coding', 'DejaVu Sans Mono',
+    monospace;
+
+  --font: var(--font-family-body);
+  --mono: var(--font-family-code);
+  --bg: var(--color-background-body);
+  --surface: var(--color-background-surface);
+  --surface-2: var(--color-background-muted);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-emphasized);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --accent: var(--color-accent);
+
+  /* 상태 색: 글은 테마의 색 글, 큰 상자의 바탕은 테마의 색 바탕을 표면과 섞어 옅게 */
+  --ok: var(--color-text-green);
+  --ok-soft: color-mix(in srgb, var(--color-background-green) 45%, var(--surface));
+  --warn: var(--color-text-orange);
+  --warn-soft: color-mix(in srgb, var(--color-warning-muted) 55%, var(--surface));
+  --bad: var(--color-text-red);
+  --bad-soft: color-mix(in srgb, var(--color-background-red) 45%, var(--surface));
+  --info: var(--color-text-blue);
+  --info-soft: color-mix(in srgb, var(--color-background-blue) 40%, var(--surface));
+  --muted-soft: var(--color-background-gray);
+
+  --radius: var(--radius-element);
+  --radius-box: var(--radius-container);
 }
 
 html,
@@ -84,7 +62,7 @@ body,
 
 body {
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--text-body-size, 14px);
   line-height: 1.55;
   color: var(--text);
   background: var(--bg);
@@ -111,108 +89,19 @@ body {
   background: transparent;
 }
 
-code,
-pre,
-.mono {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  word-break: normal;
-}
+/* 요소 전체 규칙은 Astryx의 reset 층에 둔다: 층 없이 두면 CodeBlock·Code·링크 부품의 글꼴·색을 덮는다 */
+@layer reset {
+  :where(code, pre, .mono) {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    word-break: normal;
+  }
 
-a {
-  color: var(--accent);
-}
-
-p {
-  margin: 0;
-}
-
-h1,
-h2,
-h3,
-h4 {
-  margin: 0;
-}
-
-/* ── 단추 ─────────────────────────────────────────────────────────────────── */
-
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.primary,
-.secondary,
-.ghost {
-  height: 34px;
-  padding: 0 16px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.primary {
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-.primary:not(:disabled):hover {
-  filter: brightness(1.08);
-}
-
-.secondary {
-  background: var(--surface);
-  border-color: var(--border-strong);
-}
-
-.secondary:not(:disabled):hover,
-.ghost:not(:disabled):hover {
-  background: var(--surface-2);
-}
-
-.ghost {
-  background: transparent;
-  font-weight: 500;
-}
-
-.ghost.danger {
-  color: var(--bad);
-}
-
-.work-head .row button {
-  min-width: 72px;
-}
-
-.wide {
-  width: 100%;
-}
-
-.icon-button {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.icon-button:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  :where(a) {
+    color: var(--color-text-accent, var(--accent));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 }
 
 .row {
@@ -230,63 +119,14 @@ button:disabled {
   gap: 6px;
 }
 
-/* ── 꼬리표와 점 ──────────────────────────────────────────────────────────── */
+/* ── 꼬리표와 글 ──────────────────────────────────────────────────────────── */
 
+/* Badge(ui.tsx Tag)의 둘레: 줄 안에서 줄지 않게 */
 .tag {
   display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
   flex: none;
-}
-
-.tag.tone-ok {
-  color: var(--ok);
-  background: var(--ok-soft);
-}
-.tag.tone-warn {
-  color: var(--warn);
-  background: var(--warn-soft);
-}
-.tag.tone-bad {
-  color: var(--bad);
-  background: var(--bad-soft);
-}
-.tag.tone-info {
-  color: var(--info);
-  background: var(--info-soft);
-}
-.tag.tone-muted {
-  color: var(--muted);
-  background: var(--muted-soft);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--muted);
-}
-.dot.tone-ok {
-  background: var(--ok);
-}
-.dot.tone-warn {
-  background: var(--warn);
-  box-shadow: 0 0 0 3px var(--warn-soft);
-}
-.dot.tone-bad {
-  background: var(--bad);
-}
-.dot.tone-info {
-  background: var(--info);
-}
-.dot.tone-muted {
-  background: var(--border-strong);
+  max-width: 100%;
+  vertical-align: middle;
 }
 
 .muted {
@@ -299,28 +139,20 @@ button:disabled {
 
 .warn-text {
   color: var(--warn);
+  font-weight: 500;
 }
 
 .error-line {
-  color: var(--bad);
-  background: var(--bad-soft);
-  border-radius: 6px;
-  padding: 8px 12px;
   margin: 8px 0;
   overflow-wrap: anywhere;
 }
 
-/* ── 틀 ───────────────────────────────────────────────────────────────────── */
-
-.app {
-  display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
-  height: 100%;
-}
+/* ── 틀(AppShell) ─────────────────────────────────────────────────────────── */
 
 .main {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-width: 0;
   min-height: 0;
 }
@@ -329,54 +161,29 @@ button:disabled {
   margin: 12px 24px 0;
 }
 
-/* ── 사이드바 ─────────────────────────────────────────────────────────────── */
+/* ── 사이드바(SideNav) ────────────────────────────────────────────────────── */
 
 .sidebar {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--surface-2);
-  border-right: 1px solid var(--border);
+  width: 264px;
 }
 
-.brand {
-  padding: 18px 20px 10px;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.sidebar-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 12px 12px;
+.work-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .sidebar-note {
-  padding: 8px;
-  color: var(--muted);
-  font-size: 13px;
+  padding: 8px 12px;
 }
 
-.project {
-  margin-top: 12px;
+.project + .project {
+  margin-top: 8px;
 }
 
-.project-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 4px 0 8px;
-}
-
-.project-name {
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.new-work {
+  margin: 2px 0 6px;
 }
 
 /* 품질 기준 알림(V20): [증거] 탭 위와 사이드바의 프로젝트 줄 */
@@ -385,100 +192,20 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-box);
   background: var(--warn-soft);
   line-height: 1.5;
 }
 
 .quality-notice.compact {
   gap: 8px;
-  margin: 6px 0 2px;
-  padding: 10px;
+  margin: 4px 0 6px;
+  padding: 10px 12px;
   font-size: 12px;
-}
-
-.quality-notice.compact .secondary {
-  height: 28px;
-  padding: 0 10px;
 }
 
 .quality-drafted {
   color: var(--muted);
-}
-
-.new-work {
-  display: block;
-  width: 100%;
-  margin: 6px 0 4px;
-  padding: 7px 8px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--muted);
-  text-align: left;
-  font-weight: 500;
-}
-
-.new-work:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.work-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.work-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  padding: 8px;
-  margin-top: 2px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  text-align: left;
-}
-
-.work-item .dot {
-  margin-top: 7px;
-}
-
-.work-item:hover {
-  background: var(--muted-soft);
-}
-
-.work-item.selected {
-  background: var(--surface);
-  box-shadow: 0 0 0 1px var(--border);
-}
-
-.work-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.work-title {
-  font-weight: 500;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow-wrap: anywhere;
-}
-
-.work-sub {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.sidebar-foot {
-  padding: 12px;
-  border-top: 1px solid var(--border);
 }
 
 /* ── Work ─────────────────────────────────────────────────────────────────── */
@@ -496,7 +223,6 @@ button:disabled {
   justify-content: space-between;
   gap: 24px;
   padding: 18px 24px 16px;
-  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -505,12 +231,7 @@ button:disabled {
 }
 
 .work-name {
-  font-size: 18px;
-  font-weight: 650;
   letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .work-meta {
@@ -518,13 +239,17 @@ button:disabled {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--muted);
   font-size: 13px;
 }
 
 .work-head .error-line {
   margin: 10px 0 0;
+}
+
+.work-head .row {
+  flex-wrap: nowrap;
 }
 
 .work-body {

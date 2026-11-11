@@ -154,7 +154,7 @@ test('계약의 곁들일 정리 → [증거]의 빚: 상한 넘음, 갚은 빚,
   const evidence = page.getByTestId('evidence-panel')
   await expect(evidence.getByTestId('conclusion')).toHaveText('사람 머지', { timeout: 60_000 })
   await expect(evidence.getByTestId('review-meta')).toHaveText(/^리뷰 끝/, { timeout: 60_000 })
-  await evidence.locator('summary', { hasText: /^빚/ }).click()
+  await evidence.getByRole('button', { name: /^빚/ }).click()
   await expect(evidence.getByTestId('tidy-lines')).toHaveText(
     '상한 넘음곁들일 정리 2개 · 정리 몫 112줄 (상한 20줄을 넘음)',
   )

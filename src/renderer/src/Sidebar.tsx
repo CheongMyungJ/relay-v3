@@ -1,9 +1,14 @@
 // 왼쪽 사이드바 (docs/m2-modules.md 4절): 프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니. 품질 기준이 없거나
-// 깨진 프로젝트는 그 줄에 알림과 [초안 만들기](V20).
+// 깨진 프로젝트는 그 줄에 알림과 [초안 만들기](V20). 틀은 Astryx SideNav다.
+import { Button } from '@astryxdesign/core/Button'
+import { Icon } from '@astryxdesign/core/Icon'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav'
+import { Text } from '@astryxdesign/core/Text'
 import type { ProjectView, WorkView } from '../../shared/api.ts'
 import { STATE_LABEL, workTone } from './format.ts'
 import { QualityNotice } from './QualityNotice.tsx'
-import { Dot, GearIcon } from './ui.tsx'
+import { Dot } from './ui.tsx'
 
 interface Props {
   projects: ProjectView[]
@@ -17,61 +22,71 @@ interface Props {
 
 export function Sidebar(p: Props) {
   return (
-    <aside className="sidebar" aria-label="프로젝트와 Work">
-      <div className="brand">relay</div>
-      <div className="sidebar-scroll">
-        {p.projects.length === 0 ? (
-          <p className="sidebar-note">프로젝트를 추가하면 여기에 Work가 보입니다.</p>
-        ) : null}
-        {p.projects.map((project) => {
-          const works = p.works.filter((w) => w.project === project.id)
-          return (
-            <section key={project.id} className="project" data-testid="project">
-              <header className="project-head">
-                <span className="project-name" title={project.path}>
-                  {project.name}
-                </span>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`${project.name} 설정`}
-                  title="프로젝트 설정"
-                  onClick={() => p.onSettings(project.id)}
-                >
-                  <GearIcon />
-                </button>
-              </header>
-              <QualityNotice project={project} compact />
-              <button type="button" className="new-work" onClick={() => p.onNewWork(project.id)}>
-                + 새 Work
-              </button>
-              <ul className="work-list">
-                {works.map((w) => (
-                  <li key={w.id}>
-                    <button
-                      type="button"
-                      className={`work-item${w.id === p.selected ? ' selected' : ''}`}
-                      aria-current={w.id === p.selected ? 'true' : undefined}
-                      onClick={() => p.onSelect(w.id)}
-                    >
-                      <Dot tone={workTone(w)} label={STATE_LABEL[w.state]} />
-                      <span className="work-text">
-                        <span className="work-title">{w.title}</span>
-                        <span className="work-sub">{STATE_LABEL[w.state]}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )
-        })}
-      </div>
-      <footer className="sidebar-foot">
-        <button type="button" className="ghost wide" onClick={p.onAddProject}>
-          + 프로젝트 추가
-        </button>
-      </footer>
-    </aside>
+    <SideNav
+      aria-label="프로젝트와 Work"
+      className="sidebar"
+      header={<SideNavHeading heading="relay" subheading="계약과 증거로 맡기기" />}
+      footer={
+        <Button variant="ghost" label="+ 프로젝트 추가" width="100%" onClick={p.onAddProject} />
+      }
+    >
+      {p.projects.length === 0 ? (
+        <div className="sidebar-note">
+          <Text type="supporting">프로젝트를 추가하면 여기에 Work가 보입니다.</Text>
+        </div>
+      ) : null}
+      {p.projects.map((project) => {
+        const works = p.works.filter((w) => w.project === project.id)
+        return (
+          <SideNavSection
+            key={project.id}
+            title={project.name}
+            subtitle={project.path}
+            className="project"
+            data-testid="project"
+            endContent={
+              <IconButton
+                variant="ghost"
+                size="sm"
+                label={`${project.name} 설정`}
+                tooltip="프로젝트 설정"
+                icon={<Icon icon="wrench" />}
+                onClick={() => p.onSettings(project.id)}
+              />
+            }
+          >
+            <QualityNotice project={project} compact />
+            <div className="new-work">
+              <Button
+                variant="secondary"
+                size="sm"
+                width="100%"
+                label="+ 새 Work"
+                onClick={() => p.onNewWork(project.id)}
+              />
+            </div>
+            {works.map((w) => (
+              <SideNavItem
+                key={w.id}
+                className="work-item"
+                label={w.title}
+                isSelected={w.id === p.selected}
+                onClick={() => p.onSelect(w.id)}
+                endContent={
+                  <span className="work-state">
+                    <span aria-hidden="true">
+                      <Dot tone={workTone(w)} />
+                    </span>
+                    <Text type="supporting" size="sm">
+                      {STATE_LABEL[w.state]}
+                    </Text>
+                  </span>
+                }
+              />
+            ))}
+          </SideNavSection>
+        )
+      })}
+    </SideNav>
   )
 }

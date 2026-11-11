@@ -4,6 +4,7 @@
 // (qualityDraft) 단추 대신 커밋하라고 쓴다(기준을 origin/<기본>에서 읽으면 push까지). 기본 브랜치에 들어간 뒤 앱이 다시 재면
 // 알림이 사라진다.
 import { useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
 import type { DraftPreview, ProjectView } from '../../shared/api.ts'
 import { DraftDialog } from './DraftDialog.tsx'
 import { draftPending, draftResultText, qualityNotice } from './format.ts'
@@ -32,9 +33,12 @@ export function QualityNotice(p: { project: ProjectView; compact?: boolean }) {
         <Spinner label="초안을 짜고 지금 커밋에서 한 번 돌려 보는 중…" />
       ) : (
         <div className="row">
-          <button type="button" className="secondary" onClick={draft}>
-            초안 만들기
-          </button>
+          <Button
+            variant="secondary"
+            size={p.compact ? 'sm' : 'md'}
+            label="초안 만들기"
+            onClick={draft}
+          />
         </div>
       )}
       <ErrorLine text={act.error} />
