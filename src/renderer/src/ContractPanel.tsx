@@ -4,6 +4,8 @@
 // Work를 만들 때 찾은 기록 안 된 나빠짐(M3b)은 맨 위에 알린다. 곁들일 정리(M3c)는 계약 tidy의 id마다 기준 장부의 종류·경로·
 // 까닭 첫 줄을 보이고 장부에 없는 id를 알린다(사람이 무엇을 받는지 알고 승인하게).
 import { useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { TextArea } from '@astryxdesign/core/TextArea'
 import type { Contract, ContractLine, GroundingCheck } from '../../core/types.ts'
 import type { WorkView } from '../../shared/api.ts'
 import {
@@ -78,28 +80,27 @@ function ApproveBox({ id }: { id: string }) {
     <div className="callout tone-warn" data-testid="approve-box">
       <p className="callout-title">세션이 계약을 냈습니다. 읽고 답해 주세요.</p>
       <div className="row">
-        <button
-          type="button"
-          className="primary"
-          disabled={act.busy}
+        <Button
+          variant="primary"
+          label="승인"
+          isDisabled={act.busy}
           onClick={() => void act.run(() => window.relay.approveContract(id))}
-        >
-          승인
-        </button>
+        />
       </div>
-      <textarea
-        className="field"
+      <TextArea
+        label="고칠 점"
+        isLabelHidden
+        width="100%"
         rows={2}
         value={text}
         placeholder="고칠 점이 있으면 적고 보내기를 누르세요. 세션이 고쳐 다시 냅니다."
-        aria-label="고칠 점"
-        onChange={(e) => setText(e.target.value)}
+        onChange={setText}
       />
       <div className="row">
-        <button
-          type="button"
-          className="secondary"
-          disabled={act.busy || text.trim() === ''}
+        <Button
+          variant="secondary"
+          label="보내기"
+          isDisabled={act.busy || text.trim() === ''}
           onClick={() =>
             void act
               .run(() => window.relay.askChanges(id, text.trim()))
@@ -108,9 +109,7 @@ function ApproveBox({ id }: { id: string }) {
                 if (ok) setText('')
               })
           }
-        >
-          보내기
-        </button>
+        />
       </div>
       <ErrorLine text={act.error} />
     </div>
@@ -137,31 +136,28 @@ function ChangeBox(p: {
           ? '아래는 세션이 제안한 새 계약 전체입니다.'
           : '새 계약 없이 요청만 했습니다. 거절하고 바꾼 계약 전체를 내 달라고 하세요.'}
       </p>
-      <textarea
-        className="field"
+      <TextArea
+        label="세션에게 줄 말"
+        isLabelHidden
+        width="100%"
         rows={2}
         value={text}
         placeholder="세션에게 줄 말 (선택)"
-        aria-label="세션에게 줄 말"
-        onChange={(e) => setText(e.target.value)}
+        onChange={setText}
       />
       <div className="row">
-        <button
-          type="button"
-          className="primary"
-          disabled={act.busy || !p.proposed}
+        <Button
+          variant="primary"
+          label="받아들이기"
+          isDisabled={act.busy || !p.proposed}
           onClick={() => answer(true)}
-        >
-          받아들이기
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={act.busy}
+        />
+        <Button
+          variant="secondary"
+          label="거절하기"
+          isDisabled={act.busy}
           onClick={() => answer(false)}
-        >
-          거절하기
-        </button>
+        />
       </div>
       <ErrorLine text={act.error} />
     </div>

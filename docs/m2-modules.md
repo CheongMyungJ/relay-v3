@@ -12,7 +12,7 @@ src/cli         relay CLI (M1)
 src/shared      메인·렌더러가 함께 쓰는 IPC 타입 (api.ts). 런타임 코드 없음(타입과 상수만)
 src/main        Electron 메인. index.ts와 ipc.ts만 'electron'을 가져온다. 나머지는 Node에서도 돈다(시험)
 src/preload     contextBridge
-src/renderer    React. shared와 core의 'import type'만
+src/renderer    React와 Astryx(@astryxdesign/core, V77). shared와 core의 'import type'만
 ```
 
 - ESLint 층: renderer는 shared와 `import type`만. main은 'electron'을 index.ts·ipc.ts에서만. core·adapters·engine은 'electron' 금지(M1 규칙에 더함).
@@ -385,7 +385,8 @@ class Works {
 
 ## 4. renderer
 
-- 레이아웃: 왼쪽 사이드바(프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니, 품질 기준이 없거나 깨진 프로젝트는 그 줄에 알림과 [초안 만들기]), 가운데 터미널(xterm + fit), 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
+- 부품(V77): 화면의 부품과 색·글꼴 토큰은 Astryx(`@astryxdesign/core`, 테마 neutral)다. `main.tsx`가 Theme(mode system)로 감싸고 reset·astryx·theme CSS를 relay의 CSS보다 먼저 들인다. 작은 조각(`ui.tsx`: Tag=Badge, Fold=Collapsible(처음 닫힘), Dot=StatusDot, Spinner, ErrorLine=Banner, Empty)이 부품을 감싼다.
+- 레이아웃: 왼쪽 사이드바(AppShell의 SideNav. 프로젝트 → Work, 상태 점, [+ 새 Work], 프로젝트 설정 톱니, 품질 기준이 없거나 깨진 프로젝트는 그 줄에 알림과 [초안 만들기]), 가운데 터미널(xterm + fit), 오른쪽 패널 탭 [계약] [증거] [변경] [빚].
 - [계약]: 목표, 그 바로 밑에 비목표(V29: 사람이 승인 전에 뺀 범위를 먼저 본다. 없으면 '없음'), hint, 줄 표(종류 꼬리표, 글, 근거와 확인됨/추정 표시, 예시 입력→출력, 확인 방법), 사람만 아는 규칙, 곁들일 정리(M3c, V43: 계약 tidy의 id마다 `baseDebt`의 항목으로 '<id> · <종류> · <anchor 경로>: <까닭 첫 줄>'(`renderer/src/debt.ts` `tidyRows`), 장부에 없는 id는 '기준의 빚 장부에 없음' 꼬리표, 읽지 못하면 id와 오류 줄. 밑에 까닭은 레포의 글이라는 한 줄). 단위가 있으면(V21) 머리에 '줄 n개 · 단위 k개', 전달 방식 한 줄('한 브랜치: 모든 단위를 <Work 브랜치>에 두고, 단위마다 커밋을 따로 합니다', `deliveryText`), 줄을 단위마다 묶어(`unitGroups`: 줄에 처음 나온 차례, 단위가 없는 줄은 '모든 단위에 걸친 줄' 한 묶음) '단위 <이름> · 줄 n개' 밑에 보인다. 단위가 없으면 앞처럼 줄 표 하나다. `awaiting_approval`이면 [승인]과, 그 밑에 늘 보이는 글 칸 '고칠 점'과 [보내기](M2.1 13절: 고쳐 달라기를 여는 단계 없이 쓰고 보낸다. 글이 비면 [보내기]를 누를 수 없다). `recontract`면 세션의 요청, 승인본과 제안의 차이(`contractDelta(승인본, 제안)`: 줄과 예시마다 더함·뺌·고침. 고침은 바뀐 칸 이름(줄의 단위 포함)을 붙인다. 목표·비목표·사람만 아는 규칙·곁들일 정리·전달 방식이 바뀌었으면 그 이름. 승인 표시와 계약 변경 요청 칸은 견주지 않는다), [받아들임]/[거절](글). 제출 때 기준 확인의 머리 한 줄과 예시마다 꼬리표(V28)는 V32에서 뺐다.
 - 품질 기준 알림(V20): '이 레포에는 품질 기준(.relay/quality.json)이 없습니다. 앱이 명령을 돌리지 못해 증거가 비고, 결론은 늘 사람 머지입니다.'(깨졌으면 '…이 깨져 읽지 못합니다. …'). [초안 만들기] → 초안 화면(`DraftDialog.tsx`, V62: 언어와 돌린 커밋, 돌려 본 명령의 됨·안 됨과 까닭, 지금 값, 고칠 것, 묻는 것마다 후보 고르기와 글 칸, 제안, 접힌 초안 글. 이미 있으면 [초안 쓰기]를 막고 알림) → [초안 쓰기] → '초안을 썼습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).'(이미 있으면 덮지 않았다고. 기준을 origin/<기본>에서 읽으면(qualityRef) '…기본 브랜치에 커밋한 뒤 origin에 push하면…'). 작업 트리에 초안이 있으면(qualityDraft) 단추 대신 커밋하라는 글(push도 같다).
 - [끝내기](V25): 머리줄의 [끝내기]는 [증거] 탭으로 옮기고 `end(id, { head: 화면의 HEAD })`를 부른다. 열린 것이 없으면 Work가 바로 끝난다. 걸리면(`endPending.armed`) [증거] 맨 위에 '끝내기가 걸려 있습니다: 내보내기 증거와 리뷰가 끝나고 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 여기에 보입니다.'와 [취소](`cancelEnd`)를 보이고 머리줄 단추는 '끝내기 걸림'(누를 수 없음)이다. 열린 것이 있으면 상자 '열린 것이 있습니다. 보고 끝낼지 정하세요. 고칠 것이 있으면 터미널에서 세션에게 말하세요.', 열린 것 목록(리뷰 실패면 '끝내기를 다시 누르면 리뷰를 다시 돌립니다'를 붙임), [그래도 끝내기](`end(id, { head: 상자의 head, force: true })`), [더 고치기](`cancelEnd`), 넘길 올림이나 보내지 않은 세션 몫 사실이 있으면(`handable`) [세션에 넘기기](V35, `handEnd(id, { head: 상자의 head, picks: passByExport(view) })`). 넘기면 상자 대신 '세션에 넘겼습니다: 세션이 고치고 쉬면 그 head의 내보내기 증거와 리뷰를 보고, 열린 것이 없으면 Work를 끝냅니다. 열린 것이 있으면 상자가 다시 뜹니다.'와 [취소]가 보이고(`end-handed`, `endPending.handed`이고 armed가 아님) 머리줄 단추는 '고치면 끝냄'(누를 수 없음)이다. 세션이 쉬어 그 head를 재는 동안은 걸린 끝의 글이다. 상자와 걸린 끝은 `view.endPending`이라 다른 Work로 갔다 와도 남는다. HEAD가 바뀌어 지웠으면(`view.endMoved`) 그 자리에 '[끝내기] 뒤 세션이 새로 커밋했습니다(앞 → 지금). 새 커밋의 증거와 리뷰를 보려면 끝내기를 다시 누르세요'를 보인다. [끝내기]로 끝난 Work에 메모가 남았으면(`view.endMemos`, V37) [증거] 맨 위(알림 아래)에 접힌 칸 '끝낼 때의 메모 n개'(`end-memos`, `endMemosText`)를 보인다: 펼치면 '관문에 들어가지 않아 끝을 막지 않은 리뷰 지적입니다. 고칠 것이 있으면 새 Work로 하세요.'와 지적마다 심각도, 단위, 갈래, 글, 파일:줄. 리뷰를 끈 앱(reviewDisabled)은 걸린 끝·[끝내기] 설명·다음 할 일에서 리뷰를 말하지 않는다('내보내기 증거…').

@@ -155,7 +155,7 @@ test('승격된 규칙의 허용 목록이 늘면 사람 머지 사실, 말로�
   await expect(evidence).toContainText(
     '규칙의 허용 목록이 늚: docs/knowledge/console.md (검사 `no-console`의 허용 목록',
   )
-  await evidence.locator('summary', { hasText: /^지식/ }).click()
+  await evidence.getByRole('button', { name: /^지식/ }).click()
   await expect(evidence.getByTestId('knowledge-summary')).toHaveText(
     '바뀐 지식 파일 1개 · 말로만 남은 규칙 2개',
   )
@@ -163,7 +163,7 @@ test('승격된 규칙의 허용 목록이 늘면 사람 머지 사실, 말로�
   await expect(evidence.getByTestId('knowledge-spoken')).toContainText(
     '검사 `no-eval`가 quality.json rules에 없음',
   )
-  await evidence.locator('summary', { hasText: /^빚/ }).click()
+  await evidence.getByRole('button', { name: /^빚/ }).click()
   await expect(evidence.getByTestId('tidy-paid')).toContainText(
     '`src/calc.js`가 허용 목록에서 빠지고 빠른 명령이 통과',
   )

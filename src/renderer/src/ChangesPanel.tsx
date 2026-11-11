@@ -2,9 +2,10 @@
 // diff(접기. 작은 diff는 펼친 채로, M2.1 13절). git의 영어 --stat 글은 좁은 패널에서 잘리므로 그대로 보이지 않고 patch에서
 // 센다. 빚: 이 Work가 건드린 경로의 빚. HEAD가 바뀌면 다시 읽는다.
 import { useEffect, useState } from 'react'
+import { CodeBlock } from '@astryxdesign/core/CodeBlock'
 import type { DebtItem, DebtKind } from '../../core/types.ts'
 import { diffOpen, splitDiff } from './format.ts'
-import { Empty, ErrorLine, Spinner, Tag } from './ui.tsx'
+import { Empty, ErrorLine, Fold, Spinner, Tag } from './ui.tsx'
 
 export type Loaded<T> =
   { state: 'loading' } | { state: 'ok'; value: T } | { state: 'error'; error: string }
@@ -66,46 +67,47 @@ export function DiffPanel({ id, head }: { id: string; head: string | null }) {
       </p>
       <div className="diff-files">
         {files.map((f) => (
-          <details key={f.path} className="fold diff-file" open={open}>
-            <summary>
-              <code className="diff-path">{f.path}</code>
-              <span className="diff-count">
-                {f.binary ? (
-                  <span className="muted">바이너리</span>
-                ) : (
-                  <>
-                    <span className="plus">+{f.added}</span>{' '}
-                    <span className="minus">−{f.deleted}</span>
-                  </>
-                )}
-              </span>
-              <span className="diff-bar" aria-hidden="true">
-                <span className="plus" style={{ width: `${(f.added / most) * 100}%` }} />
-                <span className="minus" style={{ width: `${(f.deleted / most) * 100}%` }} />
-              </span>
-            </summary>
-            <pre className="patch">
-              {f.patch.split('\n').map((line, i) => (
-                <span key={i} className={patchClass(line)}>
-                  {line}
-                  {'\n'}
+          <Fold
+            key={f.path}
+            className="diff-file"
+            open={open}
+            title={
+              <span className="diff-file-head">
+                <code className="diff-path">{f.path}</code>
+                <span className="diff-count">
+                  {f.binary ? (
+                    <span className="muted">바이너리</span>
+                  ) : (
+                    <>
+                      <span className="plus">+{f.added}</span>{' '}
+                      <span className="minus">−{f.deleted}</span>
+                    </>
+                  )}
                 </span>
-              ))}
-            </pre>
-          </details>
+                <span className="diff-bar" aria-hidden="true">
+                  <span className="plus" style={{ width: `${(f.added / most) * 100}%` }} />
+                  <span className="minus" style={{ width: `${(f.deleted / most) * 100}%` }} />
+                </span>
+              </span>
+            }
+          >
+            <div className="patch">
+              <CodeBlock
+                code={f.patch}
+                isDiff
+                isWrapped
+                hasLanguageLabel={false}
+                size="sm"
+                width="100%"
+                container="section"
+                hasCopyButton={false}
+              />
+            </div>
+          </Fold>
         ))}
       </div>
     </div>
   )
-}
-
-function patchClass(line: string): string | undefined {
-  if (line.startsWith('@@')) return 'hunk'
-  if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff --git'))
-    return 'meta'
-  if (line.startsWith('+')) return 'plus'
-  if (line.startsWith('-')) return 'minus'
-  return undefined
 }
 
 export const DEBT_KIND: Record<DebtKind, string> = {

@@ -82,7 +82,8 @@ export default tseslint.config(
           paths: nodeBuiltins,
           patterns: [
             { group: electron },
-            { group: ['**/core/**'], allowTypeImports: true },
+            // relay의 src/core는 타입만. 화면 부품 묶음 @astryxdesign/core는 relay의 층이 아니다
+            { group: ['**/core/**', '!@astryxdesign/core/**'], allowTypeImports: true },
             {
               group: ['**/adapters/**', '**/engine/**', '**/cli/**', '**/main/**', '**/preload/**'],
             },

@@ -2,6 +2,9 @@
 // 30일, 비교군과 lift)과 '사람 경로' 비교 줄. 기본은 지금 판이고 '모든 판'으로 바꾼다. 판이 바뀐 자리, 판을 모르는 결론 줄과 깨진
 // 장부 줄도 보인다. 귀속된 되돌림·main 실패마다 [귀속이 틀림](M4d 이의). 진행 막대·'M5까지 몇 건'·남은 주는 없다.
 import { useEffect, useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
+import { Text } from '@astryxdesign/core/Text'
 import {
   EVENTS,
   type AfterEvent,
@@ -50,15 +53,16 @@ export function RecordTable(p: { project: ProjectView }) {
   return (
     <section className="record" data-testid="record">
       <div className="record-head">
-        <span className="switch-title">실적</span>
-        <div className="segmented" role="group" aria-label="판">
-          <button type="button" className={all ? '' : 'on'} onClick={() => setAll(false)}>
-            지금 판
-          </button>
-          <button type="button" className={all ? 'on' : ''} onClick={() => setAll(true)}>
-            모든 판
-          </button>
-        </div>
+        <Text type="label">실적</Text>
+        <SegmentedControl
+          label="판"
+          size="sm"
+          value={all ? 'all' : 'now'}
+          onChange={(v) => setAll(v === 'all')}
+        >
+          <SegmentedControlItem value="now" label="지금 판" />
+          <SegmentedControlItem value="all" label="모든 판" />
+        </SegmentedControl>
       </div>
       <ErrorLine text={error} />
       {stats ? <Stats stats={stats} project={id} onChange={() => setTick((t) => t + 1)} /> : null}
@@ -138,19 +142,18 @@ function EventRow(p: { e: AfterEvent; project: string; onChange: () => void }) {
         {e.disputed ? ' · 이의로 셈에서 뺌' : ''}
       </span>
       {e.disputed ? null : (
-        <button
-          type="button"
-          className="ghost small"
-          disabled={act.busy}
+        <Button
+          variant="ghost"
+          size="sm"
+          label="귀속이 틀림"
+          isDisabled={act.busy}
           onClick={() =>
             void act.run(async () => {
               await window.relay.dispute(p.project, e.merge_commit, e.event)
               p.onChange()
             })
           }
-        >
-          귀속이 틀림
-        </button>
+        />
       )}
       <ErrorLine text={act.error} />
     </li>

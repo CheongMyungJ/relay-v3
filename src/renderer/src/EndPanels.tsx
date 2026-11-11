@@ -3,13 +3,14 @@
 // 상자의 [세션에 넘기기](V24, V35)는 열린 것에 보이는 올림과 저절로 가지 않은 세션 몫 사실을 보내고, 끝을 '고친 뒤 끝냄'으로
 // 다시 건다: 세션이 고치고 쉬면 메인이 끝내거나 상자를 다시 띄운다. 그동안은 걸린 끝의 칸에 그 글과 [취소]가 보인다.
 // [끝내기]로 끝난 Work는 끝낼 때 남은 리뷰 메모(V37)를 접어 보인다. [머지]와 [그래도 끝내기]의 빚 확인(M3b)도 여기에 둔다.
+import { Button } from '@astryxdesign/core/Button'
 import { useState } from 'react'
 import type { WorkView } from '../../shared/api.ts'
 import { debtAsk, debtTexts, type DebtVerb } from './debt.ts'
 import { handable, passByExport } from './exports.ts'
 import { endMemosText, raiseLabel } from './findings.ts'
 import { SEVERITY, endHanded, endTexts, openText } from './format.ts'
-import { ErrorLine, Tag, useAction } from './ui.tsx'
+import { ErrorLine, Fold, Tag, useAction } from './ui.tsx'
 
 /**
  * 걸린 끝(V25): 내보내기 증거와 리뷰가 끝나면 메인이 끝내거나 상자로 바꾼다. 세션에 넘겨 다시 건 끝(V35)은 세션이 고치고 쉬기를
@@ -27,14 +28,12 @@ export function EndArmed({ view }: { view: WorkView }) {
     >
       <p className="callout-title">{handed ? endTexts(view).handed : endTexts(view).armed}</p>
       <div className="row">
-        <button
-          type="button"
-          className="secondary"
-          disabled={act.busy}
+        <Button
+          variant="secondary"
+          label="취소"
+          isDisabled={act.busy}
           onClick={() => void act.run(() => window.relay.cancelEnd(view.id))}
-        >
-          취소
-        </button>
+        />
       </div>
       <ErrorLine text={act.error} />
     </div>
@@ -75,36 +74,30 @@ export function EndBox(p: { view: WorkView; head: string; open: string[] }) {
         />
       ) : null}
       <div className="row">
-        <button
-          type="button"
-          className="primary"
-          disabled={act.busy || (asking && asks !== null)}
+        <Button
+          variant="primary"
+          label="그래도 끝내기"
+          isDisabled={act.busy || (asking && asks !== null)}
           onClick={() => (asks ? setAsking(true) : force(false))}
-        >
-          그래도 끝내기
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={act.busy}
+        />
+        <Button
+          variant="secondary"
+          label="더 고치기"
+          isDisabled={act.busy}
           onClick={() => void act.run(() => window.relay.cancelEnd(view.id))}
-        >
-          더 고치기
-        </button>
+        />
         {hand ? (
-          <button
-            type="button"
-            className="secondary"
-            disabled={act.busy}
-            title={endTexts(view).hand}
+          <Button
+            variant="secondary"
+            label="세션에 넘기기"
+            isDisabled={act.busy}
+            tooltip={endTexts(view).hand}
             onClick={() =>
               void act.run(() =>
                 window.relay.handEnd(view.id, { head: p.head, picks: passByExport(view) }),
               )
             }
-          >
-            세션에 넘기기
-          </button>
+          />
         ) : null}
       </div>
       <ErrorLine text={act.error} />
@@ -136,25 +129,19 @@ export function DebtChoice(p: {
       ) : null}
       <p className="muted small">{t.note}</p>
       <div className="row">
-        <button
-          type="button"
-          className="primary"
-          disabled={p.busy}
+        <Button
+          variant="primary"
+          label={t.record}
+          isDisabled={p.busy}
           onClick={() => p.onChoose(true)}
-        >
-          {t.record}
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={p.busy}
+        />
+        <Button
+          variant="secondary"
+          label={t.skip}
+          isDisabled={p.busy}
           onClick={() => p.onChoose(false)}
-        >
-          {t.skip}
-        </button>
-        <button type="button" className="ghost" disabled={p.busy} onClick={p.onCancel}>
-          취소
-        </button>
+        />
+        <Button variant="ghost" label="취소" isDisabled={p.busy} onClick={p.onCancel} />
       </div>
     </div>
   )
@@ -168,27 +155,24 @@ export function EndMemos({ view }: { view: WorkView }) {
   const t = endMemosText(view)
   if (t === null) return null
   return (
-    <details className="fold end-memos" data-testid="end-memos">
-      <summary>{t.title}</summary>
-      <div className="fold-body">
-        <p className="muted small">{t.note}</p>
-        <ul className="fact-list">
-          {view.endMemos.map(({ unit, finding: f }, i) => (
-            <li key={i} data-testid="end-memo">
-              <Tag tone={SEVERITY[f.severity].tone}>{SEVERITY[f.severity].label}</Tag>
-              {unit === undefined ? null : <Tag>단위 {unit}</Tag>}
-              {f.raise === undefined ? null : <Tag>{raiseLabel(f)}</Tag>}
-              <span>{f.text}</span>
-              {f.file ? (
-                <code>
-                  {f.file}
-                  {f.line === undefined ? '' : `:${f.line}`}
-                </code>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </details>
+    <Fold title={t.title} className="end-memos" testId="end-memos">
+      <p className="muted small">{t.note}</p>
+      <ul className="fact-list">
+        {view.endMemos.map(({ unit, finding: f }, i) => (
+          <li key={i} data-testid="end-memo">
+            <Tag tone={SEVERITY[f.severity].tone}>{SEVERITY[f.severity].label}</Tag>
+            {unit === undefined ? null : <Tag>단위 {unit}</Tag>}
+            {f.raise === undefined ? null : <Tag>{raiseLabel(f)}</Tag>}
+            <span>{f.text}</span>
+            {f.file ? (
+              <code>
+                {f.file}
+                {f.line === undefined ? '' : `:${f.line}`}
+              </code>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Fold>
   )
 }

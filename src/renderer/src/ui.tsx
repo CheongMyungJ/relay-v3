@@ -1,33 +1,76 @@
-// 화면 곳곳에서 쓰는 작은 조각: 꼬리표, 빈 상태, 비동기 동작의 바쁨·오류.
+// 화면 곳곳에서 쓰는 작은 조각: 꼬리표, 빈 상태, 비동기 동작의 바쁨·오류. 생김새는 Astryx(@astryxdesign/core)가 맡는다.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Heading } from '@astryxdesign/core/Heading'
+import { Spinner as AxSpinner } from '@astryxdesign/core/Spinner'
+import { StatusDot } from '@astryxdesign/core/StatusDot'
 import type { Tone } from './format.ts'
 
-export function Tag({ tone = 'muted', children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={`tag tone-${tone}`}>{children}</span>
+/** 꼬리표의 색: 옅은 바탕에 진한 글(Badge의 색 이름). 흐림은 중립 */
+const BADGE: Record<Tone, 'green' | 'orange' | 'red' | 'blue' | 'neutral'> = {
+  ok: 'green',
+  warn: 'orange',
+  bad: 'red',
+  info: 'blue',
+  muted: 'neutral',
 }
 
-/** 접는 칸: 제목, 수(선택), 내용 */
-export function Fold(p: { title: string; count?: number; open?: boolean; children: ReactNode }) {
+const DOT: Record<Tone, 'success' | 'warning' | 'error' | 'accent' | 'neutral'> = {
+  ok: 'success',
+  warn: 'warning',
+  bad: 'error',
+  info: 'accent',
+  muted: 'neutral',
+}
+
+export function Tag({ tone = 'muted', children }: { tone?: Tone; children: ReactNode }) {
   return (
-    <details className="fold" open={p.open}>
-      <summary>
-        {p.title}
-        {p.count === undefined ? null : <span className="count">{p.count}</span>}
-      </summary>
+    <span className={`tag tone-${tone}`}>
+      <Badge variant={BADGE[tone]} label={children} />
+    </span>
+  )
+}
+
+/** 접는 칸: 제목, 수(선택), 내용. 처음에는 닫혀 있다(open이면 열림) */
+export function Fold(p: {
+  title: ReactNode
+  count?: number
+  open?: boolean
+  className?: string
+  testId?: string
+  children: ReactNode
+}) {
+  return (
+    <Collapsible
+      className={`fold${p.className ? ` ${p.className}` : ''}`}
+      data-testid={p.testId}
+      defaultIsOpen={p.open ?? false}
+      chevronPosition="start"
+      trigger={
+        <span className="fold-trigger">
+          <span className="fold-title">{p.title}</span>
+          {p.count === undefined ? null : <span className="count">{p.count}</span>}
+        </span>
+      }
+    >
       <div className="fold-body">{p.children}</div>
-    </details>
+    </Collapsible>
   )
 }
 
 export function Dot({ tone, label }: { tone: Tone; label?: string }) {
-  return <span className={`dot tone-${tone}`} aria-label={label} title={label} />
+  return <StatusDot variant={DOT[tone]} label={label ?? ''} tooltip={label} />
 }
 
-export function Empty({ title, children }: { title: string; children?: ReactNode }) {
+/** 빈 상태: 제목, 설명(선택), 동작(선택) */
+export function Empty(p: { title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="empty">
-      <p className="empty-title">{title}</p>
-      {children ? <div className="empty-body">{children}</div> : null}
+      <Heading level={3}>{p.title}</Heading>
+      {p.children ? <div className="empty-body">{p.children}</div> : null}
+      {p.actions ? <div className="row">{p.actions}</div> : null}
     </div>
   )
 }
@@ -35,7 +78,7 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 export function Spinner({ label }: { label: string }) {
   return (
     <div className="busy-line" role="status">
-      <span className="spinner" aria-hidden="true" />
+      <AxSpinner size="sm" aria-label={label} />
       {label}
     </div>
   )
@@ -44,9 +87,9 @@ export function Spinner({ label }: { label: string }) {
 export function ErrorLine({ text }: { text: string | null }) {
   if (!text) return null
   return (
-    <p className="error-line" role="alert">
-      {text}
-    </p>
+    <div className="error-line" role="alert">
+      <Banner status="error" title={text} collapsible={false} />
+    </div>
   )
 }
 
@@ -83,19 +126,4 @@ export function useAction(): {
   }, [])
   const clear = useCallback(() => setError(null), [])
   return { busy, error, run, clear }
-}
-
-export function GearIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.1.1-1.4-.1-1.4 2-1.6-2-3.4-2.4 1a8 8 0 0 0-2.4-1.4L14.2 2h-4l-.4 2.6a8 8 0 0 0-2.4 1.4l-2.4-1-2 3.4 2 1.6-.1 1.4.1 1.4-2 1.6 2 3.4 2.4-1a8 8 0 0 0 2.4 1.4l.4 2.6h4l.4-2.6a8 8 0 0 0 2.4-1.4l2.4 1 2-3.4-2-1.6Z"
-      />
-    </svg>
-  )
 }

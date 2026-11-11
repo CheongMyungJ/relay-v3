@@ -183,7 +183,7 @@ test('[실적]: 조건 줄, 사람 경로 줄, 판, 모든 판, [귀속이 틀�
   await record.scrollIntoViewIfNeeded()
   await shot('current')
 
-  await record.getByRole('button', { name: '모든 판' }).click()
+  await record.getByRole('radio', { name: '모든 판' }).click()
   await expect(small).toContainText('small (a1b2c3) · 일치 3/5')
   await expect(record.getByTestId('record-epoch')).toHaveText('모든 판')
 
