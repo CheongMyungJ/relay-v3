@@ -148,6 +148,7 @@ export class Works implements WorkCtx {
         chain: Promise.resolve(),
         wired: false,
         merging: false,
+        polling: false,
         noticeSent: false,
         abort: new AbortController(),
         review: null,

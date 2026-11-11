@@ -1,0 +1,5 @@
+# 줄 끝은 어디서나 LF다(Prettier의 endOfLine: lf). Windows의 git checkout이 CRLF로 바꾸면 format:check가 모든 파일을 잡는다
+* text=auto eol=lf
+# Windows 배치 파일은 cmd.exe가 읽으므로 CRLF로 둔다
+*.cmd text eol=crlf
+*.bat text eol=crlf
