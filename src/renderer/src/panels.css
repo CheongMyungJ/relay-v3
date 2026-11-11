@@ -490,6 +490,7 @@
 
 .diff-path {
   min-width: 0;
+  font-size: 12.5px;
   overflow-wrap: anywhere;
   font-weight: 500;
 }

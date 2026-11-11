@@ -72,7 +72,16 @@ export function Sidebar(p: Props) {
                 label={w.title}
                 isSelected={w.id === p.selected}
                 onClick={() => p.onSelect(w.id)}
-                endContent={<Dot tone={workTone(w)} label={STATE_LABEL[w.state]} />}
+                endContent={
+                  <span className="work-state">
+                    <span aria-hidden="true">
+                      <Dot tone={workTone(w)} />
+                    </span>
+                    <Text type="supporting" size="sm">
+                      {STATE_LABEL[w.state]}
+                    </Text>
+                  </span>
+                }
               />
             ))}
           </SideNavSection>

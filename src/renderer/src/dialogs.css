@@ -4,7 +4,13 @@
 /* ── 대화상자 안 ──────────────────────────────────────────────────────────── */
 
 .dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: 20px 24px 24px;
+  /* Astryx Dialog의 글 초기화(word-break: normal) 대신 한국어는 낱말 단위로 줄을 바꾼다 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .dialog-actions {
@@ -148,7 +154,8 @@
   font-weight: 600;
 }
 
-.draft-option {
+.draft-option,
+.draft-option label {
   font-family: var(--mono);
 }
 

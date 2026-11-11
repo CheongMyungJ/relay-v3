@@ -25,9 +25,9 @@ import {
 import { TerminalView } from './TerminalView.tsx'
 import { ErrorLine, Tag, useAction } from './ui.tsx'
 
-type Tab = 'contract' | 'evidence' | 'diff' | 'debt'
+type PanelTab = 'contract' | 'evidence' | 'diff' | 'debt'
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: PanelTab; label: string }[] = [
   { id: 'contract', label: '계약' },
   { id: 'evidence', label: '증거' },
   { id: 'diff', label: '변경' },
@@ -35,14 +35,14 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 /** 상태가 바뀌면 그 상태에서 볼 탭으로 옮긴다: 계약을 다루는 동안은 [계약], 그 뒤로는 [증거] */
-function defaultTab(s: WorkState): Tab {
+function defaultTab(s: WorkState): PanelTab {
   return s === 'drafting' || s === 'awaiting_approval' || s === 'recontract'
     ? 'contract'
     : 'evidence'
 }
 
 export function WorkPane({ view, project }: { view: WorkView; project: ProjectView | null }) {
-  const [picked, setPicked] = useState<{ tab: Tab; state: WorkState } | null>(null)
+  const [picked, setPicked] = useState<{ tab: PanelTab; state: WorkState } | null>(null)
   const tab = picked && picked.state === view.state ? picked.tab : defaultTab(view.state)
   const live = view.session !== 'stopped'
   // 탭이나 상태가 바뀌면 맨 위로: 결론 한 줄과 답이 필요한 상자(승인, 계약 바꾸기, 끝내기)가 먼저 보이게
@@ -64,7 +64,10 @@ export function WorkPane({ view, project }: { view: WorkView; project: ProjectVi
             <TabList
               role="tablist"
               value={tab}
-              onChange={(t) => setPicked({ tab: t as Tab, state: view.state })}
+              onChange={(v) => {
+                const t = TABS.find((x) => x.id === v)
+                if (t) setPicked({ tab: t.id, state: view.state })
+              }}
               hasDivider
               size="sm"
             >
@@ -130,7 +133,8 @@ function WorkHeader(p: {
             <Code>{view.branch}</Code> ← <Code>{view.base}</Code>
           </span>
         </div>
-        <ErrorLine text={view.error ? `마지막 실패: ${view.error}` : null} />
+        {/* 남아 있는 마지막 실패는 새 일이 아니다: Work를 고를 때마다 다시 알리지 않는다(role alert 없음) */}
+        <ErrorLine text={view.error ? `마지막 실패: ${view.error}` : null} quiet />
         <ErrorLine text={act.error ?? ending.error} />
       </div>
       <div className="row">
@@ -177,7 +181,7 @@ function WorkHeader(p: {
         ) : null}
       </div>
       <AlertDialog
-        isOpen={abandoning}
+        isOpen={abandoning && active}
         onOpenChange={setAbandoning}
         title="이 Work를 버릴까요?"
         description="세션을 끝냅니다. 브랜치와 worktree는 남습니다."

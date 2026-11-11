@@ -33,20 +33,28 @@ export function Tag({ tone = 'muted', children }: { tone?: Tone; children: React
   )
 }
 
-/** 접는 칸: 제목, 수(선택), 내용. 처음에는 닫혀 있다(open이면 열림) */
+/**
+ * 접는 칸: 제목, 수(선택), 내용. 처음에는 닫혀 있다(open이면 열림). Collapsible은 닫힌 내용도 그려 두므로, 무거운 내용은
+ * lazy로 처음 열 때 그린다(그 뒤로는 닫아도 남김)
+ */
 export function Fold(p: {
   title: ReactNode
   count?: number
   open?: boolean
+  lazy?: boolean
   className?: string
   testId?: string
   children: ReactNode
 }) {
+  const [opened, setOpened] = useState(p.open ?? false)
   return (
     <Collapsible
       className={`fold${p.className ? ` ${p.className}` : ''}`}
       data-testid={p.testId}
       defaultIsOpen={p.open ?? false}
+      onOpenChange={(o) => {
+        if (o) setOpened(true)
+      }}
       chevronPosition="start"
       trigger={
         <span className="fold-trigger">
@@ -55,7 +63,7 @@ export function Fold(p: {
         </span>
       }
     >
-      <div className="fold-body">{p.children}</div>
+      <div className="fold-body">{!p.lazy || opened ? p.children : null}</div>
     </Collapsible>
   )
 }
@@ -84,10 +92,11 @@ export function Spinner({ label }: { label: string }) {
   )
 }
 
-export function ErrorLine({ text }: { text: string | null }) {
+/** 오류 한 줄. 방금 난 실패는 알린다(role alert). quiet면 남아 있는 실패라 알리지 않는다 */
+export function ErrorLine({ text, quiet }: { text: string | null; quiet?: boolean }) {
   if (!text) return null
   return (
-    <div className="error-line" role="alert">
+    <div className="error-line" role={quiet ? undefined : 'alert'}>
       <Banner status="error" title={text} collapsible={false} />
     </div>
   )

@@ -71,6 +71,7 @@ export function DiffPanel({ id, head }: { id: string; head: string | null }) {
             key={f.path}
             className="diff-file"
             open={open}
+            lazy
             title={
               <span className="diff-file-head">
                 <code className="diff-path">{f.path}</code>

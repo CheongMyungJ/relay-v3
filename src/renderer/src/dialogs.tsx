@@ -14,28 +14,28 @@ import type { NewWorkInput, ProjectSettings, ProjectView, WorkView } from '../..
 import { RecordTable } from './RecordTable.tsx'
 import { ErrorLine, useAction } from './ui.tsx'
 
-/** 너비: 보통 480, wide 600, draft 760 */
-const WIDTH = { normal: 480, wide: 600, draft: 760 } as const
+/** 너비: wide 600, draft 760 */
+const WIDTH = { wide: 600, draft: 760 } as const
 
+/**
+ * relay의 대화상자는 모두 입력이 있다(purpose form): Esc·✕·취소로 닫고, 바탕을 눌러서는 닫지 않는다(쓰던 글을 잃지
+ * 않게, V77). 내용은 .dialog-body가 스크롤한다
+ */
 export function Modal(p: {
   title: string
   onClose: () => void
   children: ReactNode
-  wide?: boolean
-  size?: keyof typeof WIDTH
-  /** 입력이 있는 대화상자: 바탕을 눌러도 닫지 않는다 */
-  form?: boolean
+  size: keyof typeof WIDTH
 }) {
-  const size = p.size ?? (p.wide ? 'wide' : 'normal')
   return (
     <Dialog
       isOpen
       onOpenChange={(open) => {
         if (!open) p.onClose()
       }}
-      width={WIDTH[size]}
+      width={WIDTH[p.size]}
       maxHeight="calc(100dvh - 48px)"
-      purpose={p.form ? 'form' : 'info'}
+      purpose="form"
       aria-label={p.title}
     >
       <DialogHeader title={p.title} onOpenChange={() => p.onClose()} />
@@ -76,7 +76,7 @@ export function NewWorkDialog(p: {
   }
 
   return (
-    <Modal title="새 Work" onClose={p.onClose} wide form>
+    <Modal title="새 Work" onClose={p.onClose} size="wide">
       <form className="form" onSubmit={submit}>
         {p.projects.length > 1 ? (
           <Selector
@@ -205,7 +205,7 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
     })
   }
   return (
-    <Modal title={`${p.project.name} 설정`} onClose={p.onClose} wide form>
+    <Modal title={`${p.project.name} 설정`} onClose={p.onClose} size="wide">
       <form className="form" onSubmit={save}>
         <Toggle
           label="자동 머지"

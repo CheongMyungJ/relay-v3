@@ -77,7 +77,7 @@ export function DraftDialog(p: {
   const units = v.units.map((u) => (u.dir === '.' ? u.label : `${u.label} ${u.dir}/`))
   // Astryx Dialog는 맨 위 층(<dialog>)에 뜬다: 사이드바의 좁은 알림 안에서 열려도 그 글꼴·색을 물려받지 않는다
   return (
-    <Modal title={`품질 기준 초안 · ${p.projectName}`} onClose={p.onClose} size="draft" form>
+    <Modal title={`품질 기준 초안 · ${p.projectName}`} onClose={p.onClose} size="draft">
       <div className="draft" data-testid="draft-dialog">
         <p className="muted">
           언어: {units.length === 0 ? '찾지 못함(앱이 직접 재는 래칫만)' : units.join(', ')}.{' '}
