@@ -41,9 +41,6 @@ export function ContractPanel({ view }: { view: WorkView }) {
           <p className="muted small">{unrecorded}</p>
         </div>
       ) : null}
-      {view.state === 'awaiting_approval' && view.pendingContract ? (
-        <ApproveBox id={view.id} />
-      ) : null}
       {view.state === 'recontract' ? (
         <ChangeBox
           id={view.id}
@@ -68,25 +65,24 @@ export function ContractPanel({ view }: { view: WorkView }) {
           {view.hint ? <p className="muted">일의 성격 제안: {view.hint}</p> : null}
         </Empty>
       )}
+      {/* 승인 칸은 패널 아래에 붙어 있다(V78): 계약을 끝까지 읽은 자리에서 바로 답한다 */}
+      {view.state === 'awaiting_approval' && view.pendingContract ? (
+        <ApproveBox id={view.id} />
+      ) : null}
     </div>
   )
 }
 
-/** 승인을 기다리는 계약(M2.1 13절): [승인]과, 여는 단계 없이 늘 보이는 고칠 점 칸과 [보내기] */
+/**
+ * 승인을 기다리는 계약(M2.1 13절): 여는 단계 없이 늘 보이는 고칠 점 칸과 [보내기], 그리고 [승인]. 패널 아래에 붙어 계약을
+ * 읽는 동안에도 보인다(V78)
+ */
 function ApproveBox({ id }: { id: string }) {
   const act = useAction()
   const [text, setText] = useState('')
   return (
-    <div className="callout tone-warn" data-testid="approve-box">
-      <p className="callout-title">세션이 계약을 냈습니다. 읽고 답해 주세요.</p>
-      <div className="row">
-        <Button
-          variant="primary"
-          label="승인"
-          isDisabled={act.busy}
-          onClick={() => void act.run(() => window.relay.approveContract(id))}
-        />
-      </div>
+    <div className="approve-bar" data-testid="approve-box">
+      <p className="approve-title">세션이 계약을 냈습니다. 읽고 답해 주세요.</p>
       <TextArea
         label="고칠 점"
         isLabelHidden
@@ -96,7 +92,7 @@ function ApproveBox({ id }: { id: string }) {
         placeholder="고칠 점이 있으면 적고 보내기를 누르세요. 세션이 고쳐 다시 냅니다."
         onChange={setText}
       />
-      <div className="row">
+      <div className="row end">
         <Button
           variant="secondary"
           label="보내기"
@@ -109,6 +105,12 @@ function ApproveBox({ id }: { id: string }) {
                 if (ok) setText('')
               })
           }
+        />
+        <Button
+          variant="primary"
+          label="승인"
+          isDisabled={act.busy}
+          onClick={() => void act.run(() => window.relay.approveContract(id))}
         />
       </div>
       <ErrorLine text={act.error} />

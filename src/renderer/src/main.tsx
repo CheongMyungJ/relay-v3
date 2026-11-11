@@ -3,6 +3,8 @@
 // reset → 부품(astryx-base) → 테마(astryx-theme) → relay의 틀(층 없음, styles.css·panels.css·dialogs.css).
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { InternationalizationProvider } from '@astryxdesign/core/i18n'
+import koKR from '@astryxdesign/core/locales/ko-KR.generated.js'
 import { Theme } from '@astryxdesign/core/theme'
 import { neutralTheme } from '@astryxdesign/theme-neutral/built'
 import '@astryxdesign/core/reset.css'
@@ -18,7 +20,10 @@ if (root)
   createRoot(root).render(
     <StrictMode>
       <Theme theme={neutralTheme} mode="system">
-        <App />
+        {/* 부품이 스스로 쓰는 글(닫기, 선택 사항 등)도 한국어로(V78) */}
+        <InternationalizationProvider locale="ko-KR" messages={{ 'ko-KR': koKR }}>
+          <App />
+        </InternationalizationProvider>
       </Theme>
     </StrictMode>,
   )

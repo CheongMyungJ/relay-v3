@@ -4,14 +4,15 @@
 
 import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, Notification, shell } from 'electron'
 import { claudeVersion, findClaude } from '../adapters/claude.ts'
 import { git } from '../adapters/exec.ts'
 import * as gh from '../adapters/gh.ts'
 import { relayHome } from '../adapters/store.ts'
 import { check } from '../engine/check.ts'
 import { m3Switches } from '../engine/m3.ts'
-import { EVENTS } from '../shared/api.ts'
+import { EVENTS, type WorkView } from '../shared/api.ts'
+import { AttentionWatch } from './attention.ts'
 import { HookServer } from './hooks.ts'
 import { registerIpc } from './ipc.ts'
 import { SessionHost } from './sessions.ts'
@@ -29,6 +30,31 @@ let quitting = false
 
 const log = (text: string, error?: unknown) => console.error(`[relay] ${text}`, error ?? '')
 
+const attention = new AttentionWatch()
+
+/**
+ * 사람의 답이 필요해진 Work(V78): 독 배지에 그 수를 쓰고, 창을 보고 있지 않으면 OS 알림을 띄운다. 알림을 누르면 창을 앞으로
+ * 가져오고 그 Work를 고른다. 알림을 쓸 수 없는 곳(알림 서버가 없는 Linux 등)에서는 조용히 넘어간다
+ */
+function attend(v: WorkView): void {
+  const a = attention.note(v)
+  try {
+    app.setBadgeCount(attention.count())
+    if (!a || win?.isFocused() || !Notification.isSupported()) return
+    const n = new Notification({ title: a.title, body: a.body })
+    n.on('click', () => {
+      if (!win || win.isDestroyed()) return
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+      win.webContents.send(EVENTS.show, { id: a.id })
+    })
+    n.show()
+  } catch (e) {
+    log('알림 실패', e)
+  }
+}
+
 const HOME = relayHome(process.env)
 // 창의 저장소와 하나만 띄우기 잠금을 $RELAY_HOME 아래에 둔다: 홈이 다른 앱(시험의 임시 홈)은 따로 뜬다
 app.setPath('userData', join(HOME, 'electron'))
@@ -37,7 +63,7 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1400,
     height: 880,
-    // 사이드바(252)와 패널(340) 사이에서 터미널이 70열쯤 남는 너비. 질문(AskUserQuestion)은 터미널에서 답한다
+    // 사이드바(264)와 가장 좁은 패널(340) 사이에서 터미널이 70열쯤(560px) 남는 너비. 질문(AskUserQuestion)은 터미널에서 답한다
     minWidth: 1180,
     minHeight: 560,
     title: 'relay',
@@ -154,6 +180,7 @@ async function start(): Promise<void> {
     emit: (event, payload) => {
       for (const bw of BrowserWindow.getAllWindows())
         if (!bw.isDestroyed()) bw.webContents.send(event, payload)
+      if (event === EVENTS.work) attend(payload as WorkView)
     },
     relayVersion,
     // 스모크 시험이 Stop 뒤 5초를 기다리지 않게 줄일 수 있다
@@ -163,6 +190,7 @@ async function start(): Promise<void> {
   })
   await w.init()
   works = w
+  attention.prime(w.list().works)
   record.start()
   registerIpc({ works: w, record: new RecordDesk({ store, now }), sessions, window: () => win })
   createWindow()

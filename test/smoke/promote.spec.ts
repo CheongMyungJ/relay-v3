@@ -139,7 +139,7 @@ async function shot(name: string): Promise<void> {
 
 test('승격된 규칙의 허용 목록이 늘면 사람 머지 사실, 말로만 남은 규칙, rule_violation의 갚음', async () => {
   await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click()
-  await page.getByRole('button', { name: '+ 새 Work' }).first().click()
+  await page.getByRole('button', { name: '새 Work', exact: true }).first().click()
   const dialog = page.getByRole('dialog', { name: '새 Work' })
   await dialog.getByLabel('요청', { exact: true }).fill(REQUEST)
   await dialog.getByRole('button', { name: '만들기' }).click()

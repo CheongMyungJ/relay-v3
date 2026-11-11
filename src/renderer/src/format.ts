@@ -337,8 +337,8 @@ export function qualityNotice(q: QualityState): string | null {
  */
 function draftNext(ref: string | null): string {
   return ref?.startsWith('origin/')
-    ? `검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(V9: 기준은 ${ref}에서 읽음).`
-    : '검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).'
+    ? `검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(기준은 ${ref}에서 읽습니다).`
+    : '검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(기준은 기준 브랜치에서 읽습니다).'
 }
 
 /** [초안 만들기]의 답을 한 줄로. 이미 있으면 덮지 않았다고 */

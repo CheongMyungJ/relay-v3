@@ -6,6 +6,7 @@ import { Button } from '@astryxdesign/core/Button'
 import { EVENTS, type ProjectView, type WorkView } from '../../shared/api.ts'
 import { NewWorkDialog, SettingsDialog } from './dialogs.tsx'
 import { Sidebar } from './Sidebar.tsx'
+import { newWorkKey, newWorkKeyText } from './keys.ts'
 import { Empty, ErrorLine, useAction } from './ui.tsx'
 import { WorkPane } from './WorkPane.tsx'
 
@@ -31,6 +32,8 @@ export function App() {
     // 이벤트를 먼저 구독한다. list의 답보다 먼저 온 이벤트는 그 답보다 오래된 것이다(같은 IPC 통로의 차례)
     const offWork = window.relay.on(EVENTS.work, (w) => setWorks((ws) => upsert(ws, w)))
     const offProjects = window.relay.on(EVENTS.projects, setProjects)
+    // OS 알림을 눌렀다(V78): 그 Work를 고른다
+    const offShow = window.relay.on(EVENTS.show, ({ id }) => setSelected(id))
     window.relay.list().then(
       (l) => {
         setProjects(l.projects)
@@ -42,6 +45,7 @@ export function App() {
     return () => {
       offWork()
       offProjects()
+      offShow()
     }
   }, [])
 
@@ -55,6 +59,20 @@ export function App() {
   )
 
   const view = works.find((w) => w.id === selected) ?? null
+  // 새 Work 단축키(V78): 고른 Work의 프로젝트, 없으면 첫 프로젝트. 대화상자가 열려 있으면 듣지 않는다
+  const target = view?.project ?? projects[0]?.id ?? null
+  const dialogOpen = dialog !== null
+  useEffect(() => {
+    if (target === null || dialogOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!newWorkKey(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      setDialog({ kind: 'new', project: target })
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [target, dialogOpen])
   const closeDialog = useCallback(() => setDialog(null), [])
   const settingsProject =
     dialog?.kind === 'settings' ? projects.find((p) => p.id === dialog.project) : undefined
@@ -105,7 +123,7 @@ export function App() {
               actions={
                 <Button
                   variant="primary"
-                  label="+ 새 Work"
+                  label="새 Work"
                   onClick={() => {
                     const first = projects[0]
                     if (first) setDialog({ kind: 'new', project: first.id })
@@ -117,6 +135,7 @@ export function App() {
                 요청을 쓰면 세션이 계약을 먼저 씁니다. 승인하면 세션이 알아서 구현하고, 앱이 증거를
                 확인합니다.
               </p>
+              <p className="small">단축키 {newWorkKeyText()}</p>
             </Empty>
           )}
         </div>

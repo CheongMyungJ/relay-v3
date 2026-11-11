@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react'
 import { CodeBlock } from '@astryxdesign/core/CodeBlock'
 import type { DebtItem, DebtKind } from '../../core/types.ts'
-import { diffOpen, splitDiff } from './format.ts'
+import { diffOpen, splitDiff, type DiffFile as DiffFileView } from './format.ts'
+import { patchView, splitPath } from './summary.ts'
 import { Empty, ErrorLine, Fold, Spinner, Tag } from './ui.tsx'
 
 export type Loaded<T> =
@@ -67,47 +68,60 @@ export function DiffPanel({ id, head }: { id: string; head: string | null }) {
       </p>
       <div className="diff-files">
         {files.map((f) => (
-          <Fold
-            key={f.path}
-            className="diff-file"
-            open={open}
-            lazy
-            title={
-              <span className="diff-file-head">
-                <code className="diff-path">{f.path}</code>
-                <span className="diff-count">
-                  {f.binary ? (
-                    <span className="muted">바이너리</span>
-                  ) : (
-                    <>
-                      <span className="plus">+{f.added}</span>{' '}
-                      <span className="minus">−{f.deleted}</span>
-                    </>
-                  )}
-                </span>
-                <span className="diff-bar" aria-hidden="true">
-                  <span className="plus" style={{ width: `${(f.added / most) * 100}%` }} />
-                  <span className="minus" style={{ width: `${(f.deleted / most) * 100}%` }} />
-                </span>
-              </span>
-            }
-          >
-            <div className="patch">
-              <CodeBlock
-                code={f.patch}
-                isDiff
-                isWrapped
-                hasLanguageLabel={false}
-                size="sm"
-                width="100%"
-                container="section"
-                hasCopyButton={false}
-              />
-            </div>
-          </Fold>
+          <DiffFile key={f.path} f={f} most={most} open={open} />
         ))}
       </div>
     </div>
+  )
+}
+
+/** 파일 하나: 머리(폴더는 흐리게, 파일 이름은 또렷하게, 더한·뺀 줄, 막대)와 접는 patch. git의 머리 줄은 보이지 않는다(V78) */
+function DiffFile({ f, most, open }: { f: DiffFileView; most: number; open: boolean }) {
+  const { dir, base } = splitPath(f.path)
+  const { notes, body } = patchView(f.patch)
+  return (
+    <Fold
+      className="diff-file"
+      open={open}
+      lazy
+      title={
+        <span className="diff-file-head">
+          <code className="diff-path" title={f.path}>
+            <span className="diff-dir">{dir}</span>
+            <span className="diff-base">{base}</span>
+          </code>
+          <span className="diff-count">
+            {f.binary ? (
+              <span className="muted">바이너리</span>
+            ) : (
+              <>
+                <span className="plus">+{f.added}</span> <span className="minus">−{f.deleted}</span>
+              </>
+            )}
+          </span>
+          <span className="diff-bar" aria-hidden="true">
+            <span className="plus" style={{ width: `${(f.added / most) * 100}%` }} />
+            <span className="minus" style={{ width: `${(f.deleted / most) * 100}%` }} />
+          </span>
+        </span>
+      }
+    >
+      {notes.length > 0 ? <p className="muted small diff-notes">{notes.join(' · ')}</p> : null}
+      {body ? (
+        <div className="patch">
+          <CodeBlock
+            code={body}
+            isDiff
+            isWrapped
+            hasLanguageLabel={false}
+            size="sm"
+            width="100%"
+            container="section"
+            hasCopyButton={false}
+          />
+        </div>
+      ) : null}
+    </Fold>
   )
 }
 

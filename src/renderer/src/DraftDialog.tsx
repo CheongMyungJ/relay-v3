@@ -13,7 +13,7 @@ import type {
   DraftQualityResult,
   DraftQuestionView,
 } from '../../shared/api.ts'
-import { DialogActions, Modal } from './dialogs.tsx'
+import { Modal } from './dialogs.tsx'
 import { ErrorLine, Fold, Tag, useAction } from './ui.tsx'
 
 const KIND: Readonly<Record<DraftCommandView['kind'], string>> = {
@@ -77,7 +77,23 @@ export function DraftDialog(p: {
   const units = v.units.map((u) => (u.dir === '.' ? u.label : `${u.label} ${u.dir}/`))
   // Astryx Dialog는 맨 위 층(<dialog>)에 뜬다: 사이드바의 좁은 알림 안에서 열려도 그 글꼴·색을 물려받지 않는다
   return (
-    <Modal title={`품질 기준 초안 · ${p.projectName}`} onClose={p.onClose} size="draft">
+    <Modal
+      title={`품질 기준 초안 · ${p.projectName}`}
+      onClose={p.onClose}
+      size="draft"
+      footer={
+        <>
+          <Button variant="ghost" label="닫기" onClick={p.onClose} />
+          <Button
+            variant="primary"
+            label="초안 쓰기"
+            isLoading={act.busy}
+            isDisabled={v.exists}
+            onClick={write}
+          />
+        </>
+      }
+    >
       <div className="draft" data-testid="draft-dialog">
         <p className="muted">
           언어: {units.length === 0 ? '찾지 못함(앱이 직접 재는 래칫만)' : units.join(', ')}.{' '}
@@ -173,16 +189,6 @@ export function DraftDialog(p: {
           </p>
         ) : null}
         <ErrorLine text={act.error} />
-        <DialogActions>
-          <Button variant="secondary" label="닫기" onClick={p.onClose} />
-          <Button
-            variant="primary"
-            label="초안 쓰기"
-            isLoading={act.busy}
-            isDisabled={v.exists}
-            onClick={write}
-          />
-        </DialogActions>
       </div>
     </Modal>
   )

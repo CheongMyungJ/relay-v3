@@ -267,7 +267,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await expect(page.getByTestId('project')).toContainText(repo.dir.split('/').at(-1) ?? '')
 
   // 새 Work 대화상자
-  await page.getByRole('button', { name: '+ 새 Work' }).first().click()
+  await page.getByRole('button', { name: '새 Work', exact: true }).first().click()
   const dialog = page.getByRole('dialog', { name: '새 Work' })
   await dialog.getByLabel('요청', { exact: true }).fill(REQUEST)
   await dialog.getByRole('button', { name: '버그 고침' }).click()
@@ -406,7 +406,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   const second = page.getByTestId('project').nth(1)
   await expect(second).toContainText(bare.dir.split('/').at(-1) ?? '')
   const notice = second.getByTestId('quality-notice')
-  await expect(notice).toContainText('이 레포에는 품질 기준(.relay/quality.json)이 없습니다')
+  await expect(notice).toContainText('품질 기준 없음') // 짧은 글(V78), 온전한 글은 [증거] 탭
   await notice.getByRole('button', { name: '초안 만들기' }).click()
   // 초안 화면(V60~V62, 자세한 것은 draft.spec.ts)의 [초안 쓰기]가 쓴다
   await page.getByRole('button', { name: '초안 쓰기' }).click({ timeout: 30_000 })
@@ -420,7 +420,7 @@ test('새 Work → 계약 제출 → [승인] → 증거 결론 → PR과 리뷰
   await shot('quality-notice')
 
   // 그 레포의 새 Work: 계약 → [승인] → 커밋·Stop → 증거(명령 없음). [증거] 탭 위에도 알림
-  await second.getByRole('button', { name: '+ 새 Work' }).click()
+  await second.getByRole('button', { name: '새 Work', exact: true }).click()
   const newWork = page.getByRole('dialog', { name: '새 Work' })
   await newWork.getByLabel('요청', { exact: true }).fill(REQUEST)
   await newWork.getByRole('button', { name: '만들기' }).click()
@@ -569,7 +569,7 @@ test('단위 브랜치(V22): 통합 증거 칸과 내보내기마다 칸, 없는
   await app.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.setContentSize(1400, 900)
   })
-  await page.getByTestId('project').first().getByRole('button', { name: '+ 새 Work' }).click()
+  await page.getByRole('button', { name: '새 Work', exact: true }).first().click()
   const dialog = page.getByRole('dialog', { name: '새 Work' })
   await dialog
     .getByLabel('요청', { exact: true })

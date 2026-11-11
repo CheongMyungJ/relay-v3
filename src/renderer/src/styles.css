@@ -1,18 +1,21 @@
-/* relay 화면의 바탕 (docs/m2-modules.md 4절): 토큰 잇기, 글꼴, 틀, 사이드바, 터미널.
+/* relay 화면의 바탕 (docs/m2-modules.md 4절): 토큰 잇기, 글꼴, 틀, 사이드바, 머리줄, 터미널.
    부품(단추, 입력, 대화상자, 탭, 꼬리표)의 생김새는 Astryx(@astryxdesign/core, 테마 neutral)가 맡고, 이 파일은 층 없는
    relay의 틀만 둔다(층 없는 규칙이 Astryx의 층을 이기므로 button·input 같은 요소 전체 규칙은 두지 않는다).
    밝은·어두운 테마는 시스템을 따른다(Theme mode="system"). 패널은 panels.css, 대화상자는 dialogs.css. */
 
-/* 터미널은 테마를 따르되 늘 조금 어둡게 둔다(terminals.ts가 :root에서 읽는다) */
+/* 터미널은 테마를 따르되 늘 어둡게 둔다(terminals.ts가 :root에서 읽는다) */
 :root {
-  --term-bg: #1b1c1f;
+  --term-bg: #17181c;
   --term-fg: #e4e4e2;
   --term-selection: #3d4a63;
+  --term-bar: #202127;
+  --term-muted: #9a9ba3;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --term-bg: #111113;
+    --term-bg: #101113;
+    --term-bar: #18191c;
   }
 }
 
@@ -27,6 +30,17 @@
     ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, 'D2Coding', 'DejaVu Sans Mono',
     monospace;
 
+  /* 강조색 하나(V78): 주 단추, 고른 줄, 탭 밑줄, 포커스. neutral 테마의 무채색 강조를 덮는다 */
+  --color-accent: light-dark(#3b55d9, #93a5ff);
+  --color-on-accent: light-dark(#ffffff, #0d1230);
+  --color-accent-muted: light-dark(#e9edfe, #262d55);
+  --color-text-accent: light-dark(#2f47c4, #a9b7ff);
+  --color-icon-accent: light-dark(#2f47c4, #a9b7ff);
+  /* 글의 크기(V78): 코드는 본문보다 한 단계 작게, 모서리는 덜 둥글게 */
+  --text-code-size: 12.5px;
+  --radius-element: 7px;
+  --radius-container: 10px;
+
   --font: var(--font-family-body);
   --mono: var(--font-family-code);
   --bg: var(--color-background-body);
@@ -37,16 +51,23 @@
   --text: var(--color-text-primary);
   --muted: var(--color-text-secondary);
   --accent: var(--color-accent);
+  --accent-text: var(--color-text-accent);
+  --accent-soft: var(--color-accent-muted);
 
-  /* 상태 색: 글은 테마의 색 글, 큰 상자의 바탕은 테마의 색 바탕을 표면과 섞어 옅게 */
+  /* 상태 색: 글은 테마의 색 글, 띠는 조금 밝은 색, 옅은 바탕은 표면에 살짝 섞는다 */
   --ok: var(--color-text-green);
-  --ok-soft: color-mix(in srgb, var(--color-background-green) 45%, var(--surface));
+  --ok-bar: light-dark(#2f9e44, #6ab26b);
+  --ok-soft: color-mix(in srgb, var(--color-background-green) 22%, var(--surface));
   --warn: var(--color-text-orange);
-  --warn-soft: color-mix(in srgb, var(--color-warning-muted) 55%, var(--surface));
+  --warn-bar: light-dark(#e8890c, #df843f);
+  --warn-soft: color-mix(in srgb, var(--color-background-orange) 20%, var(--surface));
   --bad: var(--color-text-red);
-  --bad-soft: color-mix(in srgb, var(--color-background-red) 45%, var(--surface));
-  --info: var(--color-text-blue);
-  --info-soft: color-mix(in srgb, var(--color-background-blue) 40%, var(--surface));
+  --bad-bar: light-dark(#d9372c, #fa6762);
+  --bad-soft: color-mix(in srgb, var(--color-background-red) 22%, var(--surface));
+  --info: var(--accent-text);
+  --info-bar: var(--accent);
+  --info-soft: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  --muted-bar: var(--border-strong);
   --muted-soft: var(--color-background-gray);
 
   --radius: var(--radius-element);
@@ -104,6 +125,17 @@ body {
   }
 }
 
+/* relay가 직접 쓴 인라인 code(부품이 아닌 것은 class가 없다): 옅은 바탕의 작은 칩 */
+code:not([class]) {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--muted-soft);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -117,6 +149,11 @@ body {
 
 .row.tight {
   gap: 6px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ── 꼬리표와 글 ──────────────────────────────────────────────────────────── */
@@ -147,6 +184,11 @@ body {
   overflow-wrap: anywhere;
 }
 
+.icon {
+  display: block;
+  flex: none;
+}
+
 /* ── 틀(AppShell) ─────────────────────────────────────────────────────────── */
 
 .main {
@@ -155,6 +197,7 @@ body {
   height: 100%;
   min-width: 0;
   min-height: 0;
+  background: var(--surface);
 }
 
 .main > .error-line {
@@ -167,48 +210,224 @@ body {
   width: 264px;
 }
 
-.work-state {
-  display: inline-flex;
+.brand {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+  gap: 10px;
+  padding: 4px 4px 2px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--color-on-accent);
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.brand-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.3;
 }
 
 .sidebar-note {
   padding: 8px 12px;
 }
 
+.project {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .project + .project {
-  margin-top: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.project-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding-left: 8px;
+}
+
+.project-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* 프로젝트 줄의 단추는 올리거나 포커스가 들어오면 또렷해진다 */
+.project-actions {
+  display: flex;
+  flex: none;
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+
+.project:hover .project-actions,
+.project-actions:focus-within {
+  opacity: 1;
 }
 
 .new-work {
-  margin: 2px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
 }
 
-/* 품질 기준 알림(V20): [증거] 탭 위와 사이드바의 프로젝트 줄 */
-.quality-notice {
+.new-work:hover {
+  background: var(--color-overlay-hover);
+}
+
+.new-work:focus-visible,
+.work-item:focus-visible,
+.done-toggle:focus-visible,
+.branch-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.work-item {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: var(--radius-box);
-  background: var(--warn-soft);
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px 7px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-item:hover {
+  background: var(--color-overlay-hover);
+}
+
+.work-item.selected {
+  background: var(--accent-soft);
+}
+
+.work-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.work-item.selected .work-title {
+  font-weight: 650;
+}
+
+.work-item.closed .work-title {
+  color: var(--muted);
+}
+
+.work-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.work-state.needs {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.done-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.done-toggle:hover {
+  background: var(--color-overlay-hover);
+}
+
+.done-toggle .icon {
+  transition: transform 0.12s;
+}
+
+.done-toggle[aria-expanded='true'] .icon {
+  transform: rotate(90deg);
+}
+
+/* 품질 기준 알림(V20): [증거] 탭 위(.callout)와 사이드바의 프로젝트 줄(작게) */
+.quality-notice {
   line-height: 1.5;
 }
 
 .quality-notice.compact {
-  gap: 8px;
-  margin: 4px 0 6px;
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 2px;
+  padding: 4px 8px 6px;
   font-size: 12px;
+}
+
+.quality-short {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+  font-weight: 600;
 }
 
 .quality-drafted {
   color: var(--muted);
 }
 
-/* ── Work ─────────────────────────────────────────────────────────────────── */
+/* ── Work의 머리줄 ────────────────────────────────────────────────────────── */
 
 .work {
   display: flex;
@@ -219,10 +438,10 @@ body {
 
 .work-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 18px 24px 16px;
+  padding: 14px 20px 13px 24px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -231,6 +450,13 @@ body {
 }
 
 .work-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
   letter-spacing: -0.01em;
 }
 
@@ -239,9 +465,76 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12.5px;
+}
+
+/* 단계 표시: 지난 단계는 찬 점, 지금 단계는 꼬리표, 남은 단계는 빈 점 */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.steps li + li::before {
+  content: '';
+  width: 12px;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+
+.step-dot.past {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branch-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 340px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--muted-soft);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.branch-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-copy:hover {
+  background: var(--accent-soft);
 }
 
 .work-head .error-line {
@@ -250,7 +543,10 @@ body {
 
 .work-head .row {
   flex-wrap: nowrap;
+  flex: none;
 }
+
+/* ── 가운데 터미널과 오른쪽 패널의 틀 ─────────────────────────────────────── */
 
 .work-body {
   display: flex;
@@ -259,12 +555,81 @@ body {
 }
 
 .terminal-pane {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  /* 가장 좁은 창(1180px)에서도 터미널이 70열쯤 남게: 패널이 먼저 준다 */
+  min-width: 560px;
   min-height: 0;
-  padding: 12px 6px 6px 14px;
   background: var(--term-bg);
   color-scheme: dark;
+}
+
+.work-body.wide .terminal-pane {
+  display: none;
+}
+
+.terminal-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--term-bar);
+  color: var(--term-muted);
+  font-size: 12px;
+}
+
+.term-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b6c75;
+}
+
+.term-dot.running {
+  background: #5fd38d;
+  animation: term-pulse 1.6s ease-in-out infinite;
+}
+
+.term-dot.idle {
+  background: #5fd38d;
+}
+
+.term-dot.starting {
+  background: #f0b54a;
+}
+
+.term-dot.waiting {
+  background: #f0b54a;
+}
+
+.terminal-bar .waiting-text {
+  color: #f0b54a;
+  font-weight: 600;
+}
+
+@keyframes term-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-dot.running {
+    animation: none;
+  }
+}
+
+.terminal-wrap {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 6px 6px 14px;
+}
+
+.terminal-pane.stopped .terminal-wrap {
+  opacity: 0.6;
 }
 
 .terminal-host {

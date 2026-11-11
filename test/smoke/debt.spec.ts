@@ -123,7 +123,7 @@ async function shot(name: string): Promise<void> {
 
 test('기록 안 된 나빠짐 알림 → 나빠진 래칫의 [머지]가 빚을 묻는다 → [빚으로 남기고 머지]', async () => {
   await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click()
-  await page.getByRole('button', { name: '+ 새 Work' }).first().click()
+  await page.getByRole('button', { name: '새 Work', exact: true }).first().click()
   const dialog = page.getByRole('dialog', { name: '새 Work' })
   await dialog.getByLabel('요청', { exact: true }).fill(REQUEST)
   await dialog.getByRole('button', { name: '만들기' }).click()
@@ -156,6 +156,21 @@ test('기록 안 된 나빠짐 알림 → 나빠진 래칫의 [머지]가 빚을
   await expect(evidence.getByTestId('debt-ask')).toHaveCount(0)
   await expect(evidence.getByTestId('debt-commit')).toHaveText(/^빚 기록 커밋\(잰 [0-9a-f]{7}\)$/)
   await shot('merged')
+
+  // 틀(V78): 터미널 위의 띠가 세션의 상태를 말하고, 패널만 넓게 보면 터미널을 가린다. 단축키(Alt+1~4, macOS는 ⌘)로 탭을 옮긴다
+  await expect(page.getByTestId('terminal-bar')).toHaveText('세션 닫힘')
+  await page.getByRole('button', { name: '패널 넓게 보기' }).click()
+  await expect(page.locator('.terminal-pane')).toBeHidden()
+  await shot('wide')
+  await page.getByRole('button', { name: '터미널 다시 보기' }).click()
+  await expect(page.locator('.terminal-pane')).toBeVisible()
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Alt'
+  await page.keyboard.press(`${mod}+1`)
+  await expect(page.getByTestId('contract-panel')).toBeVisible()
+  await page.keyboard.press(`${mod}+3`)
+  await expect(page.getByTestId('diff-panel')).toBeVisible()
+  // git의 머리 줄(diff --git, index)은 보이지 않는다
+  await expect(page.getByTestId('diff-panel')).not.toContainText('diff --git')
 
   // 설정: 빚 기록 스위치(켬)
   await page.getByRole('button', { name: /설정$/ }).first().click()

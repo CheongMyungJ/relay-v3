@@ -131,7 +131,7 @@ async function shot(name: string): Promise<void> {
 
 test('계약의 곁들일 정리 → [증거]의 빚: 상한 넘음, 갚은 빚, 못 갚은 빚, 건드린 곳의 빚', async () => {
   await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click()
-  await page.getByRole('button', { name: '+ 새 Work' }).first().click()
+  await page.getByRole('button', { name: '새 Work', exact: true }).first().click()
   const dialog = page.getByRole('dialog', { name: '새 Work' })
   await dialog.getByLabel('요청', { exact: true }).fill(REQUEST)
   await dialog.getByRole('button', { name: '만들기' }).click()

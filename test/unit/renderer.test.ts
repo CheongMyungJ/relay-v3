@@ -538,17 +538,17 @@ describe('증거 패널의 글', () => {
       /^이 레포의 품질 기준\(\.relay\/quality\.json\)이 깨져/,
     )
     expect(draftResultText({ written: true, path: '/r/.relay/quality.json' })).toBe(
-      '초안을 썼습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).',
+      '초안을 썼습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(기준은 기준 브랜치에서 읽습니다).',
     )
     expect(draftPending('main')).toBe(
-      '작업 트리에 초안(.relay/quality.json)이 있습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(V9: 기준은 base에서 읽음).',
+      '작업 트리에 초안(.relay/quality.json)이 있습니다. 검토하고 기본 브랜치에 커밋하면 다음 Work부터 쓰입니다(기준은 기준 브랜치에서 읽습니다).',
     )
     expect(draftResultText({ written: false, path: '/r/.relay/quality.json' })).toMatch(
       /^이미 있어 덮지 않았습니다: \/r\/\.relay\/quality\.json\. 검토하고/,
     )
     // 기준을 origin/<기본>에서 읽으면 로컬 커밋만으로는 쓰이지 않는다: push까지 말한다
     expect(draftPending('origin/main')).toBe(
-      '작업 트리에 초안(.relay/quality.json)이 있습니다. 검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(V9: 기준은 origin/main에서 읽음).',
+      '작업 트리에 초안(.relay/quality.json)이 있습니다. 검토하고 기본 브랜치에 커밋한 뒤 origin에 push하면 다음 Work부터 쓰입니다(기준은 origin/main에서 읽습니다).',
     )
     expect(
       draftResultText({ written: true, path: '/r/.relay/quality.json' }, 'origin/main'),
