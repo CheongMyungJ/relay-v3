@@ -220,12 +220,32 @@ export class HookServer {
       return await readJsonBody(req, this.o.maxBody ?? MAX_BODY)
     } catch (e) {
       if (e instanceof BodyTooLarge) {
+        // 본문을 다 받기 전에 답하고 닫으면 남은 바이트 때문에 RST가 나가고, Windows의 클라이언트는 413을 읽기 전에
+        // ECONNRESET을 받는다. 남은 본문을 버리며 다 받은 뒤(길어도 DRAIN_MS) 답하고 닫는다
+        await drained(req)
         res.writeHead(413, { Connection: 'close' })
         res.end()
       } else end(res, 400)
       return null
     }
   }
+}
+
+/** 상한을 넘은 본문을 버리며 기다리는 시간. 넘으면 그대로 닫는다 */
+const DRAIN_MS = 2_000
+
+/** 요청 본문을 버리며 끝까지 받는다(끝났거나, 끊겼거나, DRAIN_MS가 지나면 돌아온다) */
+function drained(req: http.IncomingMessage): Promise<void> {
+  if (req.readableEnded || req.destroyed) return Promise.resolve()
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(done, DRAIN_MS)
+    for (const event of ['end', 'close', 'error']) req.once(event, done)
+    req.resume()
+  })
 }
 
 function end(res: http.ServerResponse, status: number): void {

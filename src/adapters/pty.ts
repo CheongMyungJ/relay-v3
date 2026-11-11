@@ -103,6 +103,19 @@ export function answerDa1(data: string, reply: (answer: string) => void): string
   return out
 }
 
+/**
+ * Windows: node-pty는 콘솔 입력 파이프의 소켓에 'error' 처리를 두지 않는다. claude가 끝난 뒤 'exit'가 오기 전에 쓴 글은
+ * 닫히는 파이프에 닿아 실패하고(ERROR_NO_DATA: write EAGAIN·EPIPE), 그 오류가 잡히지 않은 예외로 앱을 끝낸다. 끝나는
+ * 터미널에 쓴 글은 POSIX처럼 그냥 버린다. 소켓은 node-pty의 안쪽 칸(_agent.inSocket)이라 없으면 아무것도 하지 않는다
+ */
+function quietInput(p: nodePty.IPty): void {
+  if (!isWindows) return
+  const agent = (p as unknown as { _agent?: { inSocket?: { on?: unknown } } })._agent
+  const socket = agent?.inSocket
+  if (socket && typeof socket.on === 'function')
+    (socket as { on(event: 'error', cb: () => void): void }).on('error', () => {})
+}
+
 /** killTree가 SIGHUP 뒤 SIGKILL까지 기다리는 기본 시간 */
 const KILL_GRACE_MS = 5_000
 
@@ -119,6 +132,9 @@ export function startPty(opts: PtyOptions): PtySession {
     useConptyDll: true,
   })
   let exited = false
+  // killTree를 부른 뒤: 끝나는 콘솔에는 쓰지 않는다
+  let closing = false
+  quietInput(p)
   const exitWaiters: (() => void)[] = []
   p.onExit(() => {
     exited = true
@@ -135,7 +151,10 @@ export function startPty(opts: PtyOptions): PtySession {
     })
   const listeners: ((data: string) => void)[] = []
   p.onData((data) => {
-    const out = opts.answerQueries ? answerDa1(data, (a) => p.write(a)) : data
+    const answer = (a: string) => {
+      if (!exited && !closing) p.write(a)
+    }
+    const out = opts.answerQueries ? answerDa1(data, answer) : data
     if (out) for (const cb of listeners) cb(out)
   })
   return {
@@ -143,13 +162,14 @@ export function startPty(opts: PtyOptions): PtySession {
     onData: (cb) => void listeners.push(cb),
     onExit: (cb) => void p.onExit((e) => cb(e.exitCode)),
     write: (d) => {
-      if (!exited) p.write(d)
+      if (!exited && !closing) p.write(d)
     },
     resize: (c, r) => {
-      if (!exited) p.resize(c, r)
+      if (!exited && !closing) p.resize(c, r)
     },
     killTree: async (graceMs = KILL_GRACE_MS) => {
       if (exited) return
+      closing = true
       await killTree(p.pid, () => p.kill())
       const ended = await waitExit(graceMs)
       // 맨 앞이 끝났어도 SIGHUP을 무시한 자식이 묶음에 남을 수 있다. 다른 묶음으로 간 배경 작업(셸의 job control)은
@@ -224,6 +244,8 @@ const RUN_MAX_BYTES = 32 * 1024 * 1024
 
 /** 돌고 있는 runFile의 맨 앞 pid(POSIX에서는 detached 묶음의 맨 앞) */
 const runningFiles = new Set<number>()
+/** killRunFiles가 끝낸 pid. Windows의 taskkill은 종료 코드 1을 남기므로 따로 적어 exit null로 돌려준다 */
+const killedFiles = new Set<number>()
 
 function stopTree(pid: number): void {
   if (isWindows) {
@@ -236,7 +258,10 @@ function stopTree(pid: number): void {
  * 앱이 끝날 때 exec.ts의 killActive 옆에서 부른다
  */
 export function killRunFiles(): void {
-  for (const pid of runningFiles) stopTree(pid)
+  for (const pid of runningFiles) {
+    killedFiles.add(pid)
+    stopTree(pid)
+  }
   runningFiles.clear()
 }
 const MAX_TIMER_MS = 2 ** 31 - 1
@@ -245,7 +270,8 @@ const CLOSE_WAIT_MS = 5_000
 
 /**
  * 실행 파일을 셸 없이 인자 배열로 돌린다(.cmd는 spawnSpec). 던지지 않는다: 돌리지 못했거나 시간이 넘으면 exit null과
- * stderr 끝의 까닭. 시간이 넘으면 프로세스 묶음째(Windows는 taskkill /T) 끝낸다. 출력은 상한까지 자르지 않는다
+ * stderr 끝의 까닭(killRunFiles가 끝낸 것은 까닭 없이 exit null). 시간이 넘으면 프로세스 묶음째(Windows는 taskkill /T)
+ * 끝낸다. 출력은 상한까지 자르지 않는다
  */
 export function runFile(bin: string, args: string[], opts: RunFileOptions): Promise<RunOutput> {
   const started = performance.now()
@@ -271,6 +297,7 @@ export function runFile(bin: string, args: string[], opts: RunFileOptions): Prom
       settled = true
       for (const t of timers) clearTimeout(t)
       if (proc.pid !== undefined) runningFiles.delete(proc.pid)
+      const killed = proc.pid !== undefined && killedFiles.delete(proc.pid)
       opts.signal?.removeEventListener('abort', onAbort)
       const why = timedOut
         ? `시간 초과 (${opts.timeoutMs}ms)`
@@ -281,7 +308,7 @@ export function runFile(bin: string, args: string[], opts: RunFileOptions): Prom
             : spawnError
       const stderr = Buffer.concat(err).toString('utf8')
       resolve({
-        exit: why === undefined ? code : null,
+        exit: why === undefined && !killed ? code : null,
         timed_out: timedOut,
         duration_ms: Math.round(performance.now() - started),
         stdout: Buffer.concat(out).toString('utf8'),

@@ -13,7 +13,7 @@ export interface RunOptions {
 }
 
 export interface RunOutput {
-  /** 종료 코드. 신호로 끝났거나, 시간이 넘었거나, 돌리지 못했으면 null */
+  /** 종료 코드. 신호로 끝났거나(killActive가 끝낸 것 포함), 시간이 넘었거나, 돌리지 못했으면 null */
   exit: number | null
   timed_out: boolean
   duration_ms: number
@@ -88,6 +88,8 @@ function tailCollector(limit: number): { push(chunk: Buffer): void; text(): stri
 
 /** 돌고 있는 run의 맨 앞 pid */
 const active = new Set<number>()
+/** killActive가 끝낸 pid. Windows의 taskkill은 신호가 아니라 종료 코드 1을 남기므로 따로 적어 exit null로 돌려준다 */
+const killed = new Set<number>()
 let exitHookInstalled = false
 
 /**
@@ -95,7 +97,10 @@ let exitHookInstalled = false
  * cli가 SIGINT·SIGTERM 처리에서 부른다. 프로세스가 'exit'로 끝날 때도 저절로 부른다.
  */
 export function killActive(): void {
-  for (const pid of active) killTree(pid, 'SIGKILL', true)
+  for (const pid of active) {
+    killed.add(pid)
+    killTree(pid, 'SIGKILL', true)
+  }
   active.clear()
 }
 
@@ -156,10 +161,11 @@ export async function run(cmd: string, opts: RunOptions): Promise<RunOutput> {
       if (settled) return
       settled = true
       if (pid !== undefined) active.delete(pid)
+      const wasKilled = pid !== undefined && killed.delete(pid)
       for (const t of timers) clearTimeout(t)
       const err = stderr.text()
       resolve({
-        exit: timedOut || spawnError !== undefined ? null : exitCode,
+        exit: timedOut || wasKilled || spawnError !== undefined ? null : exitCode,
         timed_out: timedOut,
         duration_ms: Math.round(performance.now() - started),
         stdout: stdout.text(),
