@@ -148,3 +148,11 @@ export function useAction(): {
   const clear = useCallback(() => setError(null), [])
   return { busy, error, run, clear }
 }
+
+/**
+ * 대화상자가 떠 있는가. relay의 대화상자(새 Work, 설정, 품질 기준 초안, 버리기 확인)는 모두 Astryx Dialog·AlertDialog이고 그것은
+ * showModal()로 연 <dialog>다. 전역 단축키는 이것 하나를 보고 대화상자 뒤의 화면을 건드리지 않는다
+ */
+export function modalOpen(): boolean {
+  return document.querySelector('dialog[open]') !== null
+}

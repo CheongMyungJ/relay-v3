@@ -257,7 +257,10 @@ export function Details(p: {
         {p.integration ? null : (
           <Fold
             title="리뷰 지적"
-            summary={reviewSummary(findings)}
+            summary={reviewSummary(e.review, {
+              running: view.reviewRunning,
+              disabled: view.reviewDisabled,
+            })}
             help="독립 리뷰가 낸 지적입니다. 올림은 관문이 사람에게 보내고, 메모는 관문에 들어가지 않습니다"
           >
             {review ? (

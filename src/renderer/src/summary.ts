@@ -1,10 +1,11 @@
 // 한눈에 보이는 짧은 글 (V78): 접는 칸의 오른쪽 한 마디(숫자 대신 상태), 사이드바의 Work 묶음과 만든 때, 품질 기준 알림의 짧은 글.
 // DOM을 쓰지 않는 순수 함수만 둔다(시험: test/unit/renderer-summary.test.ts).
 
-import type { EvidenceBundle, ReviewFinding } from '../../core/types.ts'
+import type { EvidenceBundle } from '../../core/types.ts'
+import { needsAnswer } from '../../shared/answer.ts'
 import type { QualityState, WorkView } from '../../shared/api.ts'
 import { findingGroups } from './findings.ts'
-import { showEndBox, type Tone } from './format.ts'
+import type { Tone } from './format.ts'
 
 export interface Summary {
   text: string
@@ -83,9 +84,21 @@ export function knowledgeSummary(k: NonNullable<EvidenceBundle['knowledge']>): S
   )
 }
 
-/** 리뷰 지적: 올림이 있으면 경고, 메모만 있으면 흐리게 */
-export function reviewSummary(findings: ReviewFinding[]): Summary {
-  const { raised, notes } = findingGroups(findings)
+/**
+ * 리뷰 지적: 올림이 있으면 경고, 메모만 있으면 흐리게. 리뷰가 끝나지 않았으면(돌지 않음, 도는 중, 실패, 건너뜀, 꺼짐) '없음'이라고
+ * 하지 않고 그 상태를 말한다(V6: format.ts reviewNote와 같은 갈래)
+ */
+export function reviewSummary(
+  r: EvidenceBundle['review'],
+  o: { running?: boolean; disabled?: boolean } = {},
+): Summary {
+  if (o.disabled && (r === null || r.status === 'skipped'))
+    return { text: '리뷰 꺼짐', tone: 'muted' }
+  if (r === null)
+    return o.running ? { text: '도는 중', tone: 'info' } : { text: '리뷰 없음', tone: 'muted' }
+  if (r.status === 'failed') return { text: '리뷰 실패', tone: 'warn' }
+  if (r.status === 'skipped') return { text: '건너뜀', tone: 'muted' }
+  const { raised, notes } = findingGroups(r.findings)
   if (raised.length > 0)
     return {
       text: `올림 ${raised.length}${notes.length > 0 ? ` · 메모 ${notes.length}` : ''}`,
@@ -96,12 +109,7 @@ export function reviewSummary(findings: ReviewFinding[]): Summary {
 
 // ── 사이드바 ────────────────────────────────────────────────────────────────
 
-/** 사람의 답이 필요하다: 승인, 계약 다시, 끝내기 상자 */
-export function needsAnswer(v: WorkView): boolean {
-  return v.state === 'awaiting_approval' || v.state === 'recontract' || showEndBox(v)
-}
-
-/** 열린 Work(답이 필요한 것이 앞)와 끝난 Work. 묶음 안의 차례는 받은 그대로(새것이 앞) */
+/** 열린 Work(답이 필요한 것이 앞: src/shared/answer.ts)와 끝난 Work. 묶음 안의 차례는 받은 그대로(새것이 앞) */
 export function splitWorks(works: WorkView[]): { open: WorkView[]; closed: WorkView[] } {
   const closed = works.filter((w) => w.state === 'done' || w.state === 'abandoned')
   const rest = works.filter((w) => !closed.includes(w))

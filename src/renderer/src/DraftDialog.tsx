@@ -14,7 +14,7 @@ import type {
   DraftQuestionView,
 } from '../../shared/api.ts'
 import { Modal } from './dialogs.tsx'
-import { ErrorLine, Fold, Tag, useAction } from './ui.tsx'
+import { Fold, Tag, useAction } from './ui.tsx'
 
 const KIND: Readonly<Record<DraftCommandView['kind'], string>> = {
   setup: '설치',
@@ -81,6 +81,7 @@ export function DraftDialog(p: {
       title={`품질 기준 초안 · ${p.projectName}`}
       onClose={p.onClose}
       size="draft"
+      error={act.error}
       footer={
         <>
           <Button variant="ghost" label="닫기" onClick={p.onClose} />
@@ -188,7 +189,6 @@ export function DraftDialog(p: {
             작업 트리에 이미 .relay/quality.json이 있어 덮지 않습니다. 고치려면 직접 고칩니다.
           </p>
         ) : null}
-        <ErrorLine text={act.error} />
       </div>
     </Modal>
   )

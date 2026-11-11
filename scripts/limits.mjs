@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 숫자 상한 (docs/design.md 0절 3, philosophy 원칙 5).
-// 파일 600줄, src/core 합계 5,000줄. 넘으면 실패한다.
+// 파일 600줄(소스·시험·스크립트의 .ts .tsx .mjs .js .css), src/core 합계 5,000줄. 넘으면 실패한다.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
@@ -13,7 +13,7 @@ function walk(dir, out) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
     if (statSync(p).isDirectory()) walk(p, out)
-    else if (/\.(ts|mjs|js)$/.test(name)) out.push(p)
+    else if (/\.(ts|tsx|mjs|js|css)$/.test(name)) out.push(p)
   }
   return out
 }

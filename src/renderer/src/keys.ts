@@ -1,5 +1,5 @@
 // 단축키 (V78). macOS는 ⌘, 다른 OS는 터미널의 Ctrl 조합(세션이 쓰는 Ctrl+N 등)과 겹치지 않게 Alt·Ctrl+Shift를 쓴다.
-// DOM을 쓰지 않는 순수 함수만 둔다(시험: test/unit/renderer-keys.test.ts).
+// DOM을 쓰지 않는 순수 함수만 둔다(시험: test/unit/renderer-summary.test.ts). 대화상자가 떠 있는가는 ui.tsx의 modalOpen이 본다.
 
 export interface KeyLike {
   key: string
@@ -26,7 +26,18 @@ export function tabKey(e: KeyLike, mac = isMac(platform())): number | null {
 /** 새 Work 단축키: ⌘N(macOS), Ctrl+Shift+N(그 밖) */
 export function newWorkKey(e: KeyLike, mac = isMac(platform())): boolean {
   const mod = mac ? e.metaKey && !e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey
-  return mod && !e.altKey && e.key.toLowerCase() === 'n'
+  return mod && !e.altKey && letterOf(e) === 'n'
+}
+
+/**
+ * 누른 글쇠의 라틴 글자. 한글·키릴 자판이나 IME가 켜진 상태에서는 key가 다른 글자('ㅜ', 'Т', 'Process')로 오므로 그때는
+ * 자리(code)로 읽는다. key가 라틴 글자면 그것을 믿는다(Dvorak 등 자리가 다른 라틴 자판)
+ */
+function letterOf(e: KeyLike): string {
+  const k = e.key.toLowerCase()
+  if (/^[a-z]$/.test(k)) return k
+  const m = /^Key([A-Z])$/.exec(e.code ?? '')
+  return m?.[1] ? m[1].toLowerCase() : k
 }
 
 /** 단추의 풍선 글에 붙일 단축키 이름 */

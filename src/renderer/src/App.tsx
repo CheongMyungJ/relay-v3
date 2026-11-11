@@ -7,7 +7,7 @@ import { EVENTS, type ProjectView, type WorkView } from '../../shared/api.ts'
 import { NewWorkDialog, SettingsDialog } from './dialogs.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { newWorkKey, newWorkKeyText } from './keys.ts'
-import { Empty, ErrorLine, useAction } from './ui.tsx'
+import { Empty, ErrorLine, modalOpen, useAction } from './ui.tsx'
 import { WorkPane } from './WorkPane.tsx'
 
 type Dialog = { kind: 'new'; project: string } | { kind: 'settings'; project: string } | null
@@ -59,20 +59,19 @@ export function App() {
   )
 
   const view = works.find((w) => w.id === selected) ?? null
-  // 새 Work 단축키(V78): 고른 Work의 프로젝트, 없으면 첫 프로젝트. 대화상자가 열려 있으면 듣지 않는다
+  // 새 Work 단축키(V78): 고른 Work의 프로젝트, 없으면 첫 프로젝트. 어느 대화상자든 떠 있으면 듣지 않는다
   const target = view?.project ?? projects[0]?.id ?? null
-  const dialogOpen = dialog !== null
   useEffect(() => {
-    if (target === null || dialogOpen) return
+    if (target === null) return
     const onKey = (e: KeyboardEvent) => {
-      if (!newWorkKey(e)) return
+      if (!newWorkKey(e) || modalOpen()) return
       e.preventDefault()
       e.stopPropagation()
       setDialog({ kind: 'new', project: target })
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [target, dialogOpen])
+  }, [target])
   const closeDialog = useCallback(() => setDialog(null), [])
   const settingsProject =
     dialog?.kind === 'settings' ? projects.find((p) => p.id === dialog.project) : undefined

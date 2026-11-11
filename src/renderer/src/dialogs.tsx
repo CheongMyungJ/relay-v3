@@ -20,13 +20,15 @@ const WIDTH = { wide: 620, draft: 760 } as const
 
 /**
  * relay의 대화상자는 모두 입력이 있다(purpose form): Esc·✕·취소로 닫고, 바탕을 눌러서는 닫지 않는다(쓰던 글을 잃지
- * 않게, V77). 내용은 .dialog-body가 스크롤하고, 동작 줄(footer)은 그 아래에 늘 보인다(V78)
+ * 않게, V77). 내용은 .dialog-body가 스크롤하고, 동작 줄(footer)과 그 동작의 실패(error)는 그 아래에 늘 보인다(V78)
  */
 export function Modal(p: {
   title: string
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
+  /** 동작의 실패. 내용이 길어 스크롤되어도 보이게 동작 줄 위에 둔다 */
+  error?: string | null
   size: keyof typeof WIDTH
 }) {
   return (
@@ -42,7 +44,12 @@ export function Modal(p: {
     >
       <DialogHeader title={p.title} onOpenChange={() => p.onClose()} />
       <div className="dialog-body">{p.children}</div>
-      {p.footer ? <div className="row end dialog-foot">{p.footer}</div> : null}
+      {p.footer || p.error ? (
+        <div className="dialog-foot">
+          <ErrorLine text={p.error ?? null} />
+          {p.footer ? <div className="row end">{p.footer}</div> : null}
+        </div>
+      ) : null}
     </Dialog>
   )
 }
@@ -82,6 +89,7 @@ export function NewWorkDialog(p: {
       title="새 Work"
       onClose={p.onClose}
       size="wide"
+      error={act.error}
       footer={
         <>
           <Button variant="ghost" label="취소" onClick={p.onClose} />
@@ -160,7 +168,6 @@ export function NewWorkDialog(p: {
           placeholder="origin의 기본 브랜치"
           controlClassName="mono"
         />
-        <ErrorLine text={act.error} />
       </form>
     </Modal>
   )
@@ -242,6 +249,7 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
       title={`${p.project.name} 설정`}
       onClose={p.onClose}
       size="wide"
+      error={act.error}
       footer={
         <>
           <Button variant="ghost" label="취소" onClick={p.onClose} />
@@ -352,7 +360,6 @@ export function SettingsDialog(p: { project: ProjectView; onClose: () => void })
           />
         </Group>
         <RecordTable project={p.project} />
-        <ErrorLine text={act.error} />
       </form>
     </Modal>
   )

@@ -1,0 +1,251 @@
+/* 오른쪽 패널의 [증거] (docs/m2-modules.md 4절): 결론, 동작 줄, 접는 칸의 목록, 끝낼 때의 메모.
+   패널의 틀과 알림 상자는 panels.css에 있다(main.tsx가 그 뒤에 이 파일을 싣는다). */
+
+.verdict {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--muted-bar);
+  border-radius: var(--radius-box);
+  background: var(--surface);
+}
+
+.verdict.tone-ok {
+  border-left-color: var(--ok-bar);
+  background: var(--ok-soft);
+}
+.verdict.tone-warn {
+  border-left-color: var(--warn-bar);
+  background: var(--warn-soft);
+}
+.verdict.tone-info {
+  border-left-color: var(--info-bar);
+  background: var(--info-soft);
+}
+.verdict.tone-bad {
+  border-left-color: var(--bad-bar);
+  background: var(--bad-soft);
+}
+
+.verdict-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.verdict-title {
+  margin-top: 1px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.verdict-shadow {
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.verdict-decisive {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.verdict-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.verdict-meta > span {
+  white-space: nowrap;
+}
+
+.next-step {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.verdict-label + .verdict-title + .verdict-label {
+  margin-top: 8px;
+}
+
+.feedback-status {
+  margin: 0;
+  padding: 9px 12px;
+  border-left: 3px solid var(--info-bar);
+  border-radius: var(--radius);
+  background: var(--info-soft);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.stale {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--warn-bar);
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 단추도 PR 줄도 없으면 자리를 차지하지 않는다 */
+.actions:not(:has(> :not(.row:empty))) {
+  display: none;
+}
+
+.actions > .row:empty {
+  display: none;
+}
+
+.pr-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.details,
+.fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 접는 칸(ui.tsx Fold = Astryx Collapsible): 테두리 상자 안에 단추 줄과 내용 */
+.fold {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-box);
+  padding: 2px 12px;
+}
+
+/* 접는 칸의 목록(V78): 상자 하나에 줄마다 가르는 선 */
+.fold-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-box);
+}
+
+.fold-list > .fold {
+  border: 0;
+  border-radius: 0;
+  padding: 3px 12px;
+}
+
+.fold-list > .fold + .fold {
+  border-top: 1px solid var(--border);
+}
+
+.fold-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Collapsible이 trigger를 감싼 칸: 긴 글이 상자 밖으로 밀지 않게 */
+.fold :has(> .fold-trigger) {
+  min-width: 0;
+}
+
+.fold-title {
+  min-width: 0;
+}
+
+.diff-file .fold-title {
+  flex: 1;
+}
+
+/* 접는 칸의 오른쪽 한 마디: 상태를 색 점과 글로 */
+.fold-summary {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fold-summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.fold-summary.tone-ok {
+  color: var(--ok);
+}
+.fold-summary.tone-warn {
+  color: var(--warn);
+}
+.fold-summary.tone-bad {
+  color: var(--bad);
+}
+.fold-summary.tone-info {
+  color: var(--info);
+}
+.fold-summary.tone-muted {
+  color: var(--color-text-disabled);
+  font-weight: 500;
+}
+
+.fold-summary.tone-muted::before {
+  display: none;
+}
+
+/* 끝낼 때의 메모(V37): 끝난 Work의 [증거] 맨 위에서 지나치지 않게 */
+.fold.end-memos {
+  border-left: 3px solid var(--info-bar);
+  background: var(--info-soft);
+}
+
+.count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fold-body {
+  padding: 2px 2px 12px 22px;
+  font-size: 13px;
+}
+
+.fact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fact-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}

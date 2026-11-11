@@ -20,6 +20,11 @@
   border-top: 1px solid var(--border);
 }
 
+/* 동작의 실패는 동작 줄 바로 위에: 내용이 스크롤되어 있어도 보인다 */
+.dialog-foot > .error-line {
+  margin: 0 0 10px;
+}
+
 .form {
   display: flex;
   flex-direction: column;

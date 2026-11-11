@@ -33,22 +33,45 @@ const log = (text: string, error?: unknown) => console.error(`[relay] ${text}`, 
 const attention = new AttentionWatch()
 
 /**
+ * 떠 있는 OS 알림(Work마다 하나). Electron의 Notification은 들고 있지 않으면 누르기 전에 치워져(GC) click이 오지 않는다:
+ * 누르거나 닫히거나 그 Work의 답이 끝날 때까지 여기 둔다
+ */
+const shown = new Map<string, Notification>()
+
+function dismiss(id: string): void {
+  const n = shown.get(id)
+  if (!n) return
+  shown.delete(id)
+  n.close()
+}
+
+/**
  * 사람의 답이 필요해진 Work(V78): 독 배지에 그 수를 쓰고, 창을 보고 있지 않으면 OS 알림을 띄운다. 알림을 누르면 창을 앞으로
- * 가져오고 그 Work를 고른다. 알림을 쓸 수 없는 곳(알림 서버가 없는 Linux 등)에서는 조용히 넘어간다
+ * 가져오고 그 Work를 고른다. 답이 끝난 Work의 알림은 거둔다. 알림을 쓸 수 없는 곳(알림 서버가 없는 Linux 등)에서는 조용히
+ * 넘어간다
  */
 function attend(v: WorkView): void {
   const a = attention.note(v)
   try {
     app.setBadgeCount(attention.count())
+    if (!attention.waiting(v.id)) dismiss(v.id)
     if (!a || win?.isFocused() || !Notification.isSupported()) return
+    dismiss(a.id)
     const n = new Notification({ title: a.title, body: a.body })
+    const forget = () => {
+      if (shown.get(a.id) === n) shown.delete(a.id)
+    }
     n.on('click', () => {
+      forget()
       if (!win || win.isDestroyed()) return
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
       win.webContents.send(EVENTS.show, { id: a.id })
     })
+    n.on('close', forget)
+    n.on('failed', forget)
+    shown.set(a.id, n)
     n.show()
   } catch (e) {
     log('알림 실패', e)
@@ -190,6 +213,7 @@ async function start(): Promise<void> {
   })
   await w.init()
   works = w
+  // init이 Work마다 낸 이벤트는 적어 두기만 했다: 이미 기다리던 것은 알리지 않고, 이제부터 새로 생기는 것만 알린다
   attention.prime(w.list().works)
   record.start()
   registerIpc({ works: w, record: new RecordDesk({ store, now }), sessions, window: () => win })

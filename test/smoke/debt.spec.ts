@@ -172,9 +172,45 @@ test('기록 안 된 나빠짐 알림 → 나빠진 래칫의 [머지]가 빚을
   // git의 머리 줄(diff --git, index)은 보이지 않는다
   await expect(page.getByTestId('diff-panel')).not.toContainText('diff --git')
 
+  // 경계를 끝까지 끌어도 패널은 터미널이 560px 남는 데서 멈추고, 기억하는 너비도 화면의 너비와 같다(헛도는 구간이 없다)
+  const grip = await page.getByRole('separator', { name: '패널 너비' }).boundingBox()
+  if (!grip) throw new Error('경계 손잡이가 없음')
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(grip.x - 700, grip.y + 200, { steps: 8 })
+  await page.mouse.up()
+  const width = (css: string) =>
+    page.locator(css).evaluate((el) => el.getBoundingClientRect().width)
+  const saved = JSON.parse(
+    await page.evaluate<string>("localStorage.getItem('astryx-resizable:relay-panel') ?? '{}'"),
+  ) as { size?: number }
+  const widths = {
+    terminal: await width('.terminal-pane'),
+    panel: await width('.panel'),
+    saved: saved.size,
+  }
+  expect(widths.terminal).toBeGreaterThanOrEqual(560)
+  expect(widths.terminal).toBeLessThan(562)
+  expect(widths.saved).toBeCloseTo(widths.panel, 0)
+
   // 설정: 빚 기록 스위치(켬)
   await page.getByRole('button', { name: /설정$/ }).first().click()
   const settings = page.getByRole('dialog')
   await expect(settings.getByRole('switch', { name: /^빚 기록/ })).toBeChecked()
   await shot('settings')
+  // 대화상자가 떠 있는 동안 전역 단축키는 뒤의 화면을 건드리지 않는다: 탭이 그대로고 새 Work 대화상자가 겹쳐 뜨지 않는다
+  await page.keyboard.press(`${mod}+1`)
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+n' : 'Control+Shift+N')
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  await settings.getByRole('button', { name: '취소' }).click()
+  await expect(page.getByTestId('diff-panel')).toBeVisible()
+
+  // 닫으면 단축키가 다시 듣는다. 만들지 못한 까닭은 스크롤 밖 동작 줄 위에 보인다
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+n' : 'Control+Shift+N')
+  const again = page.getByRole('dialog', { name: '새 Work' })
+  await again.getByLabel('요청', { exact: true }).fill('없는 브랜치에서 시작')
+  await again.getByLabel('기준 브랜치').fill('no-such-branch')
+  await again.getByRole('button', { name: '만들기' }).click()
+  await expect(again.locator('.dialog-foot').getByRole('alert')).toBeVisible({ timeout: 30_000 })
+  await shot('create-failed')
 })

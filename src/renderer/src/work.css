@@ -1,0 +1,224 @@
+/* 고른 Work의 틀 (docs/m2-modules.md 4절): 머리줄(제목, 단계, 브랜치, 동작)과 가운데 터미널.
+   토큰과 바탕은 styles.css, 오른쪽 패널은 panels.css에 있다. */
+
+.work {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.work-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 20px 13px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.work-head-main {
+  min-width: 0;
+}
+
+.work-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.work-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* 단계 표시: 지난 단계는 찬 점, 지금 단계는 꼬리표, 남은 단계는 빈 점 */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.steps li + li::before {
+  content: '';
+  width: 12px;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+
+.step-dot.past {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branch-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 340px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--muted-soft);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.branch-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-copy:hover {
+  background: var(--accent-soft);
+}
+
+.work-head .error-line {
+  margin: 10px 0 0;
+}
+
+.work-head .row {
+  flex-wrap: nowrap;
+  flex: none;
+}
+
+/* ── 가운데 터미널과 오른쪽 패널의 틀 ─────────────────────────────────────── */
+
+.work-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  /* 가장 좁은 창(1180px)에서도 터미널이 70열쯤 남게: 패널이 먼저 준다 */
+  min-width: 560px;
+  min-height: 0;
+  background: var(--term-bg);
+  color-scheme: dark;
+}
+
+.work-body.wide .terminal-pane {
+  display: none;
+}
+
+.terminal-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--term-bar);
+  color: var(--term-muted);
+  font-size: 12px;
+}
+
+.term-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b6c75;
+}
+
+.term-dot.running {
+  background: #5fd38d;
+  animation: term-pulse 1.6s ease-in-out infinite;
+}
+
+.term-dot.idle {
+  background: #5fd38d;
+}
+
+.term-dot.starting {
+  background: #f0b54a;
+}
+
+.term-dot.waiting {
+  background: #f0b54a;
+}
+
+.terminal-bar .waiting-text {
+  color: #f0b54a;
+  font-weight: 600;
+}
+
+@keyframes term-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-dot.running {
+    animation: none;
+  }
+}
+
+.terminal-wrap {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 6px 6px 14px;
+}
+
+.terminal-pane.stopped .terminal-wrap {
+  opacity: 0.6;
+}
+
+.terminal-host {
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-viewport {
+  background: var(--term-bg) !important;
+  /* xterm은 자기 스크롤 막대를 그린다. 브라우저의 것은 숨긴다 */
+  scrollbar-width: none;
+}
+
+.terminal-host .xterm-viewport::-webkit-scrollbar {
+  display: none;
+}

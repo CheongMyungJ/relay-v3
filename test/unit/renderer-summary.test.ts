@@ -1,9 +1,11 @@
-// [단위] 한눈에 보이는 짧은 글과 단축키(V78, src/renderer/src/summary.ts, keys.ts)와 메인의 답 알림(src/main/attention.ts).
+// [단위] 한눈에 보이는 짧은 글과 단축키, 패널 너비의 끝(V78, src/renderer/src/summary.ts, keys.ts, panelSize.ts), 화면과 메인이 같이 쓰는
+// 답이 필요한가의 판정(src/shared/answer.ts)과 메인의 답 알림(src/main/attention.ts).
 // 화면은 [스모크]가 이어지는지만 본다.
 import { describe, expect, test } from 'vitest'
-import type { EvidenceBundle } from '../../src/core/types.ts'
-import { AttentionWatch, attentionOf } from '../../src/main/attention.ts'
+import type { EvidenceBundle, ReviewFinding } from '../../src/core/types.ts'
+import { AttentionWatch } from '../../src/main/attention.ts'
 import { newWorkKey, newWorkKeyText, tabKey, type KeyLike } from '../../src/renderer/src/keys.ts'
+import { panelMax } from '../../src/renderer/src/panelSize.ts'
 import {
   agoText,
   commandSummary,
@@ -11,7 +13,6 @@ import {
   doneOpen,
   knowledgeSummary,
   lineSummary,
-  needsAnswer,
   patchView,
   qualityShort,
   ratchetSummary,
@@ -19,6 +20,7 @@ import {
   splitPath,
   splitWorks,
 } from '../../src/renderer/src/summary.ts'
+import { answerReason, needsAnswer, showEndBox } from '../../src/shared/answer.ts'
 import type { WorkView } from '../../src/shared/api.ts'
 import { finding } from '../support/gate.ts'
 
@@ -83,23 +85,49 @@ describe('접는 칸의 오른쪽 한 마디', () => {
     expect(knowledgeSummary(k('not_yet', 'allow'))).toEqual({ text: '문제 2', tone: 'bad' })
     const raised = finding({ id: 'R1', raise: 'security', severity: 'low' })
     const note = finding({ id: 'R2', severity: 'high' })
-    expect(reviewSummary([])).toEqual({ text: '없음', tone: 'muted' })
-    expect(reviewSummary([note])).toEqual({ text: '메모 1', tone: 'muted' })
-    expect(reviewSummary([raised])).toEqual({ text: '올림 1', tone: 'warn' })
-    expect(reviewSummary([raised, note]).text).toBe('올림 1 · 메모 1')
+    const done = (...findings: ReviewFinding[]) => ({ status: 'done' as const, findings })
+    expect(reviewSummary(done())).toEqual({ text: '없음', tone: 'muted' })
+    expect(reviewSummary(done(note))).toEqual({ text: '메모 1', tone: 'muted' })
+    expect(reviewSummary(done(raised))).toEqual({ text: '올림 1', tone: 'warn' })
+    expect(reviewSummary(done(raised, note)).text).toBe('올림 1 · 메모 1')
+  })
+
+  test("리뷰가 끝나지 않았으면 '없음'이라고 하지 않는다(V6): 돌지 않음, 도는 중, 실패, 건너뜀, 꺼짐", () => {
+    expect(reviewSummary(null)).toEqual({ text: '리뷰 없음', tone: 'muted' })
+    expect(reviewSummary(null, { running: true })).toEqual({ text: '도는 중', tone: 'info' })
+    expect(reviewSummary({ status: 'failed', findings: [] })).toEqual({
+      text: '리뷰 실패',
+      tone: 'warn',
+    })
+    expect(reviewSummary({ status: 'skipped', findings: [] }).text).toBe('건너뜀')
+    expect(reviewSummary(null, { disabled: true }).text).toBe('리뷰 꺼짐')
+    expect(reviewSummary({ status: 'skipped', findings: [] }, { disabled: true }).text).toBe(
+      '리뷰 꺼짐',
+    )
+    // 끈 앱에서도 이미 끝난 리뷰는 그 결과를 말한다
+    expect(reviewSummary({ status: 'done', findings: [] }, { disabled: true }).text).toBe('없음')
   })
 })
 
 describe('사이드바', () => {
   const box = { head: 'h', armed: false, open: ['x'] } as WorkView['endPending']
 
-  test('답이 필요한 Work: 승인, 계약 다시, 끝내기 상자(걸린 끝과 넘긴 끝은 아님)', () => {
+  test('답이 필요한 Work(화면과 메인의 알림이 같이 쓰는 판정): 승인, 계약 다시, 끝내기 상자(걸린 끝과 넘긴 끝은 아님)', () => {
     expect(needsAnswer(work('a', { state: 'awaiting_approval' }))).toBe(true)
     expect(needsAnswer(work('a', { state: 'recontract' }))).toBe(true)
     expect(needsAnswer(work('a', { endPending: box }))).toBe(true)
     expect(needsAnswer(work('a'))).toBe(false)
     expect(needsAnswer(work('a', { endPending: { ...box, armed: true } as never }))).toBe(false)
     expect(needsAnswer(work('a', { state: 'done' }))).toBe(false)
+    expect(answerReason(work('a', { state: 'awaiting_approval' }))).toBe('approval')
+    expect(answerReason(work('a', { state: 'recontract' }))).toBe('change')
+    expect(answerReason(work('a', { endPending: box }))).toBe('end')
+    expect(answerReason(work('a', { endPending: { ...box, handed: true } as never }))).toBeNull()
+    expect(answerReason(work('a'))).toBeNull()
+    // 계약을 다시 맞추는 동안 상자가 떠 있으면 까닭은 계약이고(알림은 하나), 상자도 보인다([증거] 탭의 점)
+    const both = work('a', { state: 'recontract', endPending: box })
+    expect(answerReason(both)).toBe('change')
+    expect(showEndBox(both)).toBe(true)
   })
 
   test('열린 Work는 답이 필요한 것이 앞, 끝난 Work는 따로. 묶음 안의 차례는 그대로', () => {
@@ -197,6 +225,17 @@ describe('단축키', () => {
     expect(newWorkKey(key({ key: 'N', ctrlKey: true, shiftKey: true }), false)).toBe(true)
     expect(newWorkKey(key({ key: 'n', ctrlKey: true }), false)).toBe(false)
     expect(newWorkKey(key({ key: 'n', ctrlKey: true }), true)).toBe(false)
+    // 한글·키릴 자판이나 IME가 켜져 key가 다른 글자로 와도 자리(code)로 안다
+    expect(newWorkKey(key({ key: 'ㅜ', code: 'KeyN', metaKey: true }), true)).toBe(true)
+    expect(newWorkKey(key({ key: 'Т', code: 'KeyN', ctrlKey: true, shiftKey: true }), false)).toBe(
+      true,
+    )
+    expect(
+      newWorkKey(key({ key: 'Process', code: 'KeyN', ctrlKey: true, shiftKey: true }), false),
+    ).toBe(true)
+    // 라틴 글자가 오면 그 글자를 믿는다: Dvorak에서 N 자리의 글쇠는 b다
+    expect(newWorkKey(key({ key: 'b', code: 'KeyN', metaKey: true }), true)).toBe(false)
+    expect(newWorkKey(key({ key: 'n', code: 'KeyL', metaKey: true }), true)).toBe(true)
     expect(newWorkKeyText(true)).toBe('⌘N')
     expect(newWorkKeyText(false)).toBe('Ctrl+Shift+N')
   })
@@ -205,16 +244,9 @@ describe('단축키', () => {
 describe('답이 필요해진 Work의 알림(메인)', () => {
   const box = { head: 'h', armed: false, open: ['x'] } as WorkView['endPending']
 
-  test('답이 필요한 까닭', () => {
-    expect(attentionOf(work('a', { state: 'awaiting_approval' }))).toBe('approval')
-    expect(attentionOf(work('a', { state: 'recontract' }))).toBe('change')
-    expect(attentionOf(work('a', { endPending: box }))).toBe('end')
-    expect(attentionOf(work('a', { endPending: { ...box, handed: true } as never }))).toBeNull()
-    expect(attentionOf(work('a'))).toBeNull()
-  })
-
   test('까닭이 새로 생길 때 한 번만 알리고, 배지는 답이 필요한 Work의 수', () => {
     const w = new AttentionWatch()
+    w.prime([])
     expect(w.note(work('a', { state: 'drafting' }))).toBeNull()
     const waiting = work('a', { state: 'awaiting_approval' })
     expect(w.note(waiting)).toEqual({ id: 'a', title: '계약이 승인을 기다립니다', body: '일 a' })
@@ -223,6 +255,7 @@ describe('답이 필요해진 Work의 알림(메인)', () => {
     expect(w.count()).toBe(1)
     expect(w.note(work('a'))).toBeNull()
     expect(w.count()).toBe(0)
+    expect(w.waiting('a')).toBe(false)
     // 까닭이 바뀌면 다시 알린다
     expect(w.note(work('a', { endPending: box }))?.title).toBe('끝내기 전에 볼 것이 있습니다')
     expect(w.note(work('a', { state: 'recontract' }))?.title).toBe('세션이 계약을 바꾸자고 합니다')
@@ -235,5 +268,32 @@ describe('답이 필요해진 Work의 알림(메인)', () => {
     expect(w.count()).toBe(1)
     expect(w.note(waiting)).toBeNull()
     expect(w.note(work('b', { state: 'recontract' }))).not.toBeNull()
+  })
+
+  test('켜는 동안(prime 전) 온 것은 적어 두기만 한다: Works.init이 Work마다 내는 이벤트로 알리지 않는다', () => {
+    const w = new AttentionWatch()
+    const a = work('a', { state: 'awaiting_approval' })
+    const b = work('b', { endPending: box })
+    expect(w.note(a)).toBeNull()
+    expect(w.note(b)).toBeNull()
+    // 배지에는 기다리는 수가 그대로 보인다
+    expect(w.count()).toBe(2)
+    expect(w.waiting('a')).toBe(true)
+    w.prime([a, b, work('c')])
+    expect(w.note(a)).toBeNull()
+    expect(w.note(b)).toBeNull()
+    expect(w.note(work('c', { state: 'awaiting_approval' }))?.id).toBe('c')
+  })
+})
+
+describe('패널 너비의 끝', () => {
+  test('터미널이 560px 남는 데까지만 넓어진다(340~900). 재기 전에는 900', () => {
+    expect(panelMax(null)).toBe(900)
+    // 1400px 창: 사이드바 264를 뺀 1136에서 터미널 560
+    expect(panelMax(1136)).toBe(576)
+    expect(panelMax(2000)).toBe(900)
+    // 가장 좁은 창에서도 패널의 가장 좁은 너비보다 작아지지 않는다
+    expect(panelMax(800)).toBe(340)
+    expect(panelMax(1135.6)).toBe(575)
   })
 })

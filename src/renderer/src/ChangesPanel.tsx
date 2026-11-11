@@ -1,7 +1,7 @@
 // [변경]과 [빚] 패널 (docs/m2-modules.md 4절). 변경: `git diff --stat`의 내용(모두 몇 줄, 파일마다 몇 줄과 막대)과 파일별
 // diff(접기. 작은 diff는 펼친 채로, M2.1 13절). git의 영어 --stat 글은 좁은 패널에서 잘리므로 그대로 보이지 않고 patch에서
 // 센다. 빚: 이 Work가 건드린 경로의 빚. HEAD가 바뀌면 다시 읽는다.
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CodeBlock } from '@astryxdesign/core/CodeBlock'
 import type { DebtItem, DebtKind } from '../../core/types.ts'
 import { diffOpen, splitDiff, type DiffFile as DiffFileView } from './format.ts'
@@ -78,7 +78,6 @@ export function DiffPanel({ id, head }: { id: string; head: string | null }) {
 /** 파일 하나: 머리(폴더는 흐리게, 파일 이름은 또렷하게, 더한·뺀 줄, 막대)와 접는 patch. git의 머리 줄은 보이지 않는다(V78) */
 function DiffFile({ f, most, open }: { f: DiffFileView; most: number; open: boolean }) {
   const { dir, base } = splitPath(f.path)
-  const { notes, body } = patchView(f.patch)
   return (
     <Fold
       className="diff-file"
@@ -106,6 +105,19 @@ function DiffFile({ f, most, open }: { f: DiffFileView; most: number; open: bool
         </span>
       }
     >
+      <Patch patch={f.patch} />
+    </Fold>
+  )
+}
+
+/**
+ * 접는 칸 안의 patch. 접는 칸(lazy)은 처음 열 때에야 이것을 그리므로, patch를 쪼개고 색을 입히는 일은 연 파일만 한다(V77):
+ * 파일이 많은 diff를 접힌 채 다시 그려도 patch를 읽지 않는다
+ */
+function Patch({ patch }: { patch: string }) {
+  const { notes, body } = useMemo(() => patchView(patch), [patch])
+  return (
+    <>
       {notes.length > 0 ? <p className="muted small diff-notes">{notes.join(' · ')}</p> : null}
       {body ? (
         <div className="patch">
@@ -121,7 +133,7 @@ function DiffFile({ f, most, open }: { f: DiffFileView; most: number; open: bool
           />
         </div>
       ) : null}
-    </Fold>
+    </>
   )
 }
 
