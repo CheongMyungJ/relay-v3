@@ -20,6 +20,21 @@ npm run relay -- check     # 지금 레포에서 relay check
 npm run relay -- init --try   # 품질 기준 초안을 짜서 지금 커밋에서 한 번 돌려 본다(쓰지 않음)
 ```
 
+## 설치 파일 만들기와 배포
+
+```bash
+npm run dist:win     # Windows NSIS 설치 파일 → dist/relay-<version>-setup-x64.exe (Windows에서)
+npm run dist:linux   # WSL·Linux용 .deb → dist/relay_<version>_amd64.deb
+```
+
+배포는 package.json의 `version`을 올려 커밋하고 같은 이름의 태그를 push합니다. `.github/workflows/release.yml`이 두 파일을 만들어 GitHub Releases의 초안에 올리고, 공개는 Releases 화면에서 직접 누릅니다(V79).
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+WSL에서는 `sudo apt install ./relay_0.1.0_amd64.deb` 뒤 `relay`로 띄웁니다(WSLg가 창을 보입니다).
+
 ## 확인
 
 ```bash

@@ -8,3 +8,4 @@ coverage/
 # M2 평가 배치의 진행 로그(결과는 runs/*.tar.gz와 *.report.md로 커밋)
 docs/experiments/m2/runs/*.log
 docs/experiments/m2/runs/.done-*
+dist/

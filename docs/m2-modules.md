@@ -17,7 +17,7 @@ src/renderer    React와 Astryx(@astryxdesign/core, V77). shared와 core의 'imp
 
 - ESLint 층: renderer는 shared와 `import type`만. main은 'electron'을 index.ts·ipc.ts에서만. core·adapters·engine은 'electron' 금지(M1 규칙에 더함).
 - 빌드: electron-vite. main은 `src/main/index.ts`, preload는 `src/preload/index.ts`, 렌더러는 `src/renderer/index.html`. MCP 브리지는 main의 두 번째 입력 `src/main/mcp-bridge.ts`로 같은 `out/main/`에 빌드한다. 상대 import의 `.ts`는 Vite가 푼다.
-- 개발: `npm run dev`(electron-vite dev), `npm run build`, `npm run start`(빌드 뒤 `electron .`). `package.json`의 `main`은 `out/main/index.js`.
+- 개발: `npm run dev`(electron-vite dev), `npm run build`, `npm run start`(빌드 뒤 `electron .`).  설치 파일: `npm run dist`(electron-builder, V79). `package.json`의 `main`은 `out/main/index.js`.
 - tsconfig: `tsconfig.json`(node: src/core·adapters·engine·cli·shared·main·preload, test, scripts)과 `tsconfig.web.json`(DOM, jsx: react-jsx, src/renderer, src/shared). `npm run typecheck`은 둘 다.
 - 시험 층에 [스모크] `test/smoke/`(Playwright `_electron`, Linux는 `xvfb-run -a`)를 더한다. `npm test`에는 넣지 않고 `npm run test:smoke`.
 
