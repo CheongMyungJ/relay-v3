@@ -1,0 +1,31 @@
+# 설치 파일 만들기 (V79): Windows는 NSIS 설치 파일, WSL(Linux)은 .deb. `npm run dist`가 out/을 빌드해 dist/에 낸다.
+# 빌드한 out/와 런타임 의존성(dependencies)만 담는다. node-pty는 네이티브라 asar 밖에 푼다.
+appId: dev.relay.v3
+productName: relay
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+# node-pty는 N-API라 Node로 지은 바이너리(Windows는 동봉 prebuilds)가 Electron에서도 돈다: 다시 짓지 않는다.
+npmRebuild: false
+asarUnpack:
+  - node_modules/node-pty/**
+win:
+  target: nsis
+  artifactName: relay-${version}-setup-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target: deb
+  executableName: relay
+  category: Development
+  maintainer: CheongMyungJ
+  artifactName: relay_${version}_${arch}.${ext}
+publish:
+  provider: github
+  owner: CheongMyungJ
+  repo: relay-v3
+  releaseType: draft
